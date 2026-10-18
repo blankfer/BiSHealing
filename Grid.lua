@@ -428,6 +428,10 @@ function FG.Make(i, parent)
                           "SecureUnitButtonTemplate")
     f:SetSize(FRAME_W, FRAME_H)
     f:RegisterForClicks("AnyDown")      -- bare "LeftButtonDown" silently no-ops on secure buttons
+    -- the cell the mouse is on (FG.HeardError flashes it). A hook chains onto the template's own
+    -- OnEnter rather than replacing it, and hooking is allowed in a fight
+    f:HookScript("OnEnter", function(self) FG.over = self end)
+    f:HookScript("OnLeave", function(self) if FG.over == self then FG.over = nil end end)
 
     f.bg = f:CreateTexture(nil, "BACKGROUND")
     f.bg:SetAllPoints()
@@ -2153,6 +2157,89 @@ function FG.HoverWatch()
     end)
 end
 
+--------------------------------------------------------------------- the flash --
+-- "LoS" ON THE CELL YOUR HEAL COULD NOT SEE (18 Oct 2026). Arn chose it from a study of Healer LoS
+-- Helper, which puts a red mark at the cursor: here it is the cell itself. LINE OF SIGHT ONLY - out of
+-- range already dims the cell (Arn: "do we really need range flash logic if we are already dimming?"),
+-- but somebody behind a pillar is in range, so their cell stays bright and nothing said why the heal
+-- failed. The client says it in UI_ERROR_MESSAGE; the cell under the mouse is the one you clicked (or
+-- wheeled, or keyed - the binds are all mouseover). Nothing secret is read: the error text is the
+-- client's own string, compared only when it is plain. The fade is the client's (an Alpha animation),
+-- so nothing ticks. Off with `/bish flash off`.
+FG.FLASH_FOR = 1.2
+FG.FLASH_RED = { 1.00, 0.25, 0.30 }
+
+--- The client's failure strings this flash answers, mapped to the word it shows. Read from the
+--- client's own global (any language), with the English as a net.
+local failWords
+local function FailWords()
+    if failWords then return failWords end
+    failWords = { ["Target not in line of sight"] = "LOS" }
+    local s = _G.SPELL_FAILED_LINE_OF_SIGHT
+    if type(s) == "string" and s ~= "" and not (NS.Secret and NS.Secret(s)) then failWords[s] = "LOS" end
+    return failWords
+end
+FG.FailWords = FailWords
+
+--- A word flashed on a cell, fading out by itself. Built on first use; the cell's own pieces are untouched.
+function FG.Flash(f, word, colour)
+    if not f then return false end
+    local c = colour or FG.FLASH_RED
+    local fl = f.flash
+    if not fl then
+        fl = CreateFrame("Frame", nil, f)
+        fl:SetAllPoints()
+        if fl.SetFrameLevel and f.GetFrameLevel then
+            local lvl = f:GetFrameLevel()
+            if type(lvl) == "number" then fl:SetFrameLevel(lvl + 25) end     -- over the crosshairs
+        end
+        -- THE WORD ALONE, in the middle (Arn, 18 Oct: "someting in the middle of the cell LOS") - no
+        -- outline of its own to fight the crosshairs; a thick black edge so it reads on any class colour
+        fl.word = fl:CreateFontString(nil, "OVERLAY")
+        if fl.word.SetFont then fl.word:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 14, "THICKOUTLINE") end
+        fl.word:SetPoint("CENTER", fl, "CENTER", 0, 0)
+        if fl.CreateAnimationGroup then
+            local ok, g = pcall(fl.CreateAnimationGroup, fl)
+            if ok and g then
+                local a = g:CreateAnimation("Alpha")
+                a:SetFromAlpha(1)
+                a:SetToAlpha(0)
+                a:SetDuration(FG.FLASH_FOR)
+                if g.SetToFinalAlpha then g:SetToFinalAlpha(true) end
+                g:SetScript("OnFinished", function() fl:Hide() end)
+                fl.fade = g
+            end
+        end
+        fl:Hide()
+        f.flash = fl
+    end
+    fl.word:SetText(word or "")
+    fl.word:SetTextColor(c[1], c[2], c[3], 1)
+    fl:SetAlpha(1)
+    fl:Show()
+    if fl.fade then
+        if fl.fade.Stop then fl.fade:Stop() end
+        fl.fade:Play()
+    elseif C_Timer and C_Timer.After then
+        fl.gen = (fl.gen or 0) + 1
+        local gen = fl.gen
+        C_Timer.After(FG.FLASH_FOR, function() if fl.gen == gen then fl:Hide() end end)
+    end
+    return true
+end
+
+--- A heal failed: flash the cell under the mouse, if it was line of sight. Answers the word.
+function FG.HeardError(_, msg)
+    local d = NS.DB and NS.DB()
+    if type(d) == "table" and d.flash == false then return nil end
+    if type(msg) ~= "string" or (NS.Secret and NS.Secret(msg)) then return nil end
+    local word = FailWords()[msg]
+    local f = FG.over
+    if not (word and f and f.unit and f.IsShown and f:IsShown()) then return nil end
+    FG.Flash(f, word, FG.FLASH_RED)
+    return word
+end
+
 function FG.PaintEdge(f, unit)
     if not (f and f.bg and unit) then return nil end
     -- THE GOLD RING, on you or on your target (a player's ask, 7 Oct: "a toggle highlight self or
@@ -2868,6 +2955,11 @@ function FG.Start()
     pcall(hv.RegisterEvent, hv, "UPDATE_MOUSEOVER_UNIT")
     hv:SetScript("OnEvent", function() FG.HoverWatch() end)
     FG.hoverEvents = hv
+    -- WHY A HEAL FAILED (18 Oct): a frame of its own, one event, nothing on a timer
+    local fails = CreateFrame("Frame")
+    pcall(fails.RegisterEvent, fails, "UI_ERROR_MESSAGE")
+    fails:SetScript("OnEvent", function(_, _, ...) pcall(FG.HeardError, ...) end)
+    FG.failEvents = fails
     if NS.FB and NS.FB.Start then NS.FB.Start() end   -- the between-pulls brain, step 2
     if NS.FR and NS.FR.Start then NS.FR.Start() end   -- the five second rule, on the header
     if NS.FS and NS.FS.Start then NS.FS.Start() end   -- and the buff you keep forgetting
