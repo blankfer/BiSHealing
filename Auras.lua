@@ -198,14 +198,24 @@ function FA.Cures()
     return out
 end
 
---- ONLY ON YOUR GROUP'S CELLS (Arn, 17 Oct 2026, a screenshot of the target cell on an enemy:
---- "its coming up on the enemy bars too"). The target and target-of-target cells hold whoever you
---- clicked, friend or foe, and a secure box cannot come and go with them in a fight - so they, and
---- pets, keep the old pip. You, party1-4 and raid1-40 get boxes.
+--- WHO GETS CURE BOXES. You, party1-4 and raid1-40 - and since 18 Oct the target and target-of-target
+--- (Arn: "im targeting my self im a friendly player and it no show the cure thing, it should only
+--- refuse to draw on an unfrienldy target or tot"). Those two hold whoever you clicked, friend or foe
+--- ("its coming up on the enemy bars too", 17 Oct), and a secure box may not be shown or hidden by an
+--- addon in a fight - so the CLIENT does it: a state driver shows their boxes only while the unit is
+--- one you can help (FA.DRIVE). Pets keep the old pip.
 function FA.CureUnit(unit)
     if type(unit) ~= "string" then return false end
-    return unit == "player" or unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil
+    return unit == "player" or FA.DRIVE[unit] ~= nil or unit:match("^party%d+$") ~= nil
+        or unit:match("^raid%d+$") ~= nil
 end
+
+--- The client's own condition for a box on a cell that may hold a foe: shown on a friend, hidden on
+--- anyone else, re-judged by the client every time the unit changes - in a fight too.
+FA.DRIVE = {
+    target = "[@target,help] show; hide",
+    targettarget = "[@targettarget,help] show; hide",
+}
 
 --- Where box `i` sits on a cell, and how big it is: the marker's size plus a 2 px frame for the outline.
 --- A COLUMN DOWN THE LEFT EDGE (Arn, 17 Oct: "use the left side as the debuff window"): box 1 at the
@@ -322,8 +332,19 @@ end
 FA.CURE_PULSE_LOW, FA.CURE_PULSE_SECONDS = 0.25, 0.4    -- never down to nothing: a box that vanishes is one you look past
 
 --- The secure boxes on a cell, one per cure. Out of combat only (the caller's rule, like the
---- attributes); a box beyond the cures this character has is hidden, not destroyed.
-function FA.Boxes(cell, cures)
+--- attributes); a box beyond the cures this character has is hidden, not destroyed. On a cell whose
+--- unit may be a foe (FA.DRIVE) the client shows and hides the box; elsewhere we do.
+local function drive(b, cond)
+    if cond then
+        if b.driven ~= cond and RegisterStateDriver then RegisterStateDriver(b, "visibility", cond) end
+        b.driven = cond
+    elseif b.driven then
+        if UnregisterStateDriver then UnregisterStateDriver(b, "visibility") end
+        b.driven = nil
+    end
+end
+
+function FA.Boxes(cell, cures, unit)
     if InCombatLockdown and InCombatLockdown() then return false end
     cell.cureBoxes = cell.cureBoxes or {}
     for i = 1, FA.CURE_MAX do
@@ -352,8 +373,11 @@ function FA.Boxes(cell, cures)
                 end
                 b:SetAttribute("spell", c.name)
                 b.cure = c.name
-                b:Show()
+                local cond = FA.DRIVE[unit or ""]
+                drive(b, cond)
+                if not cond then b:Show() end
             else
+                drive(b, nil)
                 b:Hide()
                 b.cure = nil
             end
@@ -613,7 +637,7 @@ function attach(cell, unit)
             initializeFrame = FA.Placed(dispelPip(DISPEL_TINT), FA.MarkerSize(), "LEFT", cell, 2, 0),
         })
     end
-    FA.Boxes(cell, cures)
+    FA.Boxes(cell, cures, unit)
 
     -- 2. a pip for any buff we are watching. Nothing is watched by default, so no slot is built
     --    and the cell stays as clean as the grid was before.
