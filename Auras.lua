@@ -328,7 +328,10 @@ function FA.Boxes(cell, cures)
             -- the cell's unit, whoever it is now: a rebind never has to touch the box
             b:SetAttribute("useparent-unit", true)
             b:SetAttribute("type", "spell")
-            b.dim = outline(b, CURE_DIM, 0, "ARTWORK")
+            -- TWO TONES (Arn's raid, 17 Oct: the box vanished on tan, pink, green and orange bars):
+            -- a dark line outside a light one reads on every class colour
+            b.dimDark = outline(b, { 0, 0, 0, 0.7 }, 0, "ARTWORK")
+            b.dim = outline(b, CURE_DIM, -1, "ARTWORK")
             cell.cureBoxes[i] = b
         end
         if b then
@@ -546,7 +549,11 @@ function FA.Attach(cell, unit)
 end
 function attach(cell, unit)
     if not FA.Available() or not cell or not unit then return false end
-    local sig = signature()
+    -- WHETHER THIS CELL GETS CURE BOXES IS PART OF WHAT IT WAS BUILT FOR (Arn, 17 Oct 2026, a raid:
+    -- "some boxes for debuffs not drawing ... if i click where it should be it doesn't dispel"). The
+    -- grid reuses its cells as people move: a cell first built for a pet had no boxes, a raider moved
+    -- into it, the same fingerprint said "nothing changed", and the boxes were never made.
+    local sig = signature() .. (FA.CureUnit(unit) and "|cure" or "|nocure")
     if cell.auras and cell.aurasSig == sig then
         if cell.auras.SetUnit then pcall(cell.auras.SetUnit, cell.auras, unit) end
         return true

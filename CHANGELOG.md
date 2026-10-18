@@ -1,5 +1,9 @@
 # BiS Healing
 
+## Unreleased
+
+- **Cure boxes no longer go missing on some raid cells.** A cell that had shown a pet and was then given to a raider kept "no boxes", so nothing drew there and a click in that spot cured nothing. The boxes also have a dark edge under the purple one, so they stay visible on light class colours.
+
 ## 0.11.0
 
 - **Cure boxes on every cell.** Where the green dispel dot was, a small outlined box for each cure you know - a shaman gets Cure Poison and Cure Disease, a priest Dispel Magic and Cure Disease, a druid Remove Curse and Cure Poison, a paladin Cleanse. Click the box to cure that raider; it is always there, in a fight too. When they pick up something that box cures, the game draws the debuff's icon in it and the box lights up - each box only for its own kind, so the one that lights is the one to click. It frees the mouse buttons you had cures on. `/bish cures off` brings the old dot back.

@@ -5221,6 +5221,16 @@ do
         cell.auras = cell.auras or keepAuras
         tcell = nil
 
+        -- A REUSED CELL (Arn, 17 Oct raid: "some boxes for debuffs not drawing"): the grid hands a
+        -- cell that showed a pet to a raider without clearing it; the boxes must still come
+        FA.Attach(cell, "raidpet1")
+        ok(cell.auras.slots.BiSHealCure1 == nil and not b1:IsShown(), "a pet cell: no boxes")
+        FA.Attach(cell, "raid3")
+        ok(cell.auras.slots.BiSHealCure1 ~= nil and b1:IsShown(),
+           "the same cell given to a raider: the boxes come back")
+        ok(b1.dimDark ~= nil, "a dark edge under the purple one, seen on a light class colour")
+        FA.Attach(cell, "party1")
+
         -- a fight: the boxes are not touched (secure), and the switch waits
         STATE.inCombat = true
         ok(FA.Boxes(cell, {}) == false, "in a fight the boxes are left as they are")
