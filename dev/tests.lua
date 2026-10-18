@@ -547,6 +547,21 @@ local function WATCH_TICK()
         if u and STATE.units[u] then f:Show() else f:Hide() end
     end
 end
+-- A STATE DRIVER IS THE CLIENT'S TOO (18 Oct: the target cell's cure boxes). A driven frame is shown
+-- and hidden by its condition at the client's next look, whatever the addon last said - so DRIVE_TICK
+-- overrules any Show or Hide in between, as the real one does. Only the one condition shape we use:
+-- "[@<unit>,help] show; hide" - help is a unit that exists and is not in HOSTILE.
+local DRIVEN = setmetatable({}, { __mode = "k" })
+local HOSTILE = {}
+_G.RegisterStateDriver = function(f, state, cond) if state == "visibility" then DRIVEN[f] = cond end end
+_G.UnregisterStateDriver = function(f, state) if state == "visibility" then DRIVEN[f] = nil end end
+local function DRIVE_TICK()
+    for f, cond in pairs(DRIVEN) do
+        local u = tostring(cond):match("^%[@([%w]+),help%] show; hide$")
+        assert(u, "a state driver this mock does not understand: " .. tostring(cond))
+        if STATE.units[u] and not HOSTILE[u] then f:Show() else f:Hide() end
+    end
+end
 -- THE CLIENT'S OWN ANSWERS ABOUT SECRECY. There is a C_Secrets question for every kind of secret
 -- on this client - our BiSProbe census lists 27 of them - and asking is always better than
 -- handing the client a value and watching for the error. STATE.maxSecret is the one the grid
@@ -3565,6 +3580,10 @@ do
     ok(NS.DO.target(true) == true, "/bish target turns it on")
     local t = FG.target
     ok(t ~= nil and t:IsShown(), "the cell is there")
+    -- TALL like every other cell (Arn, 18 Oct: "still not on the target and tot")
+    ok(t and t.__tall and t:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "tall like the grid: the name on top, the cure boxes under it", t and tostring(t:GetHeight()))
+    ok(t and t.__nameAt and t.__nameAt:find("t", 1, true) ~= nil, "the name placed across the top", t and tostring(t.__nameAt))
     ok(t and t:GetAttribute("unit") == "target",
        "and it is the CLIENT's target token, so it follows your target in a fight",
        t and tostring(t:GetAttribute("unit")))
@@ -3739,6 +3758,8 @@ do
         ok(NS.DO.tot(true) == true, "/bish tot turns it on")
         local tt = FG.tot
         ok(tt ~= nil and tt:IsShown(), "the second cell is there")
+        ok(tt.__tall and tt:GetHeight() == FG.target:GetHeight(), "tall, the same as the target cell beside it",
+           tostring(tt:GetHeight()))
         ok(tt:GetAttribute("unit") == "targettarget",
            "and it is the client's own target-of-target token", tostring(tt:GetAttribute("unit")))
 
@@ -5237,24 +5258,42 @@ do
         local hot = cell.auras.slots.BiSHealHotRiptide
         if hot then ok(hot:OffsetFor("BOTTOMLEFT") >= cell.cureLeft, "heals over time sit beside the column too") end
 
-        -- NOT ON THE TARGET CELLS (Arn, 17 Oct: "its coming up on the enemy bars too"): whoever is
-        -- targeted may be a foe, and a secure box cannot follow them in a fight
+        -- THE TARGET CELLS: BOXES ON A FRIEND, NEVER ON A FOE (Arn, 17 Oct: "its coming up on the
+        -- enemy bars too"; 18 Oct: "im targeting my self im a friendly player and it no show the cure
+        -- thing"). Whoever is targeted may be a foe and an addon may not show or hide a secure box in a
+        -- fight - so the client does, by a state driver
         local tcell = { GetFrameLevel = function() return 5 end }
-        for _, u in ipairs({ "target", "targettarget", "pet", "partypet1", "raidpet3", "focus" }) do
+        for _, u in ipairs({ "pet", "partypet1", "raidpet3", "focus" }) do
             ok(not FA.CureUnit(u), u .. ": no cure boxes")
         end
-        for _, u in ipairs({ "player", "party2", "raid17" }) do ok(FA.CureUnit(u), u .. ": cure boxes") end
+        for _, u in ipairs({ "player", "party2", "raid17", "target", "targettarget" }) do
+            ok(FA.CureUnit(u), u .. ": cure boxes")
+        end
         FA.sig = nil
         local keepAuras = cell.auras
         cell.auras = nil
         FA.Attach(cell, "target")
-        ok(cell.auras.slots.BiSHealDispel ~= nil and cell.auras.slots.BiSHealCure1 == nil,
-           "a target cell keeps the old pip")
-        ok(not b1:IsShown() and not b2:IsShown(), "and its boxes are put away")
+        ok(cell.auras.slots.BiSHealCure1 ~= nil, "a target cell gets the cure markers")
+        ok(DRIVEN[b1] == "[@target,help] show; hide" and DRIVEN[b2] == DRIVEN[b1],
+           "and its boxes are the client's to show: only on someone you can help", tostring(DRIVEN[b1]))
+        local hadTarget = STATE.units.target
+        STATE.units.target = true
+        HOSTILE.target = true
+        DRIVE_TICK()
+        ok(not b1:IsShown() and not b2:IsShown(), "targeting a foe: no boxes")
+        HOSTILE.target = nil
+        DRIVE_TICK()
+        ok(b1:IsShown() and b2:IsShown(), "targeting a friend - yourself too: the boxes")
+        STATE.units.target = hadTarget
+        FA.sig = nil
+        cell.auras = nil
+        FA.Attach(cell, "targettarget")
+        ok(DRIVEN[b1] == "[@targettarget,help] show; hide", "the target-of-target cell: its own unit's condition",
+           tostring(DRIVEN[b1]))
         FA.sig = nil
         cell.auras = nil
         FA.Attach(cell, "party1")
-        ok(b1:IsShown(), "back on a party cell: the boxes return")
+        ok(DRIVEN[b1] == nil and b1:IsShown(), "back on a party cell: no driver, the boxes ours again")
         cell.auras = cell.auras or keepAuras
         tcell = nil
 

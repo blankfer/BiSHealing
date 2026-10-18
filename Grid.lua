@@ -739,10 +739,14 @@ function FG.LayoutTarget(anchor)
         FG.CellHeader(f, "target", f)
     end
     FG.PlaceTarget(f, anchor)
-    f:SetSize(FRAME_W, FRAME_H)
-    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, FRAME_H - 2) end
-    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, FRAME_H - 2) end
-        if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, FRAME_H - 2) end
+    -- TALL, like the grid and the self cell (Arn, 18 Oct: "still not on the target and tot"): the name
+    -- across the top, the cure boxes in the row under it
+    local h = FRAME_H + NAME_BAND
+    f:SetSize(FRAME_W, h)
+    FG.FitCell(f, FRAME_W, true)
+    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, h - 2) end
+    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, h - 2) end
+    if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, h - 2) end
     FG.Bind(f, "target")            -- which arms the mouse binds on it, like any other cell
     if NS.FA and NS.FA.Attach then NS.FA.Attach(f, "target") end
     f:Show()
@@ -782,10 +786,13 @@ function FG.LayoutToT(parent)
         FG.CellHeader(f, "tot", parent)     -- its own bar, but a drag on it moves the whole block
     end
     FG.PlaceToT(f, parent)
-    f:SetSize(FRAME_W, FRAME_H)
-    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, FRAME_H - 2) end
-    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, FRAME_H - 2) end
-        if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, FRAME_H - 2) end
+    -- tall, the same as the target cell it sits beside
+    local h = FRAME_H + NAME_BAND
+    f:SetSize(FRAME_W, h)
+    FG.FitCell(f, FRAME_W, true)
+    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, h - 2) end
+    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, h - 2) end
+    if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, h - 2) end
     FG.Bind(f, "targettarget")
     if NS.FA and NS.FA.Attach then NS.FA.Attach(f, "targettarget") end
     if f.handle then f.handle:Show() end
