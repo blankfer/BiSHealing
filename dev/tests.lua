@@ -6958,6 +6958,27 @@ do
         held.party1 = "SLEEP"
         ok(FN.PaintNeed(btn, "tremor") == true, "and a SLEEP")
 
+        -- A CONFUSE IS A CHARM OR A SHEEP (Arn, 17 Oct: "my pal got charmed and no tremor button
+        -- light up" - /bish holds had read CONFUSE, never CHARM). Only the spell tells them apart.
+        local heldSpell = {}
+        _G.C_LossOfControl.GetActiveLossOfControlDataByUnit = function(u)
+            return held[u] and { lossOfControlType = held[u], spellID = heldSpell[u] } or nil
+        end
+        held.party1, heldSpell.party1 = "CONFUSE", 118          -- Polymorph
+        ok(FN.PaintNeed(btn, "tremor") == false, "a CONFUSE from a Polymorph: no totem breaks that")
+        heldSpell.party1 = 6358                                 -- Seduction
+        ok(FN.PaintNeed(btn, "tremor") == true, "a CONFUSE from Seduction lights Tremor")
+        heldSpell.party1 = secret and secret() or nil
+        ok(FN.PaintNeed(btn, "tremor") == false, "a hidden spell id: no guess, the button stays dim")
+        local rec = FN.seenHolds.CONFUSE
+        local named = false
+        for s in pairs(rec and rec.spells or {}) do if tostring(s):find("6358", 1, true) then named = true end end
+        ok(named, "and /bish holds keeps which spell it was")
+        local kept = NS.DB().holds and NS.DB().holds.CONFUSE
+        ok(kept and type(kept.spells) == "table" and #kept.spells >= 1, "kept across logins too")
+        ok(pcall(NS.DO.holds), "/bish holds prints the spells without trouble")
+        heldSpell.party1 = nil
+
         -- COUNTED ONCE PER HOLD, not once per frame: the paint runs several times a second and the
         -- order would be nonsense if every frame of one fear counted as another fear.
         FN.Reset()
