@@ -2280,7 +2280,7 @@ do
     ok(FG.frames[1].unit == "player", "with the same order and the same groups")
     -- the grid's own size follows, so the header spans the cells rather than one of them. Not a
     -- swap of width and height: a cell is 84 x 34, so three across is wider than three down is tall.
-    ok(FG.anchor.__w == 3 * (84 + 3) - 3 and FG.anchor.__h == 34,
+    ok(FG.anchor.__w == 3 * (84 + 3) - 3 and FG.anchor.__h == FG.CELL_H + FG.NAME_BAND,
        "and the grid is as wide as the group is long, one row deep",
        ("%sx%s (was %sx%s)"):format(FG.anchor.__w, FG.anchor.__h, tallW, tallH))
 
@@ -5226,7 +5226,11 @@ do
         for _, p in ipairs(cell.name and cell.name.points or {}) do
             if p[1] == "TOPLEFT" then nameLeft = p[2] end
         end
-        ok(nameLeft == cell.cureLeft, "the cell's name is anchored there", tostring(nameLeft))
+        -- a grid cell is TALL since 17 Oct ("do the same for the regular grid too"): its name has
+        -- the top line, over the column; a short cell (target, your own) still starts past it
+        ok(nameLeft == (cell.__tall and 3 or cell.cureLeft),
+           cell.__tall and "a tall cell's name runs over the column" or "the cell's name is anchored there",
+           tostring(nameLeft))
         ok(cell.name and cell.name.__justify == "CENTER", "and centred in the room left", cell.name and cell.name.__justify)
         local hot = cell.auras.slots.BiSHealHotRiptide
         if hot then ok(hot:OffsetFor("BOTTOMLEFT") >= cell.cureLeft, "heals over time sit beside the column too") end

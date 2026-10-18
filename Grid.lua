@@ -1747,8 +1747,11 @@ function FG.Layout(anchor)
             local g = grid[i]
             local col, row = g.col, g.row
             if across then col, row = row, col end
+            -- TALL HERE TOO (Arn, 17 Oct: "do the same for the regular grid too"): the name has
+            -- the top line, the cure boxes start under it
+            h, tall = FRAME_H + NAME_BAND, true
             f:SetPoint("TOPLEFT", anchor, "TOPLEFT",
-                       (col - 1) * (FRAME_W + PAD), -(row - 1) * (FRAME_H + PAD))
+                       (col - 1) * (FRAME_W + PAD), -(row - 1) * (h + PAD))
         end
         f:SetSize(w, h)
         FG.FitCell(f, w, tall)          -- before Bind, which is what writes the name
@@ -1815,7 +1818,7 @@ function FG.Layout(anchor)
                 rows, w = deep, groups * (FRAME_W + PAD) - PAD
             end
         end
-        anchor:SetSize(w, tallH or (rows * (FRAME_H + PAD) - PAD))
+        anchor:SetSize(w, tallH or (rows * (FRAME_H + NAME_BAND + PAD) - PAD))
         -- and the prompt is trimmed to the header it now sits in: one cell wide is 84 pixels, and
         -- a word that does not fit is a word printed over whatever is beside it.
         --
