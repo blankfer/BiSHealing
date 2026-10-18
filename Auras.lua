@@ -210,9 +210,15 @@ end
 --- Where box `i` sits on a cell, and how big it is: the marker's size plus a 2 px frame for the outline.
 --- A COLUMN DOWN THE LEFT EDGE (Arn, 17 Oct: "use the left side as the debuff window"): box 1 at the
 --- top, box 2 under it - two 14 px boxes fill a 34 px cell. Answers size, x, and y down from the top.
-function FA.CureBox(i)
+--- `top` pushes the column down: a tall cell's name has the top (Grid.lua NAME_BAND).
+function FA.CureBox(i, top)
     local box = FA.MarkerSize() + 4
-    return box, 2, 2 + (i - 1) * (box + 2)
+    return box, 2, (top or 0) + 2 + (i - 1) * (box + 2)
+end
+
+--- How far down a cell's cure column starts: under the name on a tall cell, at the top otherwise.
+function FA.CureTop(cell)
+    return cell and cell.__tall and NS.FG and NS.FG.NAME_BAND or 0
 end
 
 --- Where the cure column ends, for whatever sits beside it (the name, the heals over time).
@@ -328,12 +334,15 @@ function FA.Boxes(cell, cures)
             -- the cell's unit, whoever it is now: a rebind never has to touch the box
             b:SetAttribute("useparent-unit", true)
             b:SetAttribute("type", "spell")
-            b.dim = outline(b, CURE_DIM, 0, "ARTWORK")
+            -- TWO TONES (Arn's raid, 17 Oct: the box vanished on tan, pink, green and orange bars):
+            -- a dark line outside a light one reads on every class colour
+            b.dimDark = outline(b, { 0, 0, 0, 0.7 }, 0, "ARTWORK")
+            b.dim = outline(b, CURE_DIM, -1, "ARTWORK")
             cell.cureBoxes[i] = b
         end
         if b then
             if c then
-                local size, x, y = FA.CureBox(i)
+                local size, x, y = FA.CureBox(i, FA.CureTop(cell))
                 b:SetSize(size, size)
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -y)
@@ -546,7 +555,12 @@ function FA.Attach(cell, unit)
 end
 function attach(cell, unit)
     if not FA.Available() or not cell or not unit then return false end
-    local sig = signature()
+    -- WHETHER THIS CELL GETS CURE BOXES IS PART OF WHAT IT WAS BUILT FOR (Arn, 17 Oct 2026, a raid:
+    -- "some boxes for debuffs not drawing ... if i click where it should be it doesn't dispel"). The
+    -- grid reuses its cells as people move: a cell first built for a pet had no boxes, a raider moved
+    -- into it, the same fingerprint said "nothing changed", and the boxes were never made.
+    -- and where the column starts: a cell moved into or out of a tall row places its markers again
+    local sig = signature() .. (FA.CureUnit(unit) and "|cure" or "|nocure") .. "|top" .. FA.CureTop(cell)
     if cell.auras and cell.aurasSig == sig then
         if cell.auras.SetUnit then pcall(cell.auras.SetUnit, cell.auras, unit) end
         return true
@@ -586,7 +600,7 @@ function attach(cell, unit)
     if #cures > 0 then
         local px = FA.MarkerSize()
         for i, c in ipairs(cures) do
-            local _, x, y = FA.CureBox(i)
+            local _, x, y = FA.CureBox(i, FA.CureTop(cell))
             cell.cureSlots[i] = addSlot(container, "BiSHealCure" .. i, "HARMFUL|RAID_PLAYER_DISPELLABLE", {
                 candidateFilters = { includeDispelTypes = c.types },
                 initializeFrame = FA.Placed(curePip(DISPEL_TINT, cell), px, "TOPLEFT", cell, x + 2, -(y + 2)),

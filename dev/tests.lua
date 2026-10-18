@@ -2151,6 +2151,21 @@ do
        "and a row-five cell is half a row-three cell, which is what was asked for",
        tail .. " vs " .. mid)
 
+    -- EVERY PYRAMID CELL IS TALL, AND A SHORT TAIL SHARES THE LINE (Arn, 17 Oct: "it bother me
+    -- that the bottoms row cuts off their names" ... and after IMAX: "no imax but we just make them
+    -- taller enough for the names and move the debuff out of that row")
+    local p16 = FG.Pyramid(16)
+    local last, row4, apex = p16[16], p16[11], p16[1]
+    ok(last.tall and row4.tall and apex.tall, "every row is tall, the apex too")
+    ok(last.h == FG.CELL_H + FG.NAME_BAND and apex.h == last.h, "taller by the name's band, all alike", last.h)
+    ok(last.y == row4.y + row4.h + FG.CELL_PAD, "and each row starts under the one above", last.y)
+    ok(last.w > tail and last.w <= mid, "five in a tail row are wider than eight, never wider than a cell",
+       last.w .. " (eight: " .. tail .. ", a cell: " .. mid .. ")")
+    ok(math.abs((5 * last.w + 4 * 3) - span(2)) <= 5, "and they still end where the rows above end")
+    ok(FG.Pyramid(40)[40].y == FG.Pyramid(40)[33].y + FG.CELL_H + FG.NAME_BAND + FG.CELL_PAD,
+       "every tail row is tall, not just the last")
+    ok(NS.DO.imax == nil, "the IMAX try-out is gone")
+
     -- THE ORDER: tanks first, then damage, then the healers, and raid order kept inside each.
     -- Arn, 23 Sep: "tanks dps and healers at the bottom" - in a fight you watch the tank and
     -- whoever is in the fire; the other healers are the glance you take last.
@@ -2265,7 +2280,7 @@ do
     ok(FG.frames[1].unit == "player", "with the same order and the same groups")
     -- the grid's own size follows, so the header spans the cells rather than one of them. Not a
     -- swap of width and height: a cell is 84 x 34, so three across is wider than three down is tall.
-    ok(FG.anchor.__w == 3 * (84 + 3) - 3 and FG.anchor.__h == 34,
+    ok(FG.anchor.__w == 3 * (84 + 3) - 3 and FG.anchor.__h == FG.CELL_H + FG.NAME_BAND,
        "and the grid is as wide as the group is long, one row deep",
        ("%sx%s (was %sx%s)"):format(FG.anchor.__w, FG.anchor.__h, tallW, tallH))
 
@@ -2537,6 +2552,22 @@ do
     ok(small ~= nil, "a pyramid in a 30-man actually produces narrow cells")
     ok(big ~= nil, "and wide ones above them")
     ok(small and not small.role:IsShown(), "the narrow ones have no role icon after a real layout")
+    -- a tail cell after a real layout: tall, its name across the top, the boxes under it
+    ok(small and small.__tall and small:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "a tail cell is laid out tall", small and tostring(small:GetHeight()))
+    local nameL, nameR
+    for _, pt in ipairs(small and small.name.points or {}) do
+        if pt[1] == "TOPLEFT" then nameL = pt[2] elseif pt[1] == "TOPRIGHT" then nameR = pt[2] end
+    end
+    ok(nameL == 3 and nameR == -3, "its name runs the whole width, over the boxes",
+       tostring(nameL) .. " / " .. tostring(nameR))
+    local bx = small and small.cureBoxes and small.cureBoxes[1]
+    if bx and bx:IsShown() then
+        local by = bx.points and bx.points[#bx.points]
+        ok(by and by[5] and -by[5] >= FG.NAME_BAND, "and its first cure box starts under the name",
+           by and tostring(by[5]))
+    end
+    ok(big.__tall and big:GetHeight() == FG.CELL_H + FG.NAME_BAND, "and the wide ones above are tall too")
 
     _G.IsInRaid = realRaid
     for i = 1, 30 do STATE.units["raid" .. i] = nil end
@@ -2884,6 +2915,8 @@ do
     local mine = FG.me
     ok(mine ~= nil and mine:IsShown(), "the cell is there")
     ok(mine:GetAttribute("unit") == "player", "and it is you", tostring(mine:GetAttribute("unit")))
+    ok(mine.__tall and mine:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "tall like the grid: your name on top, your cure boxes under it", tostring(mine:GetHeight()))
     ok(mine.__attrs["*type1"] ~= nil, "with the mouse binds on it, like any other cell")
     ok(mine.handle and mine.handle.__fontstrings
        and mine.handle.__fontstrings[1].__text == "BiS> me", "under a bar that says which cell it is",
@@ -5195,7 +5228,11 @@ do
         for _, p in ipairs(cell.name and cell.name.points or {}) do
             if p[1] == "TOPLEFT" then nameLeft = p[2] end
         end
-        ok(nameLeft == cell.cureLeft, "the cell's name is anchored there", tostring(nameLeft))
+        -- a grid cell is TALL since 17 Oct ("do the same for the regular grid too"): its name has
+        -- the top line, over the column; a short cell (target, your own) still starts past it
+        ok(nameLeft == (cell.__tall and 3 or cell.cureLeft),
+           cell.__tall and "a tall cell's name runs over the column" or "the cell's name is anchored there",
+           tostring(nameLeft))
         ok(cell.name and cell.name.__justify == "CENTER", "and centred in the room left", cell.name and cell.name.__justify)
         local hot = cell.auras.slots.BiSHealHotRiptide
         if hot then ok(hot:OffsetFor("BOTTOMLEFT") >= cell.cureLeft, "heals over time sit beside the column too") end
@@ -5220,6 +5257,29 @@ do
         ok(b1:IsShown(), "back on a party cell: the boxes return")
         cell.auras = cell.auras or keepAuras
         tcell = nil
+
+        -- A REUSED CELL (Arn, 17 Oct raid: "some boxes for debuffs not drawing"): the grid hands a
+        -- cell that showed a pet to a raider without clearing it; the boxes must still come
+        FA.Attach(cell, "raidpet1")
+        ok(cell.auras.slots.BiSHealCure1 == nil and not b1:IsShown(), "a pet cell: no boxes")
+        FA.Attach(cell, "raid3")
+        ok(cell.auras.slots.BiSHealCure1 ~= nil and b1:IsShown(),
+           "the same cell given to a raider: the boxes come back")
+        ok(b1.dimDark ~= nil, "a dark edge under the purple one, seen on a light class colour")
+        -- A TALL (pyramid tail) CELL: the name has the top, the column starts under it
+        local w0 = cell.__w
+        FG.FitCell(cell, 41, true)
+        FA.Attach(cell, "raid3")
+        local p1 = b1.points[#b1.points]
+        ok(p1 and -p1[5] >= FG.NAME_BAND, "on a tall cell the first box starts under the name", p1 and tostring(p1[5]))
+        local nl
+        for _, pt in ipairs(cell.name.points) do if pt[1] == "TOPLEFT" then nl = pt[2] end end
+        ok(nl == 3, "and the name is not pushed past the boxes", tostring(nl))
+        FG.FitCell(cell, w0 or 84, false)
+        FA.Attach(cell, "raid3")
+        p1 = b1.points[#b1.points]
+        ok(p1 and -p1[5] < FG.NAME_BAND, "back to an ordinary cell: the column goes back to the top")
+        FA.Attach(cell, "party1")
 
         -- a fight: the boxes are not touched (secure), and the switch waits
         STATE.inCombat = true
@@ -6884,6 +6944,27 @@ do
         ok(FN.PaintNeed(btn, "tremor") == true, "so does a CHARM")
         held.party1 = "SLEEP"
         ok(FN.PaintNeed(btn, "tremor") == true, "and a SLEEP")
+
+        -- A CONFUSE IS A CHARM OR A SHEEP (Arn, 17 Oct: "my pal got charmed and no tremor button
+        -- light up" - /bish holds had read CONFUSE, never CHARM). Only the spell tells them apart.
+        local heldSpell = {}
+        _G.C_LossOfControl.GetActiveLossOfControlDataByUnit = function(u)
+            return held[u] and { lossOfControlType = held[u], spellID = heldSpell[u] } or nil
+        end
+        held.party1, heldSpell.party1 = "CONFUSE", 118          -- Polymorph
+        ok(FN.PaintNeed(btn, "tremor") == false, "a CONFUSE from a Polymorph: no totem breaks that")
+        heldSpell.party1 = 6358                                 -- Seduction
+        ok(FN.PaintNeed(btn, "tremor") == true, "a CONFUSE from Seduction lights Tremor")
+        heldSpell.party1 = secret and secret() or nil
+        ok(FN.PaintNeed(btn, "tremor") == false, "a hidden spell id: no guess, the button stays dim")
+        local rec = FN.seenHolds.CONFUSE
+        local named = false
+        for s in pairs(rec and rec.spells or {}) do if tostring(s):find("6358", 1, true) then named = true end end
+        ok(named, "and /bish holds keeps which spell it was")
+        local kept = NS.DB().holds and NS.DB().holds.CONFUSE
+        ok(kept and type(kept.spells) == "table" and #kept.spells >= 1, "kept across logins too")
+        ok(pcall(NS.DO.holds), "/bish holds prints the spells without trouble")
+        heldSpell.party1 = nil
 
         -- COUNTED ONCE PER HOLD, not once per frame: the paint runs several times a second and the
         -- order would be nonsense if every frame of one fear counted as another fear.

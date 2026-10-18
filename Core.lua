@@ -716,6 +716,11 @@ function NS.DO.holds()
                 k.otherAt and ("  |cff4fd0cfon somebody else|r: " .. tostring(k.otherUnit) .. ", "
                     .. when(k.otherAt) .. (k.otherFight and " (in a fight)" or ""))
                 or "  |cff968eadonly ever on you|r")
+            if type(k.spells) == "table" and #k.spells > 0 then
+                local sp = {}
+                for _, s in ipairs(k.spells) do sp[#sp + 1] = tostring(s) end
+                Print("      |cff968eadspells:|r %s", table.concat(sp, ", "))
+            end
         end
     end
     -- Overlord (6 Oct): this beta can still OMIT a saved file at login. Say so rather than show a
@@ -753,6 +758,11 @@ function NS.DO.holds()
         Print("  |cffb980ff%s|r x%d%s%s", kind, rec.n or 0,
             #who > 0 and ("  on " .. table.concat(who, ", ")) or "",
             rec.fight and "  |cff968ead(in a fight)|r" or "")
+        -- and which spells (17 Oct): CONFUSE is a charm or a sheep, and only the spell says which
+        local sp = {}
+        for s in pairs(rec.spells or {}) do sp[#sp + 1] = tostring(s) end
+        table.sort(sp)
+        if #sp > 0 then Print("      |cff968eadspells:|r %s", table.concat(sp, ", ")) end
     end
 
     local lit = {}

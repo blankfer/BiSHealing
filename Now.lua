@@ -237,6 +237,29 @@ FN.HOLDS = {
     TREMOR = { FEAR = true, FEAR_MECHANIC = true, CHARM = true, SLEEP = true, POSSESS = true },
 }
 
+--- SOME HOLDS COUNT ONLY FOR THE RIGHT SPELL (Arn, 17 Oct 2026: "my pal got charmed and no tremor
+--- button light up"). /bish holds had never once read CHARM - his pal's charm came in as CONFUSE,
+--- the client's word for Polymorph and Sap too, which no totem breaks. So a CONFUSE lights Tremor
+--- only when its spell is a charm a Tremor Totem answers: Seduction, by id or by name.
+FN.HOLD_SPELLS = {
+    TREMOR = { CONFUSE = { [6358] = true, ["Seduction"] = true } },
+}
+
+--- The spell holding someone: its id and name, or nil. Both are asked "secret?" first.
+function FN.HoldSpell(d)
+    local okI, id = pcall(function() return d.spellID end)
+    id = okI and NS.Plain(id) or nil
+    if type(id) ~= "number" then return nil end
+    local name
+    local getName = (C_Spell and C_Spell.GetSpellName) or (GetSpellInfo and function(i) return (GetSpellInfo(i)) end)
+    if getName then
+        local okN, n = pcall(getName, id)
+        n = okN and NS.Plain(n) or nil
+        if type(n) == "string" then name = n end
+    end
+    return id, name
+end
+
 --- WHAT THE ADDON HAS ACTUALLY SEEN A CLIENT DO (3 Oct 2026).
 ---
 --- The hold types were already being written down and there was no way on earth to read them back,
@@ -256,12 +279,12 @@ FN.HOLDS = {
 --- the client, not about our own table key.
 FN.seenHolds = {}
 
-function FN.SawHold(kind, unit)
+function FN.SawHold(kind, unit, spell)
     FN.seenHolds = FN.seenHolds or {}
     local rec = FN.seenHolds[kind]
     local fresh = not rec
     if not rec then
-        rec = { n = 0, units = {}, other = false, fight = false }
+        rec = { n = 0, units = {}, other = false, fight = false, spells = {} }
         FN.seenHolds[kind] = rec
     end
     local wasOther = rec.other
@@ -270,9 +293,13 @@ function FN.SawHold(kind, unit)
         rec.units[unit] = (rec.units[unit] or 0) + 1
         if unit ~= "player" then rec.other = true end
     end
+    -- WHICH SPELL (17 Oct): a type alone could not say whether a CONFUSE was a charm or a sheep
+    rec.spells = rec.spells or {}
+    local newSpell = spell ~= nil and not rec.spells[spell]
+    if spell ~= nil then rec.spells[spell] = (rec.spells[spell] or 0) + 1 end
     if InCombatLockdown and InCombatLockdown() then rec.fight = true end
     -- only on something NEW: the paint asks several times a second
-    if fresh or (rec.other and not wasOther) then FN.KeepHold(kind, unit) end
+    if fresh or newSpell or (rec.other and not wasOther) then FN.KeepHold(kind, unit, spell) end
     return rec
 end
 
@@ -285,7 +312,7 @@ end
 ---
 --- Overlord measured that this beta can still OMIT a saved file at login, so `/bish holds` says
 --- when the record it shows started fresh this session rather than trusting it blind.
-function FN.KeepHold(kind, unit)
+function FN.KeepHold(kind, unit, spell)
     local db = NS.DB and NS.DB()
     if type(db) ~= "table" or type(kind) ~= "string" then return end
     db.holds = type(db.holds) == "table" and db.holds or {}
@@ -293,6 +320,13 @@ function FN.KeepHold(kind, unit)
     if type(k) ~= "table" then
         k = { firstAt = (time and time()) or 0 }
         db.holds[kind] = k
+    end
+    -- the spells this kind has been, at most eight - a list to read, not a log
+    if spell ~= nil then
+        k.spells = type(k.spells) == "table" and k.spells or {}
+        local have = false
+        for _, s in ipairs(k.spells) do if s == spell then have = true end end
+        if not have and #k.spells < 8 then k.spells[#k.spells + 1] = spell end
     end
     if type(unit) == "string" and unit ~= "player" and not k.otherAt then
         k.otherAt    = (time and time()) or 0
@@ -319,8 +353,9 @@ function FN.HoldOn(unit)
             local okT, kind = pcall(function() return d.lossOfControlType or d.locType end)
             kind = okT and NS.Plain(kind) or nil
             if type(kind) == "string" then
-                FN.SawHold(kind, unit)
-                return kind, nil
+                local id, name = FN.HoldSpell(d)
+                FN.SawHold(kind, unit, name and (name .. " (" .. id .. ")") or id)
+                return kind, nil, id, name
             end
         end
     end
@@ -329,13 +364,17 @@ end
 
 --- Is anyone in the group held by something this button answers? Returns the unit and the type.
 function FN.WhoNeeds(key)
-    local want = FN.HOLDS[(FN.Button(key) or {}).holds or ""]
+    local holds = (FN.Button(key) or {}).holds or ""
+    local want = FN.HOLDS[holds]
     if not want then return nil end
+    local bySpell = FN.HOLD_SPELLS[holds] or {}
     local FG = NS.FG
     local roster = (FG and FG.Roster and FG.Roster()) or { "player" }
     for _, unit in ipairs(roster) do
-        local kind = FN.HoldOn(unit)
+        local kind, _, id, name = FN.HoldOn(unit)
         if kind and want[kind] then return unit, kind end
+        local spells = kind and bySpell[kind]
+        if spells and ((id and spells[id]) or (name and spells[name])) then return unit, kind end
     end
     return nil
 end

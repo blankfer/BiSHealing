@@ -1,5 +1,11 @@
 # BiS Healing
 
+## Unreleased
+
+- **Cure boxes no longer go missing on some raid cells.** A cell that had shown a pet and was then given to a raider kept "no boxes", so nothing drew there and a click in that spot cured nothing. The boxes also have a dark edge under the purple one, so they stay visible on light class colours.
+- **Names fit on the cells.** Every cell of the grid - columns, rows or the pyramid - and your own cell are a little taller now, with the name across the top and the cure boxes under it, so the boxes never cut a name short. A short last row (five pets, the last six of a 25) shares the line, so those cells are wider too.
+- **Tremor lights for Seduction.** The game reports a succubus's charm as "confused" - the same word it uses for Polymorph and Sap, which no totem breaks - so Tremor stayed dark. It now looks at the spell: Seduction lights it, a sheep does not. `/bish holds` also names the spell behind every hold it has seen.
+
 ## 0.11.0
 
 - **Cure boxes on every cell.** Where the green dispel dot was, a small outlined box for each cure you know - a shaman gets Cure Poison and Cure Disease, a priest Dispel Magic and Cure Disease, a druid Remove Curse and Cure Poison, a paladin Cleanse. Click the box to cure that raider; it is always there, in a fight too. When they pick up something that box cures, the game draws the debuff's icon in it and the box lights up - each box only for its own kind, so the one that lights is the one to click. It frees the mouse buttons you had cures on. `/bish cures off` brings the old dot back.
