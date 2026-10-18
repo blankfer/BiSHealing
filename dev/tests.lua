@@ -2175,6 +2175,8 @@ do
        "a tail of eight never goes shorter than its name and boxes need")
     ok(im[4].y == im[2].y + im[2].h + FG.CELL_PAD, "the rows stack on the taller heights")
     ok(FG.Pyramid(16)[1].h == FG.CELL_H, "and off, the apex is the ordinary bar")
+    ok(im[1].tall and im[4].tall, "IMAX: every cell has its name on top and the boxes under it")
+    ok(im[16].w == FG.Pyramid(16)[16].w, "and the short tail row is as wide as without IMAX")
     local d = NS.DB()
     local wasL = d.layout
     d.layout = "pyramid"

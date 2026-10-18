@@ -159,8 +159,10 @@ function FG.Pyramid(n, imax)
         local cap = SHAPE[r] or TAIL
         local count = math.min(cap, n - i + 1)
         local w = WIDTH[r] or TAIL_W
-        local tall = SHAPE[r] == nil
-        if tall and count < TAIL then
+        -- under IMAX every cell is tall enough for the name to have the top, so every cell does
+        -- (Arn, 17 Oct: "it did not shift the debuff buttons and leave the names on top")
+        local tall = SHAPE[r] == nil or imax == true
+        if SHAPE[r] == nil and count < TAIL then
             w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
         end
         local h = tall and FRAME_H + NAME_BAND or FRAME_H
