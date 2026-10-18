@@ -861,10 +861,13 @@ function FG.LayoutSelf(anchor)
         FG.CellHeader(f, "me", f, FG.SELF_KEYS)
     end
     FG.PlaceSelf(f, anchor)
-    f:SetSize(FRAME_W, FRAME_H)
-    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, FRAME_H - 2) end
-    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, FRAME_H - 2) end
-        if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, FRAME_H - 2) end
+    -- TALL, like the grid (Arn, 17 Oct: "yeah do the self cell too"): your cell has cure boxes too
+    local h = FRAME_H + NAME_BAND
+    f:SetSize(FRAME_W, h)
+    FG.FitCell(f, FRAME_W, true)
+    if f.incoming and f.incoming.SetSize then f.incoming:SetSize(FRAME_W - 2, h - 2) end
+    if f.overheal and f.overheal.SetSize then f.overheal:SetSize(FRAME_W - 2, h - 2) end
+    if f.absorb and f.absorb.SetSize then f.absorb:SetSize(FRAME_W - 2, h - 2) end
     FG.Bind(f, "player")
     if NS.FA and NS.FA.Attach then NS.FA.Attach(f, "player") end
     if f.handle then f.handle:Show() end

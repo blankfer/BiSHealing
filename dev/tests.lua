@@ -2915,6 +2915,8 @@ do
     local mine = FG.me
     ok(mine ~= nil and mine:IsShown(), "the cell is there")
     ok(mine:GetAttribute("unit") == "player", "and it is you", tostring(mine:GetAttribute("unit")))
+    ok(mine.__tall and mine:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "tall like the grid: your name on top, your cure boxes under it", tostring(mine:GetHeight()))
     ok(mine.__attrs["*type1"] ~= nil, "with the mouse binds on it, like any other cell")
     ok(mine.handle and mine.handle.__fontstrings
        and mine.handle.__fontstrings[1].__text == "BiS> me", "under a bar that says which cell it is",
