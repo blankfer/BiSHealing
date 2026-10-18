@@ -112,10 +112,11 @@ local SHAPE  = { 1, 2, 4, 4 }           -- cells in each row; rows past the last
 local WIDTH  = { FULL_W, FULL_W, MID_W, MID_W }
 local TAIL   = 8
 local HALF_W = FRAME_W                  -- the ordinary cell, still what a non-pyramid grid uses
--- THE TAIL ROWS ARE TALLER, AND THE NAME HAS THE TOP (Arn, 17 Oct 2026: "it bother me that the
--- bottoms row cuts off their names" ... "we can just make the cell taller"). A tail cell is 41 px,
--- and since the cure boxes took the first 21 of every player's cell, its name had three letters.
--- So a tail cell is NAME_BAND taller, its name runs across the whole top, and the boxes sit under it.
+-- THE PYRAMID'S CELLS ARE TALLER, AND THE NAME HAS THE TOP (Arn, 17 Oct 2026: "it bother me that
+-- the bottoms row cuts off their names" ... "we can just make the cell taller"). A tail cell is 41
+-- px, and since the cure boxes took the first 21 of every player's cell, its name had three
+-- letters. So a cell is NAME_BAND taller, its name runs across the whole top, and the boxes sit
+-- under it - first the tail rows, then (the same night) every row of the pyramid.
 -- And a short tail row (five pets, the last six of a 25) shares the line instead of leaving
 -- three-eighths of it empty - never wider than an ordinary cell.
 local NAME_BAND = 12
@@ -146,33 +147,23 @@ local MELEE_RANK = {
 
 --- Where each of `n` cells goes: its row, its place in the row, how many share the row, and
 --- whether the row is full width. Pure - no frames - so it can be asked without a client.
---- Each cell also gets `y` (down from the top), `h` (its height) and `tall` (a tail row).
+--- Each cell also gets `y` (down from the top), `h` (its height) and `tall` (name on top).
 ---
---- IMAX (Arn, 17 Oct 2026: "for the tank pyramid lets say we try making them imax 70mm aspect
---- ratio i want to see how it looks"): every cell 1.43:1, the family's window shape.
---- BUILT FROM THE BOTTOM UP (Arn, same night, the apex at 171 x 120 mostly empty: "start at row 5
---- size and go half step" - his pick of two, "bottom up"): every tail row is 66 x 46, the short
---- tail that already looked right, and each row above is half a step (10 px) wider - 76, 86, 96,
---- and the tank 106 x 74. A real triangle, narrow at the top. `/bish imax` (d.imax).
-FG.IMAX = 1.43
-FG.IMAX_W = { 106, 96, 86, 76 }          -- apex, pair, the two rows of four
-FG.IMAX_TAIL = 66                        -- row five and below
-function FG.Pyramid(n, imax)
+--- EVERY PYRAMID CELL IS TALL (Arn, 17 Oct 2026, after trying 1.43:1 "IMAX" cells and going back:
+--- "no imax but we just make them taller enough for the names and move the debuff out of that
+--- row"). The name has the top line of every cell, the cure boxes start under it - so even
+--- "Frankadank" beside a role icon and two boxes is never cut.
+function FG.Pyramid(n)
     local out, r, i, y = {}, 1, 1, 0
     while i <= n do
         local cap = SHAPE[r] or TAIL
         local count = math.min(cap, n - i + 1)
         local w = WIDTH[r] or TAIL_W
-        -- under IMAX every cell is tall enough for the name to have the top, so every cell does
-        -- (Arn, 17 Oct: "it did not shift the debuff buttons and leave the names on top")
-        local tall = SHAPE[r] == nil or imax == true
-        if imax then
-            w = FG.IMAX_W[r] or FG.IMAX_TAIL
-        elseif SHAPE[r] == nil and count < TAIL then
+        local tall = true
+        if SHAPE[r] == nil and count < TAIL then
             w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
         end
-        local h = tall and FRAME_H + NAME_BAND or FRAME_H
-        if imax then h = math.max(h, math.floor(w / FG.IMAX + 0.5)) end
+        local h = FRAME_H + NAME_BAND
         for c = 1, count do
             -- `w` is the width this cell is drawn at; `wide` is kept as the old yes/no for
             -- anything still asking "is this one of the big top rows"
@@ -1627,8 +1618,9 @@ local CHAR_W = 5.5                       -- the small font, measured by eye at 1
 --- Set a cell up for the width it has just been given. Called from the layout, where the width is
 --- known, rather than from the paint - anchors do not change sixty times a second.
 function FG.FitCell(f, w, tall)
-    -- a tall cell is a tail cell, in the pyramid: its shape says the role too, and the icon goes
-    local narrow = (tonumber(w) or FRAME_W) < NARROW_W or tall == true
+    -- a tall cell narrower than an ordinary one (a short tail row) gives its name the icon's corner
+    -- too: the pyramid's shape says the role. Ordinary and wider cells keep the icon.
+    local narrow = (tonumber(w) or FRAME_W) < NARROW_W or (tall == true and (tonumber(w) or FRAME_W) < FRAME_W)
     f.__w = tonumber(w) or FRAME_W
     f.__tall = tall == true or nil
     local changed = f.__narrow ~= narrow
@@ -1727,7 +1719,7 @@ function FG.Layout(anchor)
     end
     if pyramid then
         roster = FG.ByRole(roster)
-        place = FG.Pyramid(#roster, type(d) == "table" and d.imax == true)
+        place = FG.Pyramid(#roster)
         -- the widest row sets the width, and every other row is centred in it
         for _, p in ipairs(place) do
             local w = p.w or (p.wide and FULL_W or HALF_W)

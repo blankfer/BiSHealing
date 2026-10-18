@@ -2151,47 +2151,20 @@ do
        "and a row-five cell is half a row-three cell, which is what was asked for",
        tail .. " vs " .. mid)
 
-    -- THE TAIL IS TALLER, AND A SHORT ONE SHARES THE LINE (Arn, 17 Oct: "it bother me that the
-    -- bottoms row cuts off their names" ... "we can just make the cell taller")
+    -- EVERY PYRAMID CELL IS TALL, AND A SHORT TAIL SHARES THE LINE (Arn, 17 Oct: "it bother me
+    -- that the bottoms row cuts off their names" ... and after IMAX: "no imax but we just make them
+    -- taller enough for the names and move the debuff out of that row")
     local p16 = FG.Pyramid(16)
-    local last, row4 = p16[16], p16[11]
-    ok(last.tall and not row4.tall, "a tail row is tall; the rows above it are not")
-    ok(last.h == FG.CELL_H + FG.NAME_BAND and row4.h == FG.CELL_H, "taller by the name's band", last.h)
-    ok(last.y == row4.y + row4.h + FG.CELL_PAD, "and it starts under the row above", last.y)
+    local last, row4, apex = p16[16], p16[11], p16[1]
+    ok(last.tall and row4.tall and apex.tall, "every row is tall, the apex too")
+    ok(last.h == FG.CELL_H + FG.NAME_BAND and apex.h == last.h, "taller by the name's band, all alike", last.h)
+    ok(last.y == row4.y + row4.h + FG.CELL_PAD, "and each row starts under the one above", last.y)
     ok(last.w > tail and last.w <= mid, "five in a tail row are wider than eight, never wider than a cell",
        last.w .. " (eight: " .. tail .. ", a cell: " .. mid .. ")")
     ok(math.abs((5 * last.w + 4 * 3) - span(2)) <= 5, "and they still end where the rows above end")
     ok(FG.Pyramid(40)[40].y == FG.Pyramid(40)[33].y + FG.CELL_H + FG.NAME_BAND + FG.CELL_PAD,
        "every tail row is tall, not just the last")
-
-    -- IMAX (Arn, 17 Oct: "lets say we try making them imax 70mm aspect ratio"): every cell 1.43:1
-    local im = FG.Pyramid(16, true)
-    local function ratio(q) return q.w / q.h end
-    ok(math.abs(ratio(im[1]) - 1.43) < 0.02 and math.abs(ratio(im[4]) - 1.43) < 0.03,
-       "IMAX: the apex and a middle cell are 1.43:1", im[1].w .. "x" .. im[1].h .. ", " .. im[4].w .. "x" .. im[4].h)
-    ok(im[16].h >= FG.CELL_H + FG.NAME_BAND and math.abs(ratio(im[16]) - 1.43) < 0.05,
-       "a short tail row is 1.43:1 too, and keeps room for its name", im[16].w .. "x" .. im[16].h)
-    ok(FG.Pyramid(40, true)[40].h >= FG.CELL_H + FG.NAME_BAND,
-       "a tail of eight never goes shorter than its name and boxes need")
-    ok(im[4].y == im[2].y + im[2].h + FG.CELL_PAD, "the rows stack on the taller heights")
-    ok(FG.Pyramid(16)[1].h == FG.CELL_H, "and off, the apex is the ordinary bar")
-    ok(im[1].tall and im[4].tall, "IMAX: every cell has its name on top and the boxes under it")
-    ok(im[16].w == FG.Pyramid(16)[16].w, "and the short tail row is as wide as without IMAX")
-    -- BOTTOM UP (Arn: "start at row 5 size and go half step"): 66 x 46 at the bottom, the tank 106 x 74
-    ok(im[16].w == 66 and im[16].h == 46, "IMAX: the tail is 66 x 46", im[16].w .. "x" .. im[16].h)
-    ok(im[1].w == 106 and im[1].h == 74, "the tank is 106 x 74", im[1].w .. "x" .. im[1].h)
-    ok(im[2].w == 96 and im[4].w == 86 and im[8].w == 76, "half a step (10 px) a row: 96, 86, 76")
-    ok(im[1].w < 2 * im[2].w + 3 and 2 * im[2].w + 3 < 4 * im[4].w + 9,
-       "a real triangle: every row wider than the one above")
-    local d = NS.DB()
-    local wasL = d.layout
-    d.layout = "pyramid"
-    ok(NS.DO.imax() == true and d.imax == true, "/bish imax turns it on")
-    ok(NS.DO.imax() == false and d.imax == nil, "and again turns it off")
-    NS.DO.imax(true)
-    _G.SlashCmdList.BISHEALING("imax off")
-    ok(d.imax == nil, "/bish imax off")
-    d.layout = wasL
+    ok(NS.DO.imax == nil, "the IMAX try-out is gone")
 
     -- THE ORDER: tanks first, then damage, then the healers, and raid order kept inside each.
     -- Arn, 23 Sep: "tanks dps and healers at the bottom" - in a fight you watch the tank and
@@ -2594,7 +2567,7 @@ do
         ok(by and by[5] and -by[5] >= FG.NAME_BAND, "and its first cure box starts under the name",
            by and tostring(by[5]))
     end
-    ok(not big.__tall and big:GetHeight() == FG.CELL_H, "the cells above keep their height")
+    ok(big.__tall and big:GetHeight() == FG.CELL_H + FG.NAME_BAND, "and the wide ones above are tall too")
 
     _G.IsInRaid = realRaid
     for i = 1, 30 do STATE.units["raid" .. i] = nil end
