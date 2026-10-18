@@ -1,9 +1,10 @@
 # BiS Healing
 
-## Unreleased
+## 0.12.0
 
+- **Cure boxes on your target and target-of-target cells** - whenever they're someone you can help, yourself included. On a mob or an enemy player the boxes aren't there, and the game itself makes that call as your target changes, in a fight too.
 - **Cure boxes no longer go missing on some raid cells.** A cell that had shown a pet and was then given to a raider kept "no boxes", so nothing drew there and a click in that spot cured nothing. The boxes also have a dark edge under the purple one, so they stay visible on light class colours.
-- **Names fit on the cells.** Every cell of the grid - columns, rows or the pyramid - and your own cell are a little taller now, with the name across the top and the cure boxes under it, so the boxes never cut a name short. A short last row (five pets, the last six of a 25) shares the line, so those cells are wider too.
+- **Names fit on the cells.** Every cell of the grid - columns, rows or the pyramid - your own cell and the target and target-of-target cells are a little taller now, with the name across the top and the cure boxes under it, so the boxes never cut a name short. A short last row (five pets, the last six of a 25) shares the line, so those cells are wider too.
 - **Tremor lights for Seduction.** The game reports a succubus's charm as "confused" - the same word it uses for Polymorph and Sap, which no totem breaks - so Tremor stayed dark. It now looks at the spell: Seduction lights it, a sheep does not. `/bish holds` also names the spell behind every hold it has seen.
 
 ## 0.11.0
