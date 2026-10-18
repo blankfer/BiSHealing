@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Cure boxes no longer go missing on some raid cells.** A cell that had shown a pet and was then given to a raider kept "no boxes", so nothing drew there and a click in that spot cured nothing. The boxes also have a dark edge under the purple one, so they stay visible on light class colours.
+- **Names fit on the pyramid's bottom rows.** Those small cells are a little taller now, with the name across the whole top and the cure boxes under it. A short last row (five pets, the last six of a 25) shares the line, so each cell is wider too.
 
 ## 0.11.0
 

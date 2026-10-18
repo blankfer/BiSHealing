@@ -2151,6 +2151,19 @@ do
        "and a row-five cell is half a row-three cell, which is what was asked for",
        tail .. " vs " .. mid)
 
+    -- THE TAIL IS TALLER, AND A SHORT ONE SHARES THE LINE (Arn, 17 Oct: "it bother me that the
+    -- bottoms row cuts off their names" ... "we can just make the cell taller")
+    local p16 = FG.Pyramid(16)
+    local last, row4 = p16[16], p16[11]
+    ok(last.tall and not row4.tall, "a tail row is tall; the rows above it are not")
+    ok(last.h == FG.CELL_H + FG.NAME_BAND and row4.h == FG.CELL_H, "taller by the name's band", last.h)
+    ok(last.y == row4.y + row4.h + FG.CELL_PAD, "and it starts under the row above", last.y)
+    ok(last.w > tail and last.w <= mid, "five in a tail row are wider than eight, never wider than a cell",
+       last.w .. " (eight: " .. tail .. ", a cell: " .. mid .. ")")
+    ok(math.abs((5 * last.w + 4 * 3) - span(2)) <= 5, "and they still end where the rows above end")
+    ok(FG.Pyramid(40)[40].y == FG.Pyramid(40)[33].y + FG.CELL_H + FG.NAME_BAND + FG.CELL_PAD,
+       "every tail row is tall, not just the last")
+
     -- THE ORDER: tanks first, then damage, then the healers, and raid order kept inside each.
     -- Arn, 23 Sep: "tanks dps and healers at the bottom" - in a fight you watch the tank and
     -- whoever is in the fire; the other healers are the glance you take last.
@@ -2537,6 +2550,22 @@ do
     ok(small ~= nil, "a pyramid in a 30-man actually produces narrow cells")
     ok(big ~= nil, "and wide ones above them")
     ok(small and not small.role:IsShown(), "the narrow ones have no role icon after a real layout")
+    -- a tail cell after a real layout: tall, its name across the top, the boxes under it
+    ok(small and small.__tall and small:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "a tail cell is laid out tall", small and tostring(small:GetHeight()))
+    local nameL, nameR
+    for _, pt in ipairs(small and small.name.points or {}) do
+        if pt[1] == "TOPLEFT" then nameL = pt[2] elseif pt[1] == "TOPRIGHT" then nameR = pt[2] end
+    end
+    ok(nameL == 3 and nameR == -3, "its name runs the whole width, over the boxes",
+       tostring(nameL) .. " / " .. tostring(nameR))
+    local bx = small and small.cureBoxes and small.cureBoxes[1]
+    if bx and bx:IsShown() then
+        local by = bx.points and bx.points[#bx.points]
+        ok(by and by[5] and -by[5] >= FG.NAME_BAND, "and its first cure box starts under the name",
+           by and tostring(by[5]))
+    end
+    ok(not big.__tall and big:GetHeight() == FG.CELL_H, "the cells above keep their height")
 
     _G.IsInRaid = realRaid
     for i = 1, 30 do STATE.units["raid" .. i] = nil end
@@ -5229,6 +5258,19 @@ do
         ok(cell.auras.slots.BiSHealCure1 ~= nil and b1:IsShown(),
            "the same cell given to a raider: the boxes come back")
         ok(b1.dimDark ~= nil, "a dark edge under the purple one, seen on a light class colour")
+        -- A TALL (pyramid tail) CELL: the name has the top, the column starts under it
+        local w0 = cell.__w
+        FG.FitCell(cell, 41, true)
+        FA.Attach(cell, "raid3")
+        local p1 = b1.points[#b1.points]
+        ok(p1 and -p1[5] >= FG.NAME_BAND, "on a tall cell the first box starts under the name", p1 and tostring(p1[5]))
+        local nl
+        for _, pt in ipairs(cell.name.points) do if pt[1] == "TOPLEFT" then nl = pt[2] end end
+        ok(nl == 3, "and the name is not pushed past the boxes", tostring(nl))
+        FG.FitCell(cell, w0 or 84, false)
+        FA.Attach(cell, "raid3")
+        p1 = b1.points[#b1.points]
+        ok(p1 and -p1[5] < FG.NAME_BAND, "back to an ordinary cell: the column goes back to the top")
         FA.Attach(cell, "party1")
 
         -- a fight: the boxes are not touched (secure), and the switch waits

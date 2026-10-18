@@ -112,6 +112,14 @@ local SHAPE  = { 1, 2, 4, 4 }           -- cells in each row; rows past the last
 local WIDTH  = { FULL_W, FULL_W, MID_W, MID_W }
 local TAIL   = 8
 local HALF_W = FRAME_W                  -- the ordinary cell, still what a non-pyramid grid uses
+-- THE TAIL ROWS ARE TALLER, AND THE NAME HAS THE TOP (Arn, 17 Oct 2026: "it bother me that the
+-- bottoms row cuts off their names" ... "we can just make the cell taller"). A tail cell is 41 px,
+-- and since the cure boxes took the first 21 of every player's cell, its name had three letters.
+-- So a tail cell is NAME_BAND taller, its name runs across the whole top, and the boxes sit under it.
+-- And a short tail row (five pets, the last six of a 25) shares the line instead of leaving
+-- three-eighths of it empty - never wider than an ordinary cell.
+local NAME_BAND = 12
+FG.NAME_BAND = NAME_BAND
 -- TANKS, THEN DAMAGE, THEN THE HEALERS AT THE BOTTOM. Arn, 23 Sep: "when we arrange by tanks.
 -- lets do tanks dps and healers at the bottom". The healers were second when the pyramid was
 -- built; in a fight the people you watch hardest are the tank and whoever is standing in the
@@ -138,18 +146,26 @@ local MELEE_RANK = {
 
 --- Where each of `n` cells goes: its row, its place in the row, how many share the row, and
 --- whether the row is full width. Pure - no frames - so it can be asked without a client.
+--- Each cell also gets `y` (down from the top), `h` (its height) and `tall` (a tail row).
 function FG.Pyramid(n)
-    local out, r, i = {}, 1, 1
+    local out, r, i, y = {}, 1, 1, 0
     while i <= n do
         local cap = SHAPE[r] or TAIL
         local count = math.min(cap, n - i + 1)
         local w = WIDTH[r] or TAIL_W
+        local tall = SHAPE[r] == nil
+        if tall and count < TAIL then
+            w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
+        end
+        local h = tall and FRAME_H + NAME_BAND or FRAME_H
         for c = 1, count do
             -- `w` is the width this cell is drawn at; `wide` is kept as the old yes/no for
             -- anything still asking "is this one of the big top rows"
-            out[i] = { row = r, col = c, count = count, w = w, wide = w == FULL_W }
+            out[i] = { row = r, col = c, count = count, w = w, wide = w == FULL_W,
+                       y = y, h = h, tall = tall }
             i = i + 1
         end
+        y = y + h + PAD
         r = r + 1
     end
     return out
@@ -1595,9 +1611,11 @@ local CHAR_W = 5.5                       -- the small font, measured by eye at 1
 
 --- Set a cell up for the width it has just been given. Called from the layout, where the width is
 --- known, rather than from the paint - anchors do not change sixty times a second.
-function FG.FitCell(f, w)
-    local narrow = (tonumber(w) or FRAME_W) < NARROW_W
+function FG.FitCell(f, w, tall)
+    -- a tall cell is a tail cell, in the pyramid: its shape says the role too, and the icon goes
+    local narrow = (tonumber(w) or FRAME_W) < NARROW_W or tall == true
     f.__w = tonumber(w) or FRAME_W
+    f.__tall = tall == true or nil
     local changed = f.__narrow ~= narrow
     f.__narrow = narrow
     FG.PlaceName(f)
@@ -1609,18 +1627,22 @@ end
 --- think we center the name and use the left side as the debuff window"). With cure boxes the
 --- cell's left edge is a column of them (f.cureLeft = where it ends, set by Auras.lua FA.Boxes)
 --- and the name is centred in what is left; without, it starts at the edge as it always did.
+--- A TALL cell (a pyramid tail row) puts it across the whole top instead, over the boxes.
 function FG.PlaceName(f)
-    local left = f.cureLeft or 3
+    local tall = f.__tall == true
+    local left = tall and 3 or (f.cureLeft or 3)
+    local top = tall and -2 or -4
     local w = f.__w or FRAME_W
     f.__chars = math.max(3, math.floor((w - left - 3) / CHAR_W))
     if not f.name then return end
-    if f.__nameAt == left .. (f.__narrow and "n" or "w") then return end
-    f.__nameAt = left .. (f.__narrow and "n" or "w")
+    local at = left .. (f.__narrow and "n" or "w") .. (tall and "t" or "")
+    if f.__nameAt == at then return end
+    f.__nameAt = at
     f.name:ClearAllPoints()
-    f.name:SetPoint("TOPLEFT", left, -4)
+    f.name:SetPoint("TOPLEFT", left, top)
     -- the corner the role icon was keeping, or all of it
-    f.name:SetPoint("TOPRIGHT", f.__narrow and -3 or -14, -4)
-    if f.name.SetJustifyH then f.name:SetJustifyH(f.cureLeft and "CENTER" or "LEFT") end
+    f.name:SetPoint("TOPRIGHT", f.__narrow and -3 or -14, top)
+    if f.name.SetJustifyH then f.name:SetJustifyH((tall or f.cureLeft) and "CENTER" or "LEFT") end
     if f.unit then f.name:SetText(FG.CellName(f, f.unit)) end
 end
 
@@ -1701,13 +1723,14 @@ function FG.Layout(anchor)
     for i, unit in ipairs(roster) do
         local f = FG.frames[i] or FG.Make(i, anchor)
         f:ClearAllPoints()
-        local w = FRAME_W
+        local w, h, tall = FRAME_W, FRAME_H, false
         if pyramid then
             local p = place[i]
             w = p.w or (p.wide and FULL_W or HALF_W)
+            h, tall = p.h or FRAME_H, p.tall or false
             local rowW = p.count * w + (p.count - 1) * PAD
             local x = (span - rowW) / 2 + (p.col - 1) * (w + PAD)
-            f:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -(p.row - 1) * (FRAME_H + PAD))
+            f:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -(p.y or (p.row - 1) * (FRAME_H + PAD)))
         else
             -- ACROSS, OR DOWN. A player's request (paszczyszyn, 22 Sep): "Can we have an option to
             -- setup cells? vertically and horizontally?". A group is a COLUMN by default - five
@@ -1720,14 +1743,14 @@ function FG.Layout(anchor)
             f:SetPoint("TOPLEFT", anchor, "TOPLEFT",
                        (col - 1) * (FRAME_W + PAD), -(row - 1) * (FRAME_H + PAD))
         end
-        f:SetSize(w, FRAME_H)
-        FG.FitCell(f, w)                -- before Bind, which is what writes the name
+        f:SetSize(w, h)
+        FG.FitCell(f, w, tall)          -- before Bind, which is what writes the name
         -- THE INCOMING BAR FOLLOWS THE CELL. It was sized once, at birth, to one ordinary cell -
         -- so on a full-width apex cell the pale "heal on its way" stripe would have stopped dead
         -- halfway across, which reads as "only half of this is coming".
-        if f.incoming and f.incoming.SetSize then f.incoming:SetSize(w - 2, FRAME_H - 2) end
-        if f.absorb and f.absorb.SetSize then f.absorb:SetSize(w - 2, FRAME_H - 2) end
-        if f.overheal and f.overheal.SetSize then f.overheal:SetSize(w - 2, FRAME_H - 2) end
+        if f.incoming and f.incoming.SetSize then f.incoming:SetSize(w - 2, h - 2) end
+        if f.absorb and f.absorb.SetSize then f.absorb:SetSize(w - 2, h - 2) end
+        if f.overheal and f.overheal.SetSize then f.overheal:SetSize(w - 2, h - 2) end
         FG.Bind(f, unit)
         -- the aura markers ride the same out-of-combat moment as the secure attributes: the
         -- container is told its unit here and then draws by itself for the whole fight
@@ -1770,9 +1793,11 @@ function FG.Layout(anchor)
     -- cells rather than the 84 pixels of one. Out of combat only, like everything else here.
     local n = #roster
     if n > 0 then
-        local w, rows
+        local w, rows, tallH
         if pyramid then
+            -- the rows are not all one height any more: the last row's bottom is the grid's
             w, rows = span, place[n].row
+            tallH = place[n].y and (place[n].y + place[n].h) or nil
         else
             local deep = 0            -- the longest group
             for _, g in ipairs(grid) do if g.row > deep then deep = g.row end end
@@ -1783,7 +1808,7 @@ function FG.Layout(anchor)
                 rows, w = deep, groups * (FRAME_W + PAD) - PAD
             end
         end
-        anchor:SetSize(w, rows * (FRAME_H + PAD) - PAD)
+        anchor:SetSize(w, tallH or (rows * (FRAME_H + PAD) - PAD))
         -- and the prompt is trimmed to the header it now sits in: one cell wide is 84 pixels, and
         -- a word that does not fit is a word printed over whatever is beside it.
         --
