@@ -3565,6 +3565,10 @@ do
     ok(NS.DO.target(true) == true, "/bish target turns it on")
     local t = FG.target
     ok(t ~= nil and t:IsShown(), "the cell is there")
+    -- TALL like every other cell (Arn, 18 Oct: "still not on the target and tot")
+    ok(t and t.__tall and t:GetHeight() == FG.CELL_H + FG.NAME_BAND,
+       "tall like the grid: the name on top, the cure boxes under it", t and tostring(t:GetHeight()))
+    ok(t and t.__nameAt and t.__nameAt:find("t", 1, true) ~= nil, "the name placed across the top", t and tostring(t.__nameAt))
     ok(t and t:GetAttribute("unit") == "target",
        "and it is the CLIENT's target token, so it follows your target in a fight",
        t and tostring(t:GetAttribute("unit")))
@@ -3739,6 +3743,8 @@ do
         ok(NS.DO.tot(true) == true, "/bish tot turns it on")
         local tt = FG.tot
         ok(tt ~= nil and tt:IsShown(), "the second cell is there")
+        ok(tt.__tall and tt:GetHeight() == FG.target:GetHeight(), "tall, the same as the target cell beside it",
+           tostring(tt:GetHeight()))
         ok(tt:GetAttribute("unit") == "targettarget",
            "and it is the client's own target-of-target token", tostring(tt:GetAttribute("unit")))
 
