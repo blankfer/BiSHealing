@@ -149,10 +149,14 @@ local MELEE_RANK = {
 --- Each cell also gets `y` (down from the top), `h` (its height) and `tall` (a tail row).
 ---
 --- IMAX (Arn, 17 Oct 2026: "for the tank pyramid lets say we try making them imax 70mm aspect
---- ratio i want to see how it looks"): every cell 1.43:1, the family's window shape - the apex and
---- the pair 171 x 120, the middle rows 84 x 59. Never shorter than a cell already is, so a tail
---- of eight (40 px wide) keeps the height its name and two boxes need. `/bish imax` (d.imax).
+--- ratio i want to see how it looks"): every cell 1.43:1, the family's window shape.
+--- BUILT FROM THE BOTTOM UP (Arn, same night, the apex at 171 x 120 mostly empty: "start at row 5
+--- size and go half step" - his pick of two, "bottom up"): every tail row is 66 x 46, the short
+--- tail that already looked right, and each row above is half a step (10 px) wider - 76, 86, 96,
+--- and the tank 106 x 74. A real triangle, narrow at the top. `/bish imax` (d.imax).
 FG.IMAX = 1.43
+FG.IMAX_W = { 106, 96, 86, 76 }          -- apex, pair, the two rows of four
+FG.IMAX_TAIL = 66                        -- row five and below
 function FG.Pyramid(n, imax)
     local out, r, i, y = {}, 1, 1, 0
     while i <= n do
@@ -162,7 +166,9 @@ function FG.Pyramid(n, imax)
         -- under IMAX every cell is tall enough for the name to have the top, so every cell does
         -- (Arn, 17 Oct: "it did not shift the debuff buttons and leave the names on top")
         local tall = SHAPE[r] == nil or imax == true
-        if SHAPE[r] == nil and count < TAIL then
+        if imax then
+            w = FG.IMAX_W[r] or FG.IMAX_TAIL
+        elseif SHAPE[r] == nil and count < TAIL then
             w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
         end
         local h = tall and FRAME_H + NAME_BAND or FRAME_H

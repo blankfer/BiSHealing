@@ -2177,6 +2177,12 @@ do
     ok(FG.Pyramid(16)[1].h == FG.CELL_H, "and off, the apex is the ordinary bar")
     ok(im[1].tall and im[4].tall, "IMAX: every cell has its name on top and the boxes under it")
     ok(im[16].w == FG.Pyramid(16)[16].w, "and the short tail row is as wide as without IMAX")
+    -- BOTTOM UP (Arn: "start at row 5 size and go half step"): 66 x 46 at the bottom, the tank 106 x 74
+    ok(im[16].w == 66 and im[16].h == 46, "IMAX: the tail is 66 x 46", im[16].w .. "x" .. im[16].h)
+    ok(im[1].w == 106 and im[1].h == 74, "the tank is 106 x 74", im[1].w .. "x" .. im[1].h)
+    ok(im[2].w == 96 and im[4].w == 86 and im[8].w == 76, "half a step (10 px) a row: 96, 86, 76")
+    ok(im[1].w < 2 * im[2].w + 3 and 2 * im[2].w + 3 < 4 * im[4].w + 9,
+       "a real triangle: every row wider than the one above")
     local d = NS.DB()
     local wasL = d.layout
     d.layout = "pyramid"
