@@ -147,7 +147,13 @@ local MELEE_RANK = {
 --- Where each of `n` cells goes: its row, its place in the row, how many share the row, and
 --- whether the row is full width. Pure - no frames - so it can be asked without a client.
 --- Each cell also gets `y` (down from the top), `h` (its height) and `tall` (a tail row).
-function FG.Pyramid(n)
+---
+--- IMAX (Arn, 17 Oct 2026: "for the tank pyramid lets say we try making them imax 70mm aspect
+--- ratio i want to see how it looks"): every cell 1.43:1, the family's window shape - the apex and
+--- the pair 171 x 120, the middle rows 84 x 59. Never shorter than a cell already is, so a tail
+--- of eight (40 px wide) keeps the height its name and two boxes need. `/bish imax` (d.imax).
+FG.IMAX = 1.43
+function FG.Pyramid(n, imax)
     local out, r, i, y = {}, 1, 1, 0
     while i <= n do
         local cap = SHAPE[r] or TAIL
@@ -158,6 +164,7 @@ function FG.Pyramid(n)
             w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
         end
         local h = tall and FRAME_H + NAME_BAND or FRAME_H
+        if imax then h = math.max(h, math.floor(w / FG.IMAX + 0.5)) end
         for c = 1, count do
             -- `w` is the width this cell is drawn at; `wide` is kept as the old yes/no for
             -- anything still asking "is this one of the big top rows"
@@ -1712,7 +1719,7 @@ function FG.Layout(anchor)
     end
     if pyramid then
         roster = FG.ByRole(roster)
-        place = FG.Pyramid(#roster)
+        place = FG.Pyramid(#roster, type(d) == "table" and d.imax == true)
         -- the widest row sets the width, and every other row is centred in it
         for _, p in ipairs(place) do
             local w = p.w or (p.wide and FULL_W or HALF_W)

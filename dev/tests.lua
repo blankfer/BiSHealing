@@ -2164,6 +2164,27 @@ do
     ok(FG.Pyramid(40)[40].y == FG.Pyramid(40)[33].y + FG.CELL_H + FG.NAME_BAND + FG.CELL_PAD,
        "every tail row is tall, not just the last")
 
+    -- IMAX (Arn, 17 Oct: "lets say we try making them imax 70mm aspect ratio"): every cell 1.43:1
+    local im = FG.Pyramid(16, true)
+    local function ratio(q) return q.w / q.h end
+    ok(math.abs(ratio(im[1]) - 1.43) < 0.02 and math.abs(ratio(im[4]) - 1.43) < 0.03,
+       "IMAX: the apex and a middle cell are 1.43:1", im[1].w .. "x" .. im[1].h .. ", " .. im[4].w .. "x" .. im[4].h)
+    ok(im[16].h >= FG.CELL_H + FG.NAME_BAND and math.abs(ratio(im[16]) - 1.43) < 0.05,
+       "a short tail row is 1.43:1 too, and keeps room for its name", im[16].w .. "x" .. im[16].h)
+    ok(FG.Pyramid(40, true)[40].h >= FG.CELL_H + FG.NAME_BAND,
+       "a tail of eight never goes shorter than its name and boxes need")
+    ok(im[4].y == im[2].y + im[2].h + FG.CELL_PAD, "the rows stack on the taller heights")
+    ok(FG.Pyramid(16)[1].h == FG.CELL_H, "and off, the apex is the ordinary bar")
+    local d = NS.DB()
+    local wasL = d.layout
+    d.layout = "pyramid"
+    ok(NS.DO.imax() == true and d.imax == true, "/bish imax turns it on")
+    ok(NS.DO.imax() == false and d.imax == nil, "and again turns it off")
+    NS.DO.imax(true)
+    _G.SlashCmdList.BISHEALING("imax off")
+    ok(d.imax == nil, "/bish imax off")
+    d.layout = wasL
+
     -- THE ORDER: tanks first, then damage, then the healers, and raid order kept inside each.
     -- Arn, 23 Sep: "tanks dps and healers at the bottom" - in a fight you watch the tank and
     -- whoever is in the fire; the other healers are the glance you take last.

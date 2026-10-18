@@ -300,6 +300,20 @@ function NS.DO.cures(on)
     return on
 end
 
+--- The pyramid's cells at 1.43:1, the IMAX 70mm shape (Arn, 17 Oct: "i want to see how it looks").
+--- No argument flips. Only the pyramid changes; the grids keep their bars.
+function NS.DO.imax(on)
+    local d = DB()
+    if on == nil then on = d.imax ~= true end
+    d.imax = on and true or nil
+    local fight = InCombatLockdown and InCombatLockdown()
+    if not fight and NS.FG and NS.FG.Layout then NS.FG.Layout() end
+    Print((on and "pyramid cells at 1.43:1 (IMAX)" or "pyramid cells back to bars")
+        .. (d.layout ~= "pyramid" and " - you see it in the pyramid: /bish pyramid" or "")
+        .. (fight and " - after this fight" or ""))
+    return on
+end
+
 --- A click on a dead raider, out of combat, casts your res instead of the heal. No argument flips.
 function NS.DO.res(on)
     local d = DB()
@@ -1934,6 +1948,9 @@ SlashCmdList.BISHEALING = function(input)
     elseif msg == "res" or msg:match("^res%s") then
         local w = msg:match("^res%s+(%a+)")
         NS.DO.res(w == "on" and true or w == "off" and false or nil)
+    elseif msg == "imax" or msg:match("^imax%s") then
+        local w = msg:match("^imax%s+(%a+)")
+        NS.DO.imax(w == "on" and true or w == "off" and false or nil)
     elseif msg == "cures" or msg:match("^cures%s") then
         local w = msg:match("^cures%s+(%a+)")
         NS.DO.cures(w == "on" and true or w == "off" and false or nil)
