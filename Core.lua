@@ -79,6 +79,9 @@ local DEFAULTS = {
     -- "grid" (a column inside the main grid), "own" (a block of their own), or "off". A boolean
     -- from before 26 Sep still reads: true is "grid", false is "off". Off by default still, since
     -- most healers heal a pet by exception - the three settings are about WHERE, not whether.
+    -- the shared BiS channel's two switches, as /biscomm left them (LibBiSComm, since 0.13.0)
+    comm      = true,
+    commShare = true,
     pets    = "off",
     petAt   = "under",   -- where the pet block sits when it has one: under the grid by default
     petPos  = nil,       -- where it was dragged to, from the middle of the screen
@@ -2056,6 +2059,29 @@ function NS.Claim()
     return true
 end
 
+-- THE SHARED BIS CHANNEL (0.13.0; Arn, 18 Oct: "Can we add the library to bis healing?"). BiS Healing
+-- carried only RezComm, so a healer running nothing else never shared a spot with the guild's map.
+-- LibBiSComm is the same one six BiS addons embed (the newest copy loaded wins); no setting of this
+-- addon gates it - only /biscomm off / share off do, and that choice survives a logout here.
+NS.Comm = {}
+function NS.Comm.Boot()
+    local lib = _G.LibBiSComm
+    if not lib then return false end
+    lib:RegisterAddon(ADDON, NS.VERSION)
+    local db = DB()
+    if db.comm == false then lib:SetEnabled(false) end
+    if db.commShare == false and lib.SetSharing then lib:SetSharing(false) end
+    lib:Boot()
+    return true
+end
+function NS.Comm.Save()
+    local lib = _G.LibBiSComm
+    if not lib then return end
+    local db = DB()
+    db.comm = lib:Enabled()
+    if lib.Sharing then db.commShare = lib:Sharing() end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
@@ -2082,6 +2108,7 @@ ev:SetScript("OnEvent", function(_, event, name)
     end
 
     if event == "PLAYER_LOGOUT" then
+        NS.Comm.Save()
         local db = DB()
         db.savedAt = (time and time()) or 0
         db.saves = (tonumber(db.saves) or 0) + 1
@@ -2091,6 +2118,7 @@ ev:SetScript("OnEvent", function(_, event, name)
 
     DB()
     NS.Claim()                              -- the name may only be known by now
+    pcall(NS.Comm.Boot)                     -- never let the channel stop the grid from starting
     if NS.FG and NS.FG.Start then NS.FG.Start() end
     Print(("%s -- /bish, or the button on your minimap"):format(NS.VERSION))
     if not NS.loaded.found or NS.loaded.savedAt == nil then

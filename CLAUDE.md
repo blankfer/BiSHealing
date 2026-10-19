@@ -16,7 +16,7 @@ The second addon of this name. The first was 5,000 lines of shaman Chain Heal br
 - `API.lua`: `BiSHealingAPI` (major 1, version 1, playbook 5a), last before `UI/`. Read-only copies of the binds, the show/Clique switches, BiS> now and the tank; `OpenBinds`/`OpenOptions`; callbacks `BiSHealing_BindsChanged` / `_TankChanged` / `_Shown`, fired through `NS.Announce` from Mouse.lua, Now.lua and Core.lua. The file's header is the documentation. Ready = the grid started (`FG.anchor`).
 - `UI/options.lua`: eight rows, all of them `NS.DO` calls, on BiSTheme's shared kit. `NS.UI.Rows()` is what a suite reads back.
 - `UI/minimap.lua`: the rows behind the minimap button (BiSTheme's `Minimap.lua`).
-- `Libs/`: BiSTheme only (`Console.lua`, `Options.lua`, `Minimap.lua`) — copies, never edited here. See the libs rules in `../_bisdev/CLAUDE.md`.
+- `Libs/`: BiSTheme (`Console.lua`, `Options.lua`, `Minimap.lua`), `RezComm-1.0` and, since 0.13.0, `LibBiSComm-1.0` (booted by `NS.Comm.Boot` at login, its `/biscomm` switches saved as `comm` / `commShare`) — copies, never edited here. See the libs rules in `../_bisdev/CLAUDE.md`.
 - `dev/tests.lua`: the suite, 132 checks. It **reads the TOC** and loads every file the client would, in order — a hand-written list goes stale, and this one lost 5,000 lines in a day. The client it mocks is the measured one: secret numbers that error on arithmetic, comparison and `tostring`; `UnitInRange` a secret boolean; aura containers; `GetCursorInfo` in its four-value Forever shape. It covers the migration in detail, because getting that wrong loses somebody's binds silently.
 - `dev/theme.lua`: asserts the embedded BiSTheme bytes match canon.
 - `.github/workflows/check.yml`: calls the reusable CI workflow in `bisdev`.

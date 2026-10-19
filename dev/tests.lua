@@ -1631,6 +1631,32 @@ do
     STATE.dead.party1 = nil
     _G.UnitName = realName
 end
+-- THE SHARED BIS CHANNEL (0.13.0; Arn, 18 Oct: "Can we add the library to bis healing?") - a healer
+-- running only BiS Healing never shared a spot with the guild's map
+do
+    local function bytes(p) local fh = io.open(p, "rb") if not fh then return nil end local b = fh:read("*a") fh:close() return b end
+    local mine, canon = bytes("Libs/LibBiSComm-1.0/LibBiSComm-1.0.lua"), bytes("../_bisdev/LibBiSComm-1.0/LibBiSComm-1.0.lua")
+    ok(mine and (not canon or mine == canon), "the embedded LibBiSComm is the canonical copy (run _bisdev/sync.ps1)")
+    local toc = bytes("BiSHealing.toc") or ""
+    ok(toc:find("Libs\\LibBiSComm-1.0\\LibBiSComm-1.0.lua", 1, true) ~= nil, "the TOC loads it")
+    local loaded, err = pcall(function() assert(loadfile("Libs/LibBiSComm-1.0/LibBiSComm-1.0.lua"))() end)
+    local lib = _G.LibBiSComm
+    ok(loaded and lib and lib.MINOR == 14, "LibBiSComm minor 14 loads in this client's shape", tostring(err))
+    if lib then
+        ok(NS.Comm.Boot() and lib:AddonsBlob():find("BiSHealing", 1, true), "booted at login, BiS Healing named in it",
+           lib:AddonsBlob())
+        -- /biscomm share off survives a logout
+        lib:SetSharing(false)
+        NS.Comm.Save()
+        ok(NS.DB().commShare == false, "share off is saved")
+        lib:SetSharing(true)
+        NS.Comm.Boot()
+        ok(lib:Sharing() == false, "and the next login keeps it off")
+        lib:SetSharing(true)
+        NS.Comm.Save()
+        ok(NS.DB().commShare == true, "share on again")
+    end
+end
 -- AND SHOWS ITS WORKING (7 Oct). Arn read "Healing Wave" and could not tell if that was the
 -- longest or just the left click - the line still said "left click first". The yards settle it.
 do
