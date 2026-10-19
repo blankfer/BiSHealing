@@ -1610,8 +1610,9 @@ do
     -- (the suite skips Libs lines - each lib has its own suite - so this one is loaded by hand)
     local loaded = pcall(function() assert(loadfile("Libs/RezComm-1.0/RezComm-1.0.lua"))() end)
     ok(loaded and _G.BiSRezComm and _G.BiSRezComm.MINOR, "and it loads in this client's shape")
-    -- RezComm minor 4 (12 Oct 2026, debt 37): a claim is never thrown into a lockdown or a realm
-    -- block, and the client's "try again" is heard
+    -- RezComm minor 4 (12 Oct 2026, debt 37): a claim is never thrown into a lockdown, and the
+    -- client's "try again" is heard. Minor 5 (18 Oct): the realm's "restricted" is NOT a block -
+    -- Forever says plain true while it delivers (Arn's /run), and minor 4 held every claim on it
     local RC = _G.BiSRezComm
     local keepCI = _G.C_ChatInfo
     _G.C_ChatInfo = { InChatMessagingLockdown = function() return true end }
@@ -1623,7 +1624,7 @@ do
     _G.C_ChatInfo = keepCI
     ok(okL == false and whyL == "chat lockdown", "RezComm holds a claim in the chat lockdown")
     ok(okS == false, "and when the client hides whether chat is locked")
-    ok(okB == false and whyB == "realm block", "and when the realm blocks addon messages")
+    ok(okB == true and whyB == nil, "Forever's 'restricted' (always true) does not hold a claim")
     ok(RC.Again(3) and RC.Again(8) and not RC.Again(0) and not RC.Again(nil) and not RC.Again(true),
        "a throttle answer means try again; success (or no answer, 2.5.x) does not")
     FZ.claims = {}
