@@ -1,5 +1,10 @@
 # BiS Healing
 
+## 0.13.0
+
+- **Your guild sees where you are.** BiS Healing now carries the shared BiS library, so with it alone you show up on your guildmates' BiS Guild map (outside instances; `/biscomm share off` turns it off, and that is remembered).
+- **BiS addons can talk to each other on Forever again.** The game wrongly says addon messages are restricted, and the shared BiS code believed it - your rez claims never went out. They do now.
+
 ## 0.12.0
 
 - **Cure boxes on your target and target-of-target cells** - whenever they're someone you can help, yourself included. On a mob or an enemy player the boxes aren't there, and the game itself makes that call as your target changes, in a fight too.
