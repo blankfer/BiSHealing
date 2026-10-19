@@ -37,7 +37,7 @@
 ]]
 
 -- minor 4 (12 Oct 2026, debt 37): lockdown + realm-block checks, the send answer read, one retry
-local MAJOR, MINOR = "RezComm-1.0", 4
+local MAJOR, MINOR = "RezComm-1.0", 5
 local RC = _G.BiSRezComm
 if RC and (RC.MINOR or 0) >= MINOR then return end
 RC = RC or {}
@@ -167,7 +167,7 @@ local function Send(cmd, name)
   -- to prevent. Do not "fix" this into a scheduled send.
   -- FOREVER'S RULES (minor 4, 12 Oct 2026, debt 37). It sent blind and never read the answer, so a
   -- claim made in the chat lockdown - or throttled - simply vanished, and the next healer cast the
-  -- same res. Now: no send into a lockdown or a realm block (said in RC.lastError, answered false
+  -- same res. Now: no send into a lockdown (said in RC.lastError, answered false
   -- so the caller knows); the client's answer is READ; a throttle is retried ONCE, 0.3 s later -
   -- quick enough to still matter, and only while this claim is still the one we hold.
   local ok, why = RC.MaySend()
@@ -201,19 +201,17 @@ local function hidden(v)
   return issecretvalue ~= nil and issecretvalue(v) == true
 end
 
---- May a claim go out right now? false + why in the lockdown, or when the realm blocks addon
---- messages; a hidden answer to either question counts as "no" (never guessed open).
+--- May a claim go out right now? false + why in the chat lockdown (a hidden answer counts as
+--- "no", never guessed open). The realm "block" is not asked since minor 5.
 function RC.MaySend()
   local lock = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
   if lock then
     local ok, v = pcall(lock)
     if ok and (hidden(v) or v) then return false, "chat lockdown" end
   end
-  local block = C_ChatInfo and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted
-  if block then
-    local ok, v = pcall(block)
-    if ok and (hidden(v) or v) then return false, "realm block" end
-  end
+  -- NOT the realm "block" (minor 5, 18 Oct 2026): Forever answers AreOutgoingAddonChatMessagesRestricted
+  -- with a plain true while it delivers every addon message (Arn's /run, LibBiSComm minor 13) - asked,
+  -- it held every rez claim. The send's own answer (RC.Again) is the client's real word.
   return true
 end
 
