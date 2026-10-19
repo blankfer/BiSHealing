@@ -1,5 +1,9 @@
 # BiS Healing
 
+## 0.13.1
+
+- **"LOS" on the cell you couldn't see.** When a heal fails because the target is out of line of sight, "LOS" shows in the middle of that cell for a moment, so you know to move rather than wait. Out of range already dims the cell. `/bish flash off` turns it off.
+
 ## 0.13.0
 
 - **Your guild sees where you are.** BiS Healing now carries the shared BiS library, so with it alone you show up on your guildmates' BiS Guild map (outside instances; `/biscomm share off` turns it off, and that is remembered).

@@ -1764,6 +1764,21 @@ function NS.DO.hover(how)
     return on
 end
 
+--- /bish flash [on|off] - "LOS" in the middle of the cell your heal could not see (18 Oct 2026; range
+--- already dims).
+--- On by default; on stores nothing.
+function NS.DO.flash(how)
+    local d = DB()
+    local on
+    if how == "on" or how == true then on = true
+    elseif how == "off" or how == false then on = false
+    else on = d.flash == false end
+    if on then d.flash = nil else d.flash = false end
+    remember()
+    Print(on and "a heal out of line of sight marks the cell - LOS" or "no flash when a heal can't see them")
+    return on
+end
+
 --- /bish dim 40 - how bright an out-of-range cell stays, as a percentage, 20 to 90.
 function NS.DO.dim(pct)
     local d = DB()
@@ -1956,6 +1971,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.trinkets(msg:match("^trinkets%s+(%a+)"), msg:match("^trinkets%s+%a+%s+(%w+)"))
     elseif msg == "hover" or msg:match("^hover%s") then
         NS.DO.hover(msg:match("^hover%s+(%a+)"))
+    elseif msg == "flash" or msg:match("^flash%s") then
+        NS.DO.flash(msg:match("^flash%s+(%a+)"))
     elseif msg == "dim" or msg:match("^dim%s") then
         NS.DO.dim(msg:match("^dim%s+([%d%.]+)"))
     elseif msg == "clique" then

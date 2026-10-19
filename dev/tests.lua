@@ -200,6 +200,14 @@ local function newFrame(kind, name, parent)
             return a
         end
         function g:SetLooping(v) self.looping = v end
+        -- the client's group takes scripts (OnFinished) and can hold its last frame, as the LoS mark's
+        -- fade does (18 Oct); FINISH() plays the end the client would
+        function g:SetToFinalAlpha(v) self.finalAlpha = v end
+        function g:SetScript(k, fn) self.scripts = self.scripts or {} self.scripts[k] = fn end
+        function g:FINISH()
+            self.playing = false
+            if self.scripts and self.scripts.OnFinished then self.scripts.OnFinished(self) end
+        end
         function g:Play() self.playing = true end
         function g:Stop() self.playing = false end
         function g:IsPlaying() return self.playing end
@@ -8283,6 +8291,40 @@ do
     hoverIs = nil
     FG.PaintHover(other, "party1")
     ok(not other.hoverMark.__shown, "the mouse leaves everyone: the crosshair goes")
+
+    -- "LoS" ON THE CELL YOUR HEAL COULD NOT SEE (Arn, 18 Oct; line of sight only - "do we really need
+    -- range flash logic if we are already dimming?"). The cell under the mouse is known from its own
+    -- OnEnter, hooked onto the template's - chained, never replacing it
+    do
+        local LOS = "Target not in line of sight"
+        local realLoS = _G.SPELL_FAILED_LINE_OF_SIGHT
+        _G.SPELL_FAILED_LINE_OF_SIGHT = LOS
+        local keepUnit, keepShown = other.unit, other.__shown
+        other.unit, other.__shown = "party1", true
+        FG.over = nil
+        ok(FG.HeardError(nil, LOS) == nil, "the mouse on no cell: nothing to flash")
+        other:GetScript("OnEnter")(other)
+        ok(FG.over == other, "the mouse on a cell: it is the one a click would heal")
+        ok(FG.HeardError(nil, LOS) == "LOS", "a heal blocked by line of sight marks it")
+        ok(other.flash and other.flash.__shown and other.flash.word:GetText() == "LOS",
+           "LOS in the middle of the cell (Arn: \"someting in the middle of the cell LOS\")",
+           other.flash and tostring(other.flash.word:GetText()))
+        local fade = other.flash and other.flash.fade
+        ok(fade and fade.playing and fade.anims[1].to == 0 and fade.anims[1].duration == FG.FLASH_FOR,
+           "and it fades by itself - the client's animation, nothing ticking")
+        if fade then fade:FINISH() end
+        ok(other.flash and not other.flash.__shown, "and is gone when the fade ends")
+        ok(FG.HeardError(nil, "Out of range.") == nil, "out of range does NOT flash: the cell already dims for that")
+        ok(FG.HeardError(nil, "Not enough mana") == nil, "nor any other error")
+        ok(FG.HeardError(nil, secretString()) == nil, "a secret error text is never read")
+        NS.DB().flash = false
+        ok(FG.HeardError(nil, LOS) == nil, "/bish flash off: no flash")
+        NS.DB().flash = nil
+        other:GetScript("OnLeave")(other)
+        ok(FG.over == nil, "the mouse leaves: no cell under it")
+        _G.SPELL_FAILED_LINE_OF_SIGHT = realLoS
+        other.unit, other.__shown = keepUnit, keepShown
+    end
 
     -- TARGET AND MOUSE ON THE SAME PERSON (Arn, 7 Oct, second look: "can we make it white takes the
     -- empty space of the red part? if both target and mouse over are the same person and if its
