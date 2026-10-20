@@ -1252,6 +1252,8 @@ function FN.AttachPreview(opt)
     pv:Hide()
     FN.preview = pv
     local function hover(r)
+        -- the mana-for-mana window docked in the same place: the preview keeps out of its way
+        if NS.FE and NS.FE.Docked and NS.FE.Docked() then return end
         if r.opt and r.opt.tankPreview then
             if not pv:IsShown() then pv:Show() FN.DressPreview() end
             FN.PaintPreview()

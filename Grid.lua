@@ -97,7 +97,12 @@ local PER_COL = 5                       -- one column per party, the way a raid 
 --   row 1      1 cell   at FULL_W    the apex, two ordinary cells wide
 --   row 2      2 cells  at FULL_W
 --   rows 3-4   4 cells  at MID_W     = an ordinary cell
---   rows 5+    8 cells  at TAIL_W    = half of one, which is what he asked for
+--   rows 5+    6 cells  at TAIL_W    = two-thirds of one (8 at half, until 19 Oct - below)
+--
+-- SIX, NOT EIGHT (Arn, 19 Oct 2026, a raid in tanks mode: "the bottom one end up being so crowded
+-- with the debuff stuff"). Eight to a row made a tail cell 40 px, and the two cure boxes down its
+-- left took 18 of them - "Frankadank" was "Franka". Six make it 55: the whole name, the boxes kept.
+-- A 40-man grows one row.
 --
 -- SPAN is the width of row 2 and every row fits inside it: 2 FULL_W and the gap between them.
 -- MID_W and TAIL_W are worked out FROM the span rather than guessed, so four mediums and eight
@@ -107,10 +112,10 @@ local PER_COL = 5                       -- one column per party, the way a raid 
 local FULL_W = 2 * FRAME_W + PAD        -- exactly two ordinary cells and the gap between them
 local SPAN   = 2 * FULL_W + PAD         -- the widest row: what everything else divides
 local MID_W  = math.floor((SPAN - 3 * PAD) / 4)
-local TAIL_W = math.floor((SPAN - 7 * PAD) / 8)
+local TAIL   = 6
+local TAIL_W = math.floor((SPAN - (TAIL - 1) * PAD) / TAIL)
 local SHAPE  = { 1, 2, 4, 4 }           -- cells in each row; rows past the last repeat TAIL
 local WIDTH  = { FULL_W, FULL_W, MID_W, MID_W }
-local TAIL   = 8
 local HALF_W = FRAME_W                  -- the ordinary cell, still what a non-pyramid grid uses
 -- THE PYRAMID'S CELLS ARE TALLER, AND THE NAME HAS THE TOP (Arn, 17 Oct 2026: "it bother me that
 -- the bottoms row cuts off their names" ... "we can just make the cell taller"). A tail cell is 41
@@ -153,16 +158,30 @@ local MELEE_RANK = {
 --- "no imax but we just make them taller enough for the names and move the debuff out of that
 --- row"). The name has the top line of every cell, the cure boxes start under it - so even
 --- "Frankadank" beside a role icon and two boxes is never cut.
+---
+--- EVERY TAIL ROW ONE WIDTH (Arn, 19 Oct: "row 5 still randomly smaller than the rest"). A short last
+--- row used to stretch across the line - five of them at 66 px under six at 55 - so the full row looked
+--- shrunk. Now the tail cells are spread evenly over as few rows of up to TAIL as they need, every one
+--- of them as wide as the fullest row allows: 11 go 6 + 5 at 55, 14 go 5 + 5 + 4 at 66. A short row
+--- is centred like every other row.
+local function tailShape(n)
+    local cells = n
+    for _, c in ipairs(SHAPE) do cells = cells - c end
+    if cells <= 0 then return TAIL, TAIL_W end
+    local rows = math.ceil(cells / TAIL)
+    local per = math.ceil(cells / rows)
+    return per, math.min(MID_W, math.floor((SPAN - (per - 1) * PAD) / per))
+end
+FG.TailShape = tailShape
+
 function FG.Pyramid(n)
     local out, r, i, y = {}, 1, 1, 0
+    local tailPer, tailW = tailShape(n)
     while i <= n do
-        local cap = SHAPE[r] or TAIL
+        local cap = SHAPE[r] or tailPer
         local count = math.min(cap, n - i + 1)
-        local w = WIDTH[r] or TAIL_W
+        local w = WIDTH[r] or tailW
         local tall = true
-        if SHAPE[r] == nil and count < TAIL then
-            w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
-        end
         local h = FRAME_H + NAME_BAND
         for c = 1, count do
             -- `w` is the width this cell is drawn at; `wide` is kept as the old yes/no for
@@ -1667,6 +1686,16 @@ function FG.PlaceName(f)
     if f.unit then f.name:SetText(FG.CellName(f, f.unit)) end
 end
 
+--- Every cell's name, from whoever holds its slot NOW, and every cell repainted - the one thing a
+--- group change in a fight lets us do (FG.Bind is refused), so the name always says who a click heals.
+--- The order is put right when the fight ends, as before.
+function FG.Rename()
+    for _, f in ipairs(FG.frames or {}) do
+        if f.unit and f.name then f.name:SetText(FG.CellName(f, f.unit)) end
+    end
+    FG.dirtyAll = true
+end
+
 --- The name this particular cell can hold. A secret name is handed over whole - it cannot be cut,
 --- and the client clips what will not fit.
 function FG.CellName(f, unit)
@@ -2921,6 +2950,15 @@ function FG.Start()
     end
     ev:SetScript("OnEvent", function(_, event)
         pending = true                      -- the update loop relays out when the lockdown lets it
+        -- THE GROUP CHANGED MID-FIGHT (Arn, 19 Oct: "shaman are suppose to be blue but some are priest
+        -- white might be bug when they leave during combat"): someone leaves, the client moves everyone
+        -- up a slot (raid6 is now raid5), and a cell may not be re-pointed until the fight ends. Its
+        -- bar, colour, markers and CLICK already follow the slot; only its name, written at layout,
+        -- stayed - "Chain" over a priest's white bar, a poison marker that was someone else's.
+        if (event == "GROUP_ROSTER_UPDATE" or event == "RAID_ROSTER_UPDATE")
+                and InCombatLockdown and InCombatLockdown() then
+            FG.Rename()
+        end
         -- a bind changed mid-fight is queued, not lost: the moment the lockdown lifts it lands
         if event == "PLAYER_REGEN_ENABLED" and NS.FM and NS.FM.pending then NS.FM.Apply() end
         -- THE FIGHT ENDED: a button that was needed during it is now earned (3 Oct 2026).
