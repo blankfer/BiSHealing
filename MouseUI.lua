@@ -124,7 +124,10 @@ end
 function FM.Place(w)
     w = w or FM.win
     if not w then return nil end
-    local book = FM.Book()
+    -- the spellbook first; else the mana-for-mana window while it is up (Arn, 19 Oct: "when i click the
+    -- mouse bind button it should dock it to the right of the window") - the same dock, the same way back
+    local fe = NS.FE and NS.FE.win
+    local book = FM.Book() or (fe and fe:IsShown() and fe) or nil
     if book and not w.undocked then
         if w.dockedTo ~= book then
             w:ClearAllPoints()
