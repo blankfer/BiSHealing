@@ -1686,6 +1686,16 @@ function FG.PlaceName(f)
     if f.unit then f.name:SetText(FG.CellName(f, f.unit)) end
 end
 
+--- Every cell's name, from whoever holds its slot NOW, and every cell repainted - the one thing a
+--- group change in a fight lets us do (FG.Bind is refused), so the name always says who a click heals.
+--- The order is put right when the fight ends, as before.
+function FG.Rename()
+    for _, f in ipairs(FG.frames or {}) do
+        if f.unit and f.name then f.name:SetText(FG.CellName(f, f.unit)) end
+    end
+    FG.dirtyAll = true
+end
+
 --- The name this particular cell can hold. A secret name is handed over whole - it cannot be cut,
 --- and the client clips what will not fit.
 function FG.CellName(f, unit)
@@ -2940,6 +2950,15 @@ function FG.Start()
     end
     ev:SetScript("OnEvent", function(_, event)
         pending = true                      -- the update loop relays out when the lockdown lets it
+        -- THE GROUP CHANGED MID-FIGHT (Arn, 19 Oct: "shaman are suppose to be blue but some are priest
+        -- white might be bug when they leave during combat"): someone leaves, the client moves everyone
+        -- up a slot (raid6 is now raid5), and a cell may not be re-pointed until the fight ends. Its
+        -- bar, colour, markers and CLICK already follow the slot; only its name, written at layout,
+        -- stayed - "Chain" over a priest's white bar, a poison marker that was someone else's.
+        if (event == "GROUP_ROSTER_UPDATE" or event == "RAID_ROSTER_UPDATE")
+                and InCombatLockdown and InCombatLockdown() then
+            FG.Rename()
+        end
         -- a bind changed mid-fight is queued, not lost: the moment the lockdown lifts it lands
         if event == "PLAYER_REGEN_ENABLED" and NS.FM and NS.FM.pending then NS.FM.Apply() end
         -- THE FIGHT ENDED: a button that was needed during it is now earned (3 Oct 2026).

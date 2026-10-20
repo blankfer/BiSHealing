@@ -1,5 +1,12 @@
 # BiS Healing
 
+## 0.14.0
+
+- **Mana for mana: which heal to spam.** A new window - press **open** on "which heal, mana for mana" in the options, or `/bish efficiency` - lists every rank of every heal you know with what it heals, what it costs, per mana, per second, and how long you can spam it before you run dry. Pick a fight length from 15 seconds to 5 minutes and it names the rank that heals the most in that time, with its icon to drag onto a bar or a mouse button. It reads your spells as they are right now, so your gear, +healing and talents are already in it. **mouse binds** opens the mouse window right beside it.
+- **Fixed: names on the wrong cells after someone leaves mid-fight.** Everyone moves up a slot when a player leaves, and the cells can't be rearranged until the fight ends. Their bars, colours and clicks already followed the new person, but the names stayed - so a cell could say one name and heal another. The names now follow at once; the order comes back after the fight.
+- **Tank view's bottom rows hold six, not eight**, all the same width, so names fit beside the cure boxes.
+- `/bish heals` shows everything the game tells an addon about your heals, to copy into a bug report.
+
 ## 0.13.1
 
 - **"LOS" on the cell you couldn't see.** When a heal fails because the target is out of line of sight, "LOS" shows in the middle of that cell for a moment, so you know to move rather than wait. Out of range already dims the cell. `/bish flash off` turns it off.

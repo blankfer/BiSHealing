@@ -100,6 +100,8 @@ local function newFrame(kind, name, parent)
     -- be stored in the wrong units and no test noticed (Arn, 23 Sep: "when i increased the scale
     -- size ... the target frames moved up and to the right").
     function f:GetParent() return self.__parent end
+    -- a frame can change parents, as in the client (the mana window docks onto the options, 19 Oct)
+    function f:SetParent(p) self.__parent = p end
     function f:GetEffectiveScale()
         local s = self.__scale or 1
         local p = self.__parent
@@ -145,6 +147,13 @@ local function newFrame(kind, name, parent)
     function f:Show() self.__shown = true end
     function f:Hide() self.__shown = false end
     function f:IsShown() return self.__shown end
+    function f:SetShown(v) self.__shown = v and true or false end
+    -- A CLICK RUNS OnClick, as the client's Button:Click() does - and not on a disabled button
+    function f:Click(button)
+        if self.__disabled then return end
+        local fn = self.__scripts.OnClick
+        if fn then return fn(self, button or "LeftButton", false) end
+    end
     function f:SetAlpha(a)
         -- A WIDGET MAY REFUSE A SECRET. Which ones accept them is not in any census, so the mock
         -- can be told to say no - and the addon has to leave the cell readable when it does,
@@ -307,6 +316,7 @@ local function newFrame(kind, name, parent)
             Show     = function(t) t.__shown = true end,
             Hide     = function(t) t.__shown = false end,
             IsShown  = function(t) return t.__shown end,
+            SetShown = function(t, v) t.__shown = v and true or false end,
             SetTexture  = function(t, v) t.__texture = v end,
             SetTexCoord = function(t, a, b, c, d) t.__coords = { a, b, c, d } end,
             SetAtlas    = function(t, v) t.__atlas = v end,
@@ -6531,7 +6541,9 @@ do
             tall[c] = tall[c] + 1 + #sec.options
         end
         ok(tall[1] <= 14 and tall[2] <= 14, ("each column stays short: %d and %d"):format(tall[1], tall[2]))
-        ok(#NS.UI.Rows() <= 20, "and the whole window has no more than twenty settings: " .. #NS.UI.Rows())
+        -- TWENTY-ONE (19 Oct): Arn asked for the mana-for-mana window "in the option", by name - a
+        -- door, not a setting, under the mouse binds where a healer's first look already goes
+        ok(#NS.UI.Rows() <= 21, "and the whole window has no more than twenty-one rows: " .. #NS.UI.Rows())
         -- THE HELP STRIP (Arn, 14 Oct: "yes do the help strip"): every setting says what it does
         local undocumented = {}
         for _, o in ipairs(NS.UI.Rows()) do if not o.help then undocumented[#undocumented + 1] = o.label end end
@@ -9068,6 +9080,202 @@ do
     _G.UnitName, BOOK[28], d.now, d.shown = keep.name, keep.b28, keep.now, keep.shown
     bookSaid()
     FN.Layout()
+end
+
+-- THE GROUP CHANGES MID-FIGHT (Arn, 19 Oct 2026: "shaman are suppose to be blue but some are priest
+-- white might be bug when they leave during combat" - and a poison box lit on his own cell for someone
+-- else's poison). The client moves everyone up a slot; the cells may not be re-pointed in a fight, so
+-- their bar, colour, markers and click follow the slot - and the name must too.
+do
+    local keepName, keepUnits = _G.UnitName, STATE.units
+    local NAMES = { player = "Arn", party1 = "Chain", party2 = "Tor" }
+    _G.UnitName = function(u) return NAMES[u], nil end
+    STATE.units = { player = true, party1 = true, party2 = true }
+    STATE.inCombat = false
+    local dd = NS.DB()
+    local keepShown = dd.shown
+    dd.shown = true                                   -- an earlier test left the grid hidden
+    FG.Layout()
+    local cell
+    for _, f in ipairs(FG.frames or {}) do if f.unit == "party1" then cell = f end end
+    ok(cell and cell.name.__text == "Chain", "party1's cell says Chain", cell and tostring(cell.name.__text))
+    -- Chain leaves mid-fight: Tor moves up to party1
+    STATE.inCombat = true
+    NAMES.party1, NAMES.party2 = "Tor", nil
+    STATE.units.party2 = nil
+    FG.dirtyAll = false
+    fire(FG.events, "GROUP_ROSTER_UPDATE")
+    ok(cell.unit == "party1", "in a fight the cell keeps its slot (it may not be re-pointed)")
+    ok(cell.name.__text == "Tor", "but its name now says who that slot holds - who a click heals",
+       tostring(cell.name.__text))
+    ok(FG.dirtyAll == true, "and every cell is repainted at once: bar, colour, markers")
+    STATE.inCombat = false
+    _G.UnitName, STATE.units, dd.shown = keepName, keepUnits, keepShown
+    fire(FG.events, "PLAYER_REGEN_ENABLED")
+    FG.Layout()
+end
+
+-- THE HEALS PROBE (Arn, 19 Oct 2026: "a window ... that breaks down the mana efficiency of my healing
+-- spells ... all my talents my +healing ... using all ranks"). Step 0: `/bish heals` shows what the
+-- client says about every rank, to copy out - the window is built on that.
+do
+    local FE = NS.FE
+    local keep = { ids = NS.FM.BookIds, ranks = NS.FM.Ranks, cost = C_Spell.GetSpellPowerCost,
+                   info = C_Spell.GetSpellInfo, desc = C_Spell.GetSpellDescription, bonus = _G.GetSpellBonusHealing,
+                   tabs = _G.GetNumTalentTabs, n = _G.GetNumTalents, talent = _G.GetTalentInfo, tab = _G.GetTalentTabInfo }
+    NS.FM.BookIds = function(name) if name == "Healing Wave" then return { 331, 332 } end return {} end
+    NS.FM.Ranks = function(name) if name == "Healing Wave" then return { { rank = "Rank 1" }, { rank = "Rank 2" } } end return {} end
+    C_Spell.GetSpellPowerCost = function(id) return { { type = 0, name = "MANA", cost = id == 331 and 25 or 45 } } end
+    C_Spell.GetSpellInfo = function(id) return { name = "Healing Wave", castTime = id == 331 and 1500 or 2000 } end
+    C_Spell.GetSpellDescription = function(id) return id == 331 and "Heals a friendly target for 34 to 44." or secret() end
+    _G.GetSpellBonusHealing = function() return 212 end
+    _G.GetNumTalentTabs = function() return 3 end
+    _G.GetTalentTabInfo = function(t) return ({ "Elemental", "Enhancement", "Restoration" })[t] end
+    _G.GetNumTalents = function(t) return t == 3 and 2 or 0 end
+    _G.GetTalentInfo = function(t, i)
+        if t == 3 and i == 1 then return "Tidal Focus", 0, 1, 1, 5, 5 end
+        if t == 3 and i == 2 then return "Healing Grace", 0, 1, 2, 0, 3 end
+    end
+    local text = table.concat(FE.Probe(), "\n")
+    ok(text:find("+healing 212", 1, true), "the probe reads your +healing")
+    ok(text:find("== Healing Wave: 2 ranks", 1, true), "every rank of every heal you have")
+    ok(text:find("Rank 1 [-] id 331  cost 25  cast 1500 ms", 1, true), "a rank's cost and cast time, as the client says",
+       text:match("Rank 1[^\n]*"))
+    ok(text:find("Heals a friendly target for 34 to 44.", 1, true), "and its tooltip's own words")
+    ok(text:find("   secret", 1, true), "a secret tooltip says so - never an error")
+    ok(text:find("Restoration: Tidal Focus 5/5", 1, true) and not text:find("Healing Grace", 1, true),
+       "the talents you spent points in, by tree", text:match("Restoration[^\n]*"))
+    ok(NS.DO.heals() == text and FE.box and FE.box:IsShown(), "/bish heals opens it in a box to copy")
+    NS.FM.BookIds, NS.FM.Ranks = keep.ids, keep.ranks
+    C_Spell.GetSpellPowerCost, C_Spell.GetSpellInfo, C_Spell.GetSpellDescription = keep.cost, keep.info, keep.desc
+    _G.GetSpellBonusHealing, _G.GetNumTalentTabs, _G.GetNumTalents = keep.bonus, keep.tabs, keep.n
+    _G.GetTalentInfo, _G.GetTalentTabInfo = keep.talent, keep.tab
+    FE.box:Hide()
+
+    -- THE WINDOW, on Arn's own level-30 shaman (his probe, gear on, 19 Oct): the tooltips hold the
+    -- +healing already, so the window only does the arithmetic on what the client says
+    local HW = { [331] = { 25, 1000, 60, 71 }, [332] = { 45, 1500, 127, 142 }, [547] = { 80, 2000, 232, 258 },
+                 [913] = { 155, 2500, 382, 426 }, [939] = { 200, 2500, 466, 522 },
+                 [8004] = { 105, 1500, 219, 242 }, [8008] = { 145, 1500, 284, 313 } }
+    NS.FM.BookIds = function(name)
+        if name == "Healing Wave" then return { 331, 332, 547, 913, 939 } end
+        if name == "Lesser Healing Wave" then return { 8004, 8008 } end
+        return {}
+    end
+    C_Spell.GetSpellPowerCost = function(id) return { { type = 0, name = "MANA", cost = HW[id][1] } } end
+    C_Spell.GetSpellInfo = function(id) return { name = "x", castTime = HW[id][2] } end
+    C_Spell.GetSpellDescription = function(id) return ("Heals a friendly target for %d to %d."):format(HW[id][3], HW[id][4]) end
+    local keepPow, keepRegen, keepCrit = _G.UnitPowerMax, _G.GetManaRegen, _G.GetSpellCritChance
+    _G.UnitPowerMax = function() return 1375 end
+    _G.GetManaRegen = function() return 16.276, 8.3385 end
+    _G.GetSpellCritChance = function() return 4.643 end
+    _G.GetSpellBonusHealing = function() return 150 end
+    local d = FE.Data()
+    ok(#d.rows == 7, "every rank of Healing Wave and Lesser Healing Wave", #d.rows)
+    local byLabel = {}
+    for _, r in ipairs(d.rows) do byLabel[r.label] = r end
+    local hw3 = byLabel["Healing Wave 3"]
+    ok(math.abs(hw3.heal - 245 * (1 + 0.04643 * 0.5)) < 0.01, "a heal: the tooltip's middle, with crit",
+       hw3.heal)
+    ok(math.abs(hw3.hpm - hw3.heal / 80) < 1e-9 and math.abs(hw3.hps - hw3.heal / 2) < 1e-9, "per mana, per second")
+    ok(math.abs(hw3.dry - 1375 / (40 - 8.3385)) < 0.01, "dry in: a full bar, with the mana back while casting",
+       hw3.dry)
+    local function first(t) return FE.Best(d, t)[1].label end
+    local bestHpm, bestHps = d.rows[1], d.rows[1]
+    for _, r in ipairs(d.rows) do
+        if r.hpm > bestHpm.hpm then bestHpm = r end
+        if r.hps > bestHps.hps then bestHps = r end
+    end
+    ok(bestHpm.label == "Healing Wave 3", "mana for mana: Healing Wave 3", bestHpm.label)
+    ok(bestHps.label == "Lesser Healing Wave 2", "the fastest: Lesser Healing Wave 2", bestHps.label)
+    ok(first(15) == "Lesser Healing Wave 2", "a 15 s burst: Lesser Healing Wave 2", first(15))
+    ok(first(30) == "Healing Wave 4", "half a minute: Healing Wave 4", first(30))
+    ok(first(60) == "Healing Wave 3", "a minute: Healing Wave 3", first(60))
+    ok(first(300) == "Healing Wave 3" or first(300) == "Healing Wave 2", "a long fight: the cheap ranks win", first(300))
+    -- the window paints it
+    FE.fight = 60
+    NS.DO.efficiency()
+    local w = FE.win
+    ok(w and w:IsShown() and w.answer:GetText():find("Spam Healing Wave 3 for 1 min", 1, true),
+       "the window says which to spam", w and w.answer:GetText())
+    local lit = 0
+    for i = 1, 7 do if w.rows[i].lit:IsShown() then lit = lit + 1 end end
+    ok(lit == 1, "and lights that one row")
+    w.buttons[2]:Click()
+    ok(FE.fight == 30 and w.answer:GetText():find("Healing Wave 4", 1, true), "30 s: it says Healing Wave 4")
+    -- THE ANSWER TO TAKE AWAY (Arn, 19 Oct: "i want it to make a draggable button"): that rank's icon
+    ok(w.pick:IsShown() and w.pick.id == 913, "the recommended rank's button: Healing Wave 4 (913)", w.pick.id)
+    local picked
+    local keepPick = C_Spell.PickupSpell
+    C_Spell.PickupSpell = function(id) picked = id end
+    w.pick.__scripts.OnDragStart(w.pick)
+    ok(picked == 913, "dragging it picks up that rank", picked)
+    STATE.inCombat = true
+    picked = nil
+    w.pick.__scripts.OnDragStart(w.pick)
+    ok(picked == nil, "not in a fight (the cursor is the client's then)")
+    STATE.inCombat = false
+    C_Spell.PickupSpell = keepPick
+    w.buttons[3]:Click()
+    ok(w.pick.id == 547, "a minute: the button becomes Healing Wave 3", w.pick.id)
+    -- and the mouse binds, a click away
+    local opened = 0
+    local keepMouse = NS.DO.mouse
+    NS.DO.mouse = function() opened = opened + 1 end
+    w.binds:Click()
+    NS.DO.mouse = keepMouse
+    ok(opened == 1, "the window's 'mouse binds' opens the bind window")
+    -- DOCKED BESIDE THE OPTIONS (Arn, 19 Oct: "a button that i click and the window pops up where the
+    -- 3d model is at"): the options' row hangs it off their right edge, as the tank preview
+    w:Hide()
+    local opt = NS.CFG.Build()
+    local row
+    for _, sec in ipairs(NS.CFG.Sections()) do
+        for _, o in ipairs(sec.options) do if o.key == "efficiency" then row = o end end
+    end
+    row.action()
+    local p, rel, rp = w:GetPoint(1)
+    ok(w:IsShown() and w:GetParent() == opt and p == "TOPLEFT" and rel == opt and rp == "TOPRIGHT",
+       "from the options: hung off their right edge", tostring(p) .. " " .. tostring(rp))
+    ok(math.abs(w:GetWidth() / w:GetHeight() - 1.43) < 0.01, "1.43:1, the preview's shape")
+    -- ITS OWN SIZE, SCALED (Arn's screenshot, 19 Oct: "some words get cutoff" - it had taken the
+    -- options' height in their units and came out narrower than its columns)
+    local _, oh = pcall(opt.GetHeight, opt)
+    ok(w:GetWidth() == NS.FE.W and w:GetHeight() == NS.FE.H, "docked, it keeps the size its columns are laid out for")
+    ok(type(oh) ~= "number" or oh < 200 or math.abs(w:GetScale() * NS.FE.H - oh) < 0.5,
+       "and scales as a whole to the options' height", tostring(oh) .. " " .. tostring(w:GetScale()))
+    local colEnd = 0
+    for _, c in ipairs(NS.FE.COLS) do colEnd = colEnd + c[2] + 6 end
+    ok(12 + colEnd <= NS.FE.W - 24, "every column, 'dry in' too, inside the window", 12 + colEnd)
+    -- THE MOUSE BINDS DOCK TO ITS RIGHT (Arn: "when i click the mouse bind button it should dock it to
+    -- the right of the window"), as they dock to the spellbook - and go back when it closes
+    local keepBook = NS.FM.Book
+    NS.FM.Book = function() return nil end
+    w.binds:Click()
+    local mw = NS.FM.win
+    local mp, mrel, mrp = mw:GetPoint(1)
+    ok(mw:IsShown() and mp == "TOPLEFT" and mrel == w and mrp == "TOPRIGHT", "the mouse binds open docked to its right",
+       tostring(mp) .. " " .. tostring(mrp))
+    w:Hide()
+    NS.FM.Place(mw)
+    ok(mw.dockedTo == nil and select(2, mw:GetPoint(1)) ~= w, "the mana window shut: the binds go back where they were")
+    mw:Hide()
+    NS.FM.Book = keepBook
+    row.action()
+    ok(NS.FE.Docked() and not (NS.FN.preview and NS.FN.preview:IsShown()), "the tank preview stands aside")
+    row.action()
+    ok(not w:IsShown(), "a second press closes it")
+    NS.DO.efficiency()
+    p = w:GetPoint(1)
+    ok(w:IsShown() and w:GetParent() == UIParent and p == "CENTER", "/bish efficiency alone: free, in the middle")
+    -- a secret tooltip (mid-fight) is a rank left out, never an error
+    C_Spell.GetSpellDescription = function() return secret() end
+    ok(#FE.Data().rows == 0, "secret tooltips: nothing to show, no error")
+    w:Hide()
+    _G.UnitPowerMax, _G.GetManaRegen, _G.GetSpellCritChance = keepPow, keepRegen, keepCrit
+    NS.FM.BookIds = keep.ids
+    C_Spell.GetSpellPowerCost, C_Spell.GetSpellInfo, C_Spell.GetSpellDescription = keep.cost, keep.info, keep.desc
+    _G.GetSpellBonusHealing = keep.bonus
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
