@@ -97,7 +97,12 @@ local PER_COL = 5                       -- one column per party, the way a raid 
 --   row 1      1 cell   at FULL_W    the apex, two ordinary cells wide
 --   row 2      2 cells  at FULL_W
 --   rows 3-4   4 cells  at MID_W     = an ordinary cell
---   rows 5+    8 cells  at TAIL_W    = half of one, which is what he asked for
+--   rows 5+    6 cells  at TAIL_W    = two-thirds of one (8 at half, until 19 Oct - below)
+--
+-- SIX, NOT EIGHT (Arn, 19 Oct 2026, a raid in tanks mode: "the bottom one end up being so crowded
+-- with the debuff stuff"). Eight to a row made a tail cell 40 px, and the two cure boxes down its
+-- left took 18 of them - "Frankadank" was "Franka". Six make it 55: the whole name, the boxes kept.
+-- A 40-man grows one row.
 --
 -- SPAN is the width of row 2 and every row fits inside it: 2 FULL_W and the gap between them.
 -- MID_W and TAIL_W are worked out FROM the span rather than guessed, so four mediums and eight
@@ -107,10 +112,10 @@ local PER_COL = 5                       -- one column per party, the way a raid 
 local FULL_W = 2 * FRAME_W + PAD        -- exactly two ordinary cells and the gap between them
 local SPAN   = 2 * FULL_W + PAD         -- the widest row: what everything else divides
 local MID_W  = math.floor((SPAN - 3 * PAD) / 4)
-local TAIL_W = math.floor((SPAN - 7 * PAD) / 8)
+local TAIL   = 6
+local TAIL_W = math.floor((SPAN - (TAIL - 1) * PAD) / TAIL)
 local SHAPE  = { 1, 2, 4, 4 }           -- cells in each row; rows past the last repeat TAIL
 local WIDTH  = { FULL_W, FULL_W, MID_W, MID_W }
-local TAIL   = 8
 local HALF_W = FRAME_W                  -- the ordinary cell, still what a non-pyramid grid uses
 -- THE PYRAMID'S CELLS ARE TALLER, AND THE NAME HAS THE TOP (Arn, 17 Oct 2026: "it bother me that
 -- the bottoms row cuts off their names" ... "we can just make the cell taller"). A tail cell is 41

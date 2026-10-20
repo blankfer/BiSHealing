@@ -2175,8 +2175,10 @@ do
     ok(rows(5) == "1,2,2", "a party: apex, pair, and two below", rows(5))
     -- THE SHAPE, as Arn set it on 30 Sep looking at a 40-man: "third row max 4 cells, 4th row max
     -- 4 cells, 5th row and below 8 cells half size of 3rd and 4th cell". It was 1,2 then sixes.
-    ok(rows(25) == "1,2,4,4,8,6", "a 25-man: a pair, two rows of four, then eights", rows(25))
-    ok(rows(40) == "1,2,4,4,8,8,8,5", "and a 40-man fills the eights", rows(40))
+    -- THEN SIXES, NOT EIGHTS (Arn, 19 Oct: "the bottom one end up being so crowded with the debuff
+    -- stuff" - a 40 px cell with two cure boxes down its side had six letters of name)
+    ok(rows(25) == "1,2,4,4,6,6,2", "a 25-man: a pair, two rows of four, then sixes", rows(25))
+    ok(rows(40) == "1,2,4,4,6,6,6,6,5", "and a 40-man fills the sixes", rows(40))
     local p = FG.Pyramid(9)
     -- p1 is the apex, p2 and p3 are the pair on row two, p4 begins row three
     ok(p[1].wide and p[2].wide and p[3].wide and not p[4].wide,
@@ -2197,9 +2199,10 @@ do
     for _, q in ipairs(wide) do
         if q.row == 3 then mid = q.w elseif q.row == 5 then tail = q.w end
     end
-    ok(tail * 2 <= mid + 4 and tail * 2 >= mid - 4,
-       "and a row-five cell is half a row-three cell, which is what was asked for",
-       tail .. " vs " .. mid)
+    ok(tail * 3 <= mid * 2 + 6 and tail * 3 >= mid * 2 - 6,
+       "and a row-five cell is two-thirds of a row-three cell", tail .. " vs " .. mid)
+    -- room for the name beside nothing: two cure boxes down the side (18 px) leave a name its 36
+    ok(tail >= 55, "a tail cell is 55 px - the cure boxes no longer eat the name", tail)
 
     -- EVERY PYRAMID CELL IS TALL, AND A SHORT TAIL SHARES THE LINE (Arn, 17 Oct: "it bother me
     -- that the bottoms row cuts off their names" ... and after IMAX: "no imax but we just make them
@@ -2209,8 +2212,8 @@ do
     ok(last.tall and row4.tall and apex.tall, "every row is tall, the apex too")
     ok(last.h == FG.CELL_H + FG.NAME_BAND and apex.h == last.h, "taller by the name's band, all alike", last.h)
     ok(last.y == row4.y + row4.h + FG.CELL_PAD, "and each row starts under the one above", last.y)
-    ok(last.w > tail and last.w <= mid, "five in a tail row are wider than eight, never wider than a cell",
-       last.w .. " (eight: " .. tail .. ", a cell: " .. mid .. ")")
+    ok(last.w > tail and last.w <= mid, "five in a tail row are wider than six, never wider than a cell",
+       last.w .. " (six: " .. tail .. ", a cell: " .. mid .. ")")
     ok(math.abs((5 * last.w + 4 * 3) - span(2)) <= 5, "and they still end where the rows above end")
     ok(FG.Pyramid(40)[40].y == FG.Pyramid(40)[33].y + FG.CELL_H + FG.NAME_BAND + FG.CELL_PAD,
        "every tail row is tall, not just the last")
