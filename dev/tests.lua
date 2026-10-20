@@ -9203,6 +9203,28 @@ do
     ok(lit == 1, "and lights that one row")
     w.buttons[2]:Click()
     ok(FE.fight == 30 and w.answer:GetText():find("Healing Wave 4", 1, true), "30 s: it says Healing Wave 4")
+    -- THE ANSWER TO TAKE AWAY (Arn, 19 Oct: "i want it to make a draggable button"): that rank's icon
+    ok(w.pick:IsShown() and w.pick.id == 913, "the recommended rank's button: Healing Wave 4 (913)", w.pick.id)
+    local picked
+    local keepPick = C_Spell.PickupSpell
+    C_Spell.PickupSpell = function(id) picked = id end
+    w.pick.__scripts.OnDragStart(w.pick)
+    ok(picked == 913, "dragging it picks up that rank", picked)
+    STATE.inCombat = true
+    picked = nil
+    w.pick.__scripts.OnDragStart(w.pick)
+    ok(picked == nil, "not in a fight (the cursor is the client's then)")
+    STATE.inCombat = false
+    C_Spell.PickupSpell = keepPick
+    w.buttons[3]:Click()
+    ok(w.pick.id == 547, "a minute: the button becomes Healing Wave 3", w.pick.id)
+    -- and the mouse binds, a click away
+    local opened = 0
+    local keepMouse = NS.DO.mouse
+    NS.DO.mouse = function() opened = opened + 1 end
+    w.binds:Click()
+    NS.DO.mouse = keepMouse
+    ok(opened == 1, "the window's 'mouse binds' opens the bind window")
     -- DOCKED BESIDE THE OPTIONS (Arn, 19 Oct: "a button that i click and the window pops up where the
     -- 3d model is at"): the options' row hangs it off their right edge, as the tank preview
     w:Hide()

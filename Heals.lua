@@ -331,10 +331,40 @@ function FE.Win()
         b:SetScript("OnClick", function() FE.fight = t FE.Paint() end)
         f.buttons[i] = b
     end
+    -- THE ANSWER, TO TAKE AWAY (Arn, 19 Oct: "when i select a fight time and it recommends a spell i want
+    -- it to make a draggable button"): the recommended rank's icon - drag it (or click it) onto an action
+    -- bar or the mouse binds; it is that RANK, as the mouse window's rank rows (FM.PickUp)
+    local pick = CreateFrame("Button", nil, f)
+    pick:SetSize(28, 28)
+    pick:SetPoint("BOTTOMLEFT", 12, 30)
+    pick.icon = pick:CreateTexture(nil, "ARTWORK")
+    pick.icon:SetAllPoints()
+    pick:RegisterForDrag("LeftButton")
+    local function take(self) if self.id and NS.FM and NS.FM.PickUp then NS.FM.PickUp(self.id) end end
+    pick:SetScript("OnDragStart", take)
+    pick:SetScript("OnClick", take)
+    pick:SetScript("OnEnter", function(self)
+        local tip = _G.GameTooltip
+        if not (tip and self.id) then return end
+        tip:SetOwner(self, "ANCHOR_TOP")
+        if tip.SetSpellByID then pcall(tip.SetSpellByID, tip, self.id) end
+        tip:AddLine("Drag me onto an action bar or a mouse button.", 0.31, 0.82, 0.81, true)
+        tip:Show()
+    end)
+    pick:SetScript("OnLeave", function() if _G.GameTooltip then _G.GameTooltip:Hide() end end)
+    pick:Hide()
+    f.pick = pick
+    -- the mouse binds, a click away (Arn: "and also in the window i want a open the mouse bind window")
+    local binds = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    binds:SetSize(96, 20)
+    binds:SetPoint("TOPRIGHT", -28, -6)
+    binds:SetText("mouse binds")
+    binds:SetScript("OnClick", function() if NS.DO and NS.DO.mouse then NS.DO.mouse() end end)
+    f.binds = binds
     f.answer = cell(f, "GameFontNormal")
     f.answer:SetJustifyH("LEFT")
-    f.answer:SetPoint("BOTTOMLEFT", 12, 38)
-    f.answer:SetWidth(FE.W - 24)
+    f.answer:SetPoint("BOTTOMLEFT", 46, 38)
+    f.answer:SetWidth(FE.W - 58)
     f.note = cell(f)
     f.note:SetJustifyH("LEFT")
     f.note:SetPoint("BOTTOMLEFT", 12, 12)
@@ -402,6 +432,14 @@ function FE.Paint()
         if b.LockHighlight then if t == FE.fight then b:LockHighlight() else b:UnlockHighlight() end end
     end
     local top, second = best[1], best[2]
+    f.pick.id = top and top.id or nil
+    if top then
+        local tex = C_Spell and ask(C_Spell.GetSpellTexture, top.id)
+        f.pick.icon:SetTexture(plain(tex) or "Interface\\Icons\\INV_Misc_QuestionMark")
+        f.pick:Show()
+    else
+        f.pick:Hide()
+    end
     if not top then
         f.answer:SetText("No heals of yours could be read - out of combat, the tooltips say more.")
     else
@@ -437,7 +475,7 @@ function FE.Dock(opt)
     end
     FE.dockedTo = opt
     local W = f:GetWidth() or FE.W
-    f.answer:SetWidth(W - 24)
+    f.answer:SetWidth(W - 58)
     f.note:SetWidth(W - 24)
     return FE.Paint()
 end
