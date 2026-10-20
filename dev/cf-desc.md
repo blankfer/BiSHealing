@@ -57,6 +57,15 @@ Forty names on the screen and one of them is about to die. You do not want a spe
 
 **Already use Clique?** Keep it. Tick **"let Clique handle clicks"** (or `/bish clique`) and BiS Healing steps aside entirely. Untick it and your own binds are back.
 
+## Mana for mana: which heal to spam
+
+Should you spam your biggest Healing Wave, or a smaller rank that costs half? Press **open** on "which heal, mana for mana" in the options (or `/bish efficiency`). A window opens beside them with every rank of every heal you know, read from your spells as they are right now — your gear, +healing and talents are already in the game's numbers:
+
+- **heal, mana, per mana, per second** for each rank, with your crit included. The best per mana and the fastest are lit.
+- **dry in:** how long you can spam that rank from a full mana bar, counting the mana you get back while casting.
+- **Pick a fight length — 15 s, 30 s, 1 min, 2 min or 5 min** — and it tells you the rank that heals the most in that time: full speed until you run dry, then what your regen pays for. A short burst wants a fast heal, a long fight a cheap one, and it shows you where that switch is for your character.
+- **Drag the answer.** The recommended rank's icon sits beside it — drag it onto an action bar or one of your mouse buttons. **mouse binds** opens the mouse right beside it.
+
 ## Pings, on any button you like
 
 The game's ping wheel is good and slow — you hold a key, move the mouse, pick. In a fight you want one press.
@@ -154,6 +163,7 @@ Any click on the minimap button opens the options window — two columns, everyt
 |---|---|
 | `/bish` | the options window |
 | `/bish mouse` | the mouse binds, and the ping chips |
+| `/bish efficiency` | mana for mana: every rank of your heals, and which one to spam |
 | `/bish clique` | let Clique handle the clicks, or take them back |
 | `/bish trinkets shift both` | trinkets first on a modifier tab — `1`, `2`, `both`, `off` |
 | `/bish now` | the BiS> now block |
