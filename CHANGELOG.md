@@ -1,6 +1,6 @@
 # BiS Healing
 
-## Unreleased
+## 0.15.0
 
 - **Click a dead friend, res them.** Out of combat, every click on a dead player's cell - any button, any modifier, even one with nothing bound - casts your resurrection: Resurrection, Redemption, Ancestral Spirit, and for druids **Revive**, Forever's new out-of-combat res. Rebirth is never cast for you - its long cooldown stays yours for a battle res, on a button you bind it to. The moment they're up, or a fight starts, the cell is your binds again. `/bish res off` still turns it off.
 
