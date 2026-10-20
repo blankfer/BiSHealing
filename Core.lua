@@ -1111,6 +1111,13 @@ end
 --- with how many are NEW since you last asked, the worst single spike, and the load right now.
 --- Then one line for the BiS family, so "is it us?" has an answer in the same breath.
 NS.cpuLast = {}
+--- `/bish heals`: every rank of your heals as the client reports it - cost, cast time, its tooltip -
+--- with +healing, crit, mana, regen and your talents, in a box to copy (Heals.lua, the probe for the
+--- mana-efficiency window).
+function NS.DO.heals()
+    if NS.FE and NS.FE.Show then return NS.FE.Show() end
+end
+
 function NS.DO.cpu()
     local P = C_AddOnProfiler
     local M = Enum and Enum.AddOnProfilerMetric
@@ -1915,6 +1922,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.regen()
     elseif msg == "cpu" then
         NS.DO.cpu()
+    elseif msg == "heals" then
+        NS.DO.heals()
     elseif msg == "range" then
         NS.DO.range()
     elseif msg == "overheal" or msg == "overheal test" then

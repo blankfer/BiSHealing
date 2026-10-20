@@ -9103,6 +9103,44 @@ do
     FG.Layout()
 end
 
+-- THE HEALS PROBE (Arn, 19 Oct 2026: "a window ... that breaks down the mana efficiency of my healing
+-- spells ... all my talents my +healing ... using all ranks"). Step 0: `/bish heals` shows what the
+-- client says about every rank, to copy out - the window is built on that.
+do
+    local FE = NS.FE
+    local keep = { ids = NS.FM.BookIds, ranks = NS.FM.Ranks, cost = C_Spell.GetSpellPowerCost,
+                   info = C_Spell.GetSpellInfo, desc = C_Spell.GetSpellDescription, bonus = _G.GetSpellBonusHealing,
+                   tabs = _G.GetNumTalentTabs, n = _G.GetNumTalents, talent = _G.GetTalentInfo, tab = _G.GetTalentTabInfo }
+    NS.FM.BookIds = function(name) if name == "Healing Wave" then return { 331, 332 } end return {} end
+    NS.FM.Ranks = function(name) if name == "Healing Wave" then return { { rank = "Rank 1" }, { rank = "Rank 2" } } end return {} end
+    C_Spell.GetSpellPowerCost = function(id) return { { type = 0, name = "MANA", cost = id == 331 and 25 or 45 } } end
+    C_Spell.GetSpellInfo = function(id) return { name = "Healing Wave", castTime = id == 331 and 1500 or 2000 } end
+    C_Spell.GetSpellDescription = function(id) return id == 331 and "Heals a friendly target for 34 to 44." or secret() end
+    _G.GetSpellBonusHealing = function() return 212 end
+    _G.GetNumTalentTabs = function() return 3 end
+    _G.GetTalentTabInfo = function(t) return ({ "Elemental", "Enhancement", "Restoration" })[t] end
+    _G.GetNumTalents = function(t) return t == 3 and 2 or 0 end
+    _G.GetTalentInfo = function(t, i)
+        if t == 3 and i == 1 then return "Tidal Focus", 0, 1, 1, 5, 5 end
+        if t == 3 and i == 2 then return "Healing Grace", 0, 1, 2, 0, 3 end
+    end
+    local text = table.concat(FE.Probe(), "\n")
+    ok(text:find("+healing 212", 1, true), "the probe reads your +healing")
+    ok(text:find("== Healing Wave: 2 ranks", 1, true), "every rank of every heal you have")
+    ok(text:find("Rank 1 [-] id 331  cost 25  cast 1500 ms", 1, true), "a rank's cost and cast time, as the client says",
+       text:match("Rank 1[^\n]*"))
+    ok(text:find("Heals a friendly target for 34 to 44.", 1, true), "and its tooltip's own words")
+    ok(text:find("   secret", 1, true), "a secret tooltip says so - never an error")
+    ok(text:find("Restoration: Tidal Focus 5/5", 1, true) and not text:find("Healing Grace", 1, true),
+       "the talents you spent points in, by tree", text:match("Restoration[^\n]*"))
+    ok(NS.DO.heals() == text and FE.box and FE.box:IsShown(), "/bish heals opens it in a box to copy")
+    NS.FM.BookIds, NS.FM.Ranks = keep.ids, keep.ranks
+    C_Spell.GetSpellPowerCost, C_Spell.GetSpellInfo, C_Spell.GetSpellDescription = keep.cost, keep.info, keep.desc
+    _G.GetSpellBonusHealing, _G.GetNumTalentTabs, _G.GetNumTalents = keep.bonus, keep.tabs, keep.n
+    _G.GetTalentInfo, _G.GetTalentTabInfo = keep.talent, keep.tab
+    FE.box:Hide()
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
