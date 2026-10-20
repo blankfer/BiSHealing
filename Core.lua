@@ -1118,6 +1118,13 @@ function NS.DO.heals()
     if NS.FE and NS.FE.Show then return NS.FE.Show() end
 end
 
+--- `/bish efficiency` (and the options' "which heal, mana for mana"): every rank of your heals - heal,
+--- mana, per mana, per second, how long spamming it lasts - and the one that heals most in a fight of
+--- 15 s to 5 min (Arn, 19 Oct: "mana for mana what is the best healing spell i can spam").
+function NS.DO.efficiency()
+    if NS.FE and NS.FE.Paint then return NS.FE.Paint() end
+end
+
 function NS.DO.cpu()
     local P = C_AddOnProfiler
     local M = Enum and Enum.AddOnProfilerMetric
@@ -1924,6 +1931,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.cpu()
     elseif msg == "heals" then
         NS.DO.heals()
+    elseif msg == "efficiency" or msg == "hpm" or msg == "mana for mana" then
+        NS.DO.efficiency()
     elseif msg == "range" then
         NS.DO.range()
     elseif msg == "overheal" or msg == "overheal test" then

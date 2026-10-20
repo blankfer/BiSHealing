@@ -128,6 +128,87 @@ function FE.Probe()
 end
 
 --------------------------------------------------------------------
+-- the answer: mana for mana, which heal
+--------------------------------------------------------------------
+-- WHAT THE PROBE SHOWED (Arn's level-30 shaman, 19 Oct, gear on and off): the tooltip's numbers ALREADY
+-- hold your +healing, at Forever's own share per rank (Healing Wave 1 got 15% of it, 3 got 69%, 4 and 5
+-- 87%, Lesser Healing Wave 44%) - not Classic's formula, so it is never recomputed here. The cast times
+-- already hold the talents (every Healing Wave rank 0.5 s faster: Improved Healing Wave). The costs are
+-- the client's. And the talent list is EMPTY to an addon on Forever, even with the talent window open -
+-- so nothing here reads talents: what they do is already inside the client's numbers.
+-- So the window READS each rank as it is right now, with your gear, and only does the arithmetic:
+--   heal      the tooltip's middle, times crit (a heal crits for 150%)
+--   per mana  heal / cost              per sec  heal / cast time (an instant: the 1.5 s global cooldown)
+--   dry in    how long spamming it lasts on a full bar, with the mana you get back while casting
+--   a fight   the most healing in a fight of N seconds: full speed until dry, then what regen pays for
+FE.GCD = 1.5
+FE.CRIT_HEAL = 0.5                        -- a crit heals 150%: half again
+FE.CHAIN = 1.75                           -- Chain Heal on three targets: 1 + 1/2 + 1/4 (UNVERIFIED on Forever)
+FE.FIGHTS = { 15, 30, 60, 120, 300 }
+
+local function num(s) return tonumber((tostring(s or ""):gsub(",", ""))) end
+
+--- A tooltip's heal: its low and high, or the whole of a heal over time and its seconds. Nil for a
+--- tooltip that is secret or says neither.
+function FE.Parse(desc)
+    if type(desc) ~= "string" or (NS.Secret and NS.Secret(desc)) then return nil end
+    local lo, hi = desc:match("for ([%d,]+) to ([%d,]+)")
+    if lo then return { lo = num(lo), hi = num(hi), chain = desc:find("jump", 1, true) ~= nil } end
+    local total, secs = desc:match("([%d,]+) damage over ([%d,]+) sec")
+    if not total then total, secs = desc:match("for ([%d,]+) over ([%d,]+) sec") end
+    if total then return { lo = num(total), hi = num(total), hot = num(secs) } end
+    return nil
+end
+
+--- Everything the window shows, read now: { mana, regen, crit, bonus, rows = { ... } }.
+function FE.Data()
+    local _, class = ask(UnitClass, "player")
+    class = plain(class)
+    local d = {
+        mana = plain(ask(UnitPowerMax, "player", 0)) or 0,
+        regen = plain(select(2, ask(GetManaRegen))) or 0,       -- while casting: you are, the whole fight
+        crit = plain(ask(GetSpellCritChance, FE.SCHOOL[class or ""] or 2)) or 0,
+        bonus = plain(ask(GetSpellBonusHealing)) or 0,
+        rows = {},
+    }
+    local FM = NS.FM
+    for _, name in ipairs(FE.HEALS[class or ""] or {}) do
+        local ids = FM and FM.BookIds and FM.BookIds(name) or {}
+        for i, id in ipairs(ids) do
+            local r = FE.Rank(id)
+            local h = FE.Parse(plain(r.desc))
+            local cost, cast = plain(r.cost), plain(r.cast)
+            if h and type(cost) == "number" and cost > 0 then
+                local avg = (h.lo + h.hi) / 2 * (h.chain and FE.CHAIN or 1) * (1 + d.crit / 100 * FE.CRIT_HEAL)
+                local secs = math.max(FE.GCD, (type(cast) == "number" and cast or 0) / 1000)
+                local row = { name = name, rank = i, label = ("%s %d"):format(name, i), id = id,
+                              heal = avg, cost = cost, cast = secs, hpm = avg / cost, hps = avg / secs,
+                              chain = h.chain, hot = h.hot }
+                local burn = cost / secs - d.regen
+                row.dry = burn > 0 and d.mana / burn or nil       -- nil: it never runs you dry
+                d.rows[#d.rows + 1] = row
+            end
+        end
+    end
+    return d
+end
+
+--- The healing a row does in a fight of `t` seconds, spammed from a full bar: full speed until dry, then
+--- only what the mana coming back pays for.
+function FE.Total(row, t, d)
+    if not row.dry or row.dry >= t then return row.hps * t end
+    return row.hps * row.dry + row.hpm * d.regen * (t - row.dry)
+end
+
+--- The rows best first for a fight of `t` seconds.
+function FE.Best(d, t)
+    local list = {}
+    for _, r in ipairs(d.rows) do list[#list + 1] = r end
+    table.sort(list, function(a, b) return FE.Total(a, t, d) > FE.Total(b, t, d) end)
+    return list
+end
+
+--------------------------------------------------------------------
 -- the copy box
 --------------------------------------------------------------------
 -- 1.43:1, the family's window shape (standing order, 14 Oct)
@@ -165,6 +246,172 @@ function FE.Box()
     f.edit = edit
     FE.box = f
     return f
+end
+
+--------------------------------------------------------------------
+-- the window: every rank, and the one to spam
+--------------------------------------------------------------------
+FE.COLS = { { "spell", 170, "LEFT" }, { "heal", 62 }, { "mana", 50 }, { "per mana", 70 }, { "per sec", 62 }, { "dry in", 62 } }
+FE.ROW_H = 16
+FE.fight = 60
+
+local function comma(n)
+    local s = tostring(math.floor((n or 0) + 0.5))
+    while true do
+        local k
+        s, k = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+        if k == 0 then return s end
+    end
+end
+function FE.Clock(secs)
+    if not secs then return "never" end
+    return ("%d:%02d"):format(math.floor(secs / 60), math.floor(secs % 60))
+end
+local function fightWord(t) return t < 60 and (t .. " s") or (t / 60 .. " min") end
+
+local function cell(parent, size)
+    local fs = parent:CreateFontString(nil, "OVERLAY", size or "GameFontHighlightSmall")
+    fs:SetJustifyH("RIGHT")
+    return fs
+end
+
+function FE.Win()
+    if FE.win then return FE.win end
+    local f = CreateFrame("Frame", nil, UIParent)
+    f:SetSize(FE.W, FE.H)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.05, 0.05, 0.08, 0.95)
+    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    f.title:SetPoint("TOPLEFT", 12, -10)
+    f.title:SetText("BiS> mana for mana - which heal")
+    f.sub = cell(f)
+    f.sub:SetJustifyH("LEFT")
+    f.sub:SetPoint("TOPLEFT", 12, -28)
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", 2, 2)
+    -- the column heads
+    local x = 12
+    f.heads = {}
+    for i, c in ipairs(FE.COLS) do
+        local h = cell(f, "GameFontNormalSmall")
+        h:SetJustifyH(c[3] or "RIGHT")
+        h:SetWidth(c[2])
+        h:SetPoint("TOPLEFT", x, -48)
+        h:SetText(c[1])
+        f.heads[i] = h
+        x = x + c[2] + 6
+    end
+    -- the ranks, in a scroll (a priest at 60 has forty)
+    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 12, -64)
+    scroll:SetPoint("BOTTOMRIGHT", -30, 88)
+    local list = CreateFrame("Frame", nil, scroll)
+    list:SetSize(FE.W - 50, 10)
+    scroll:SetScrollChild(list)
+    f.list, f.rows = list, {}
+    -- the fight: how long you spam
+    f.fightWord = cell(f, "GameFontNormalSmall")
+    f.fightWord:SetJustifyH("LEFT")
+    f.fightWord:SetPoint("BOTTOMLEFT", 12, 66)
+    f.fightWord:SetText("a fight of")
+    f.buttons = {}
+    for i, t in ipairs(FE.FIGHTS) do
+        local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        b:SetSize(52, 20)
+        b:SetPoint("BOTTOMLEFT", 80 + (i - 1) * 56, 62)
+        b:SetText(fightWord(t))
+        b:SetScript("OnClick", function() FE.fight = t FE.Paint() end)
+        f.buttons[i] = b
+    end
+    f.answer = cell(f, "GameFontNormal")
+    f.answer:SetJustifyH("LEFT")
+    f.answer:SetPoint("BOTTOMLEFT", 12, 38)
+    f.answer:SetWidth(FE.W - 24)
+    f.note = cell(f)
+    f.note:SetJustifyH("LEFT")
+    f.note:SetPoint("BOTTOMLEFT", 12, 12)
+    f.note:SetWidth(FE.W - 24)
+    f.note:SetText("Read from your spells right now: your gear, +healing and talents are already in the game's numbers.")
+    FE.win = f
+    return f
+end
+
+local function row(f, i)
+    local r = f.rows[i]
+    if r then return r end
+    r = CreateFrame("Frame", nil, f.list)
+    r:SetSize(FE.W - 50, FE.ROW_H)
+    r:SetPoint("TOPLEFT", 0, -(i - 1) * FE.ROW_H)
+    r.lit = r:CreateTexture(nil, "BACKGROUND")
+    r.lit:SetAllPoints()
+    r.lit:SetColorTexture(0.31, 0.82, 0.81, 0.18)          -- the family's "good": the one to spam
+    r.cells = {}
+    local x = 0
+    for c, col in ipairs(FE.COLS) do
+        local fs = cell(r)
+        fs:SetJustifyH(col[3] or "RIGHT")
+        fs:SetWidth(col[2])
+        fs:SetPoint("LEFT", x, 0)
+        r.cells[c] = fs
+        x = x + col[2] + 6
+    end
+    f.rows[i] = r
+    return r
+end
+
+--- Paint the window from what the client says now, for a fight of FE.fight seconds.
+function FE.Paint()
+    local f = FE.Win()
+    local d = FE.Data()
+    FE.data = d
+    f.sub:SetText(("+%d healing   %.1f%% crit   %s mana   %.1f mana a second back while casting"):format(
+        d.bonus, d.crit, comma(d.mana), d.regen))
+    local bestHpm, bestHps
+    for _, r in ipairs(d.rows) do
+        if not bestHpm or r.hpm > bestHpm.hpm then bestHpm = r end
+        if not bestHps or r.hps > bestHps.hps then bestHps = r end
+    end
+    local best = FE.Best(d, FE.fight)
+    for i, r in ipairs(d.rows) do
+        local w = row(f, i)
+        local c = w.cells
+        c[1]:SetText(r.label .. (r.chain and " (3 targets)" or ""))
+        c[2]:SetText(comma(r.heal))
+        c[3]:SetText(comma(r.cost))
+        c[4]:SetText(("%.2f"):format(r.hpm))
+        c[5]:SetText(comma(r.hps))
+        c[6]:SetText(FE.Clock(r.dry))
+        for k = 1, #c do c[k]:SetTextColor(1, 1, 1) end
+        if r == bestHpm then c[4]:SetTextColor(1, 0.82, 0) end
+        if r == bestHps then c[5]:SetTextColor(1, 0.82, 0) end
+        w.lit:SetShown(r == best[1])
+        w:Show()
+    end
+    for i = #d.rows + 1, #f.rows do f.rows[i]:Hide() end
+    f.list:SetHeight(math.max(10, #d.rows * FE.ROW_H))
+    for i, t in ipairs(FE.FIGHTS) do
+        local b = f.buttons[i]
+        if b.LockHighlight then if t == FE.fight then b:LockHighlight() else b:UnlockHighlight() end end
+    end
+    local top, second = best[1], best[2]
+    if not top then
+        f.answer:SetText("No heals of yours could be read - out of combat, the tooltips say more.")
+    else
+        f.answer:SetText(("Spam %s for %s: %s healing%s%s"):format(top.label, fightWord(FE.fight),
+            comma(FE.Total(top, FE.fight, d)),
+            top.dry and top.dry < FE.fight and (" (dry at " .. FE.Clock(top.dry) .. ", then regen)") or "",
+            second and ("  -  next: " .. second.label .. " " .. comma(FE.Total(second, FE.fight, d))) or ""))
+    end
+    f:Show()
+    return d, best
 end
 
 --- `/bish heals`: the readout, selected, ready to copy.

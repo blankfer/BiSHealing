@@ -35,6 +35,10 @@ function CFG.Sections()
         { title = "clicks", options = {
             { key = "mouse", kind = "button", label = "drag spells onto a mouse", help = "Opens the mouse: drag a spell onto a button (left, right, middle, 4, 5, the wheel) and clicking a cell casts it on that player.", button = "binds",
               action = function() if DO.mouse then DO.mouse() end end },
+            -- MANA FOR MANA (Arn, 19 Oct: "i want a window in the option that breaks down the mana
+            -- efficiency of my healing spells")
+            { key = "efficiency", kind = "button", label = "which heal, mana for mana", help = "Every rank of your heals with your gear right now: how much each heals, per mana and per second, how long spamming it lasts - and which one heals the most in a fight of 15 seconds to 5 minutes.", button = "open",
+              action = function() if DO.efficiency then DO.efficiency() end end },
             -- one owner of the clicks: ours, or Clique's (Arn, 22 Sep: "im a clique user")
             { key = "clique", kind = "toggle", label = "let Clique handle clicks", help = "If you use Clique, let it own the clicks on our cells; our own binds step aside.",
               get = function(db) return db.clique == true end,

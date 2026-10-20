@@ -145,6 +145,13 @@ local function newFrame(kind, name, parent)
     function f:Show() self.__shown = true end
     function f:Hide() self.__shown = false end
     function f:IsShown() return self.__shown end
+    function f:SetShown(v) self.__shown = v and true or false end
+    -- A CLICK RUNS OnClick, as the client's Button:Click() does - and not on a disabled button
+    function f:Click(button)
+        if self.__disabled then return end
+        local fn = self.__scripts.OnClick
+        if fn then return fn(self, button or "LeftButton", false) end
+    end
     function f:SetAlpha(a)
         -- A WIDGET MAY REFUSE A SECRET. Which ones accept them is not in any census, so the mock
         -- can be told to say no - and the addon has to leave the cell readable when it does,
@@ -307,6 +314,7 @@ local function newFrame(kind, name, parent)
             Show     = function(t) t.__shown = true end,
             Hide     = function(t) t.__shown = false end,
             IsShown  = function(t) return t.__shown end,
+            SetShown = function(t, v) t.__shown = v and true or false end,
             SetTexture  = function(t, v) t.__texture = v end,
             SetTexCoord = function(t, a, b, c, d) t.__coords = { a, b, c, d } end,
             SetAtlas    = function(t, v) t.__atlas = v end,
@@ -6531,7 +6539,9 @@ do
             tall[c] = tall[c] + 1 + #sec.options
         end
         ok(tall[1] <= 14 and tall[2] <= 14, ("each column stays short: %d and %d"):format(tall[1], tall[2]))
-        ok(#NS.UI.Rows() <= 20, "and the whole window has no more than twenty settings: " .. #NS.UI.Rows())
+        -- TWENTY-ONE (19 Oct): Arn asked for the mana-for-mana window "in the option", by name - a
+        -- door, not a setting, under the mouse binds where a healer's first look already goes
+        ok(#NS.UI.Rows() <= 21, "and the whole window has no more than twenty-one rows: " .. #NS.UI.Rows())
         -- THE HELP STRIP (Arn, 14 Oct: "yes do the help strip"): every setting says what it does
         local undocumented = {}
         for _, o in ipairs(NS.UI.Rows()) do if not o.help then undocumented[#undocumented + 1] = o.label end end
@@ -9139,6 +9149,66 @@ do
     _G.GetSpellBonusHealing, _G.GetNumTalentTabs, _G.GetNumTalents = keep.bonus, keep.tabs, keep.n
     _G.GetTalentInfo, _G.GetTalentTabInfo = keep.talent, keep.tab
     FE.box:Hide()
+
+    -- THE WINDOW, on Arn's own level-30 shaman (his probe, gear on, 19 Oct): the tooltips hold the
+    -- +healing already, so the window only does the arithmetic on what the client says
+    local HW = { [331] = { 25, 1000, 60, 71 }, [332] = { 45, 1500, 127, 142 }, [547] = { 80, 2000, 232, 258 },
+                 [913] = { 155, 2500, 382, 426 }, [939] = { 200, 2500, 466, 522 },
+                 [8004] = { 105, 1500, 219, 242 }, [8008] = { 145, 1500, 284, 313 } }
+    NS.FM.BookIds = function(name)
+        if name == "Healing Wave" then return { 331, 332, 547, 913, 939 } end
+        if name == "Lesser Healing Wave" then return { 8004, 8008 } end
+        return {}
+    end
+    C_Spell.GetSpellPowerCost = function(id) return { { type = 0, name = "MANA", cost = HW[id][1] } } end
+    C_Spell.GetSpellInfo = function(id) return { name = "x", castTime = HW[id][2] } end
+    C_Spell.GetSpellDescription = function(id) return ("Heals a friendly target for %d to %d."):format(HW[id][3], HW[id][4]) end
+    local keepPow, keepRegen, keepCrit = _G.UnitPowerMax, _G.GetManaRegen, _G.GetSpellCritChance
+    _G.UnitPowerMax = function() return 1375 end
+    _G.GetManaRegen = function() return 16.276, 8.3385 end
+    _G.GetSpellCritChance = function() return 4.643 end
+    _G.GetSpellBonusHealing = function() return 150 end
+    local d = FE.Data()
+    ok(#d.rows == 7, "every rank of Healing Wave and Lesser Healing Wave", #d.rows)
+    local byLabel = {}
+    for _, r in ipairs(d.rows) do byLabel[r.label] = r end
+    local hw3 = byLabel["Healing Wave 3"]
+    ok(math.abs(hw3.heal - 245 * (1 + 0.04643 * 0.5)) < 0.01, "a heal: the tooltip's middle, with crit",
+       hw3.heal)
+    ok(math.abs(hw3.hpm - hw3.heal / 80) < 1e-9 and math.abs(hw3.hps - hw3.heal / 2) < 1e-9, "per mana, per second")
+    ok(math.abs(hw3.dry - 1375 / (40 - 8.3385)) < 0.01, "dry in: a full bar, with the mana back while casting",
+       hw3.dry)
+    local function first(t) return FE.Best(d, t)[1].label end
+    local bestHpm, bestHps = d.rows[1], d.rows[1]
+    for _, r in ipairs(d.rows) do
+        if r.hpm > bestHpm.hpm then bestHpm = r end
+        if r.hps > bestHps.hps then bestHps = r end
+    end
+    ok(bestHpm.label == "Healing Wave 3", "mana for mana: Healing Wave 3", bestHpm.label)
+    ok(bestHps.label == "Lesser Healing Wave 2", "the fastest: Lesser Healing Wave 2", bestHps.label)
+    ok(first(15) == "Lesser Healing Wave 2", "a 15 s burst: Lesser Healing Wave 2", first(15))
+    ok(first(30) == "Healing Wave 4", "half a minute: Healing Wave 4", first(30))
+    ok(first(60) == "Healing Wave 3", "a minute: Healing Wave 3", first(60))
+    ok(first(300) == "Healing Wave 3" or first(300) == "Healing Wave 2", "a long fight: the cheap ranks win", first(300))
+    -- the window paints it
+    FE.fight = 60
+    NS.DO.efficiency()
+    local w = FE.win
+    ok(w and w:IsShown() and w.answer:GetText():find("Spam Healing Wave 3 for 1 min", 1, true),
+       "the window says which to spam", w and w.answer:GetText())
+    local lit = 0
+    for i = 1, 7 do if w.rows[i].lit:IsShown() then lit = lit + 1 end end
+    ok(lit == 1, "and lights that one row")
+    w.buttons[2]:Click()
+    ok(FE.fight == 30 and w.answer:GetText():find("Healing Wave 4", 1, true), "30 s: it says Healing Wave 4")
+    -- a secret tooltip (mid-fight) is a rank left out, never an error
+    C_Spell.GetSpellDescription = function() return secret() end
+    ok(#FE.Data().rows == 0, "secret tooltips: nothing to show, no error")
+    w:Hide()
+    _G.UnitPowerMax, _G.GetManaRegen, _G.GetSpellCritChance = keepPow, keepRegen, keepCrit
+    NS.FM.BookIds = keep.ids
+    C_Spell.GetSpellPowerCost, C_Spell.GetSpellInfo, C_Spell.GetSpellDescription = keep.cost, keep.info, keep.desc
+    _G.GetSpellBonusHealing = keep.bonus
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
