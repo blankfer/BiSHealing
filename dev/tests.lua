@@ -2177,8 +2177,22 @@ do
     -- 4 cells, 5th row and below 8 cells half size of 3rd and 4th cell". It was 1,2 then sixes.
     -- THEN SIXES, NOT EIGHTS (Arn, 19 Oct: "the bottom one end up being so crowded with the debuff
     -- stuff" - a 40 px cell with two cure boxes down its side had six letters of name)
-    ok(rows(25) == "1,2,4,4,6,6,2", "a 25-man: a pair, two rows of four, then sixes", rows(25))
-    ok(rows(40) == "1,2,4,4,6,6,6,6,5", "and a 40-man fills the sixes", rows(40))
+    ok(rows(40) == "1,2,4,4,6,6,6,6,5", "a 40-man: a pair, two rows of four, then sixes", rows(40))
+    -- AND SPREAD EVENLY (Arn, 19 Oct: "row 5 still randomly smaller than the rest" - six at 55 over a
+    -- last five stretched to 66)
+    ok(rows(25) == "1,2,4,4,5,5,4", "a 25-man: its fourteen spread 5, 5, 4", rows(25))
+    ok(rows(22) == "1,2,4,4,6,5", "twenty-two: 6 and 5", rows(22))
+    local uneven
+    for n = 12, 40 do
+        local w0
+        for _, q in ipairs(FG.Pyramid(n)) do
+            if q.row >= 5 then
+                w0 = w0 or q.w
+                if q.w ~= w0 then uneven = n end
+            end
+        end
+    end
+    ok(uneven == nil, "every tail row is one width, whatever the raid's size", uneven)
     local p = FG.Pyramid(9)
     -- p1 is the apex, p2 and p3 are the pair on row two, p4 begins row three
     ok(p[1].wide and p[2].wide and p[3].wide and not p[4].wide,

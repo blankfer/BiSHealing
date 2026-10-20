@@ -158,16 +158,30 @@ local MELEE_RANK = {
 --- "no imax but we just make them taller enough for the names and move the debuff out of that
 --- row"). The name has the top line of every cell, the cure boxes start under it - so even
 --- "Frankadank" beside a role icon and two boxes is never cut.
+---
+--- EVERY TAIL ROW ONE WIDTH (Arn, 19 Oct: "row 5 still randomly smaller than the rest"). A short last
+--- row used to stretch across the line - five of them at 66 px under six at 55 - so the full row looked
+--- shrunk. Now the tail cells are spread evenly over as few rows of up to TAIL as they need, every one
+--- of them as wide as the fullest row allows: 11 go 6 + 5 at 55, 14 go 5 + 5 + 4 at 66. A short row
+--- is centred like every other row.
+local function tailShape(n)
+    local cells = n
+    for _, c in ipairs(SHAPE) do cells = cells - c end
+    if cells <= 0 then return TAIL, TAIL_W end
+    local rows = math.ceil(cells / TAIL)
+    local per = math.ceil(cells / rows)
+    return per, math.min(MID_W, math.floor((SPAN - (per - 1) * PAD) / per))
+end
+FG.TailShape = tailShape
+
 function FG.Pyramid(n)
     local out, r, i, y = {}, 1, 1, 0
+    local tailPer, tailW = tailShape(n)
     while i <= n do
-        local cap = SHAPE[r] or TAIL
+        local cap = SHAPE[r] or tailPer
         local count = math.min(cap, n - i + 1)
-        local w = WIDTH[r] or TAIL_W
+        local w = WIDTH[r] or tailW
         local tall = true
-        if SHAPE[r] == nil and count < TAIL then
-            w = math.min(MID_W, math.floor((SPAN - (count - 1) * PAD) / count))
-        end
         local h = FRAME_H + NAME_BAND
         for c = 1, count do
             -- `w` is the width this cell is drawn at; `wide` is kept as the old yes/no for
