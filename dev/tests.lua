@@ -9268,6 +9268,20 @@ do
     NS.DO.efficiency()
     p = w:GetPoint(1)
     ok(w:IsShown() and w:GetParent() == UIParent and p == "CENTER", "/bish efficiency alone: free, in the middle")
+    -- NOT WORKED OUT YET, SO NOT RANKED (Arn, 19 Oct: "does this work for all the healers? does it do
+    -- hots and shields? ... chain heal bounces and priest aoe heals"): a party heal and a heal-then-HoT
+    -- would read as one target's direct part. They show with a `*` and are never the pick. The words are
+    -- Classic's - Forever's own wording is UNVERIFIED until a priest and a druid run /bish heals.
+    local poh = FE.Parse("Heals all party members within 30 yards for 312 to 333.")
+    local regrowth = FE.Parse("Heals a friendly target for 93 to 107 and another 98 over 21 sec.")
+    local renew = FE.Parse("Heals the target for 45 damage over 15 sec.")
+    local rejuv = FE.Parse("Heals the target for 32 over 12 sec.")
+    ok(poh and poh.partial and regrowth and regrowth.partial, "a party heal and a heal-then-HoT are marked partial")
+    ok(renew and not renew.partial and renew.lo == 45 and renew.hot == 15, "a plain HoT reads whole (Renew)")
+    ok(rejuv and not rejuv.partial and rejuv.lo == 32 and rejuv.hot == 12, "and the other wording (Rejuvenation)")
+    local bigPoh = { label = "Prayer of Healing 1", partial = true, hpm = 99, hps = 999, heal = 9999, cost = 1, dry = nil }
+    local dd = { rows = { bigPoh, hw3 }, regen = 8, mana = 1000 }
+    ok(FE.Best(dd, 60)[1] == hw3 and #FE.Best(dd, 60) == 1, "a `*` row is never the pick, however big it looks")
     -- a secret tooltip (mid-fight) is a rank left out, never an error
     C_Spell.GetSpellDescription = function() return secret() end
     ok(#FE.Data().rows == 0, "secret tooltips: nothing to show, no error")

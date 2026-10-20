@@ -65,6 +65,7 @@ Should you spam your biggest Healing Wave, or a smaller rank that costs half? Pr
 - **dry in:** how long you can spam that rank from a full mana bar, counting the mana you get back while casting.
 - **Pick a fight length — 15 s, 30 s, 1 min, 2 min or 5 min** — and it tells you the rank that heals the most in that time: full speed until you run dry, then what your regen pays for. A short burst wants a fast heal, a long fight a cheap one, and it shows you where that switch is for your character.
 - **Drag the answer.** The recommended rank's icon sits beside it — drag it onto an action bar or one of your mouse buttons. **mouse binds** opens the mouse right beside it.
+- **Group heals and heal-then-HoT spells** (Prayer of Healing, Holy Nova, Regrowth, Tranquility) show with a `*` and aren't ranked yet - they heal more than one number can say.
 
 ## Pings, on any button you like
 

@@ -152,11 +152,21 @@ local function num(s) return tonumber((tostring(s or ""):gsub(",", ""))) end
 --- tooltip that is secret or says neither.
 function FE.Parse(desc)
     if type(desc) ~= "string" or (NS.Secret and NS.Secret(desc)) then return nil end
+    -- NOT WORKED OUT YET (Arn, 19 Oct: "does this work for all the healers? does it do hots and shields?
+    -- ... chain heal bounces and priest aoe heals"): a heal on the whole party (Prayer of Healing, Holy
+    -- Nova, Tranquility) and a heal with a HoT after it (Regrowth) would be counted as one target's
+    -- direct part - far too low. They show, marked, and are left out of "spam this" until each is
+    -- read off a real tooltip on Forever.
+    local low = desc:lower()
+    local partial = low:find("party", 1, true) or low:find("members", 1, true) or low:find("within %d+ yards")
     local lo, hi = desc:match("for ([%d,]+) to ([%d,]+)")
-    if lo then return { lo = num(lo), hi = num(hi), chain = desc:find("jump", 1, true) ~= nil } end
+    if lo then
+        if low:find("over [%d,]+ sec") then partial = true end            -- direct, then a HoT
+        return { lo = num(lo), hi = num(hi), chain = desc:find("jump", 1, true) ~= nil, partial = partial and true or nil }
+    end
     local total, secs = desc:match("([%d,]+) damage over ([%d,]+) sec")
     if not total then total, secs = desc:match("for ([%d,]+) over ([%d,]+) sec") end
-    if total then return { lo = num(total), hi = num(total), hot = num(secs) } end
+    if total then return { lo = num(total), hi = num(total), hot = num(secs), partial = partial and true or nil } end
     return nil
 end
 
@@ -183,7 +193,7 @@ function FE.Data()
                 local secs = math.max(FE.GCD, (type(cast) == "number" and cast or 0) / 1000)
                 local row = { name = name, rank = i, label = ("%s %d"):format(name, i), id = id,
                               heal = avg, cost = cost, cast = secs, hpm = avg / cost, hps = avg / secs,
-                              chain = h.chain, hot = h.hot }
+                              chain = h.chain, hot = h.hot, partial = h.partial }
                 local burn = cost / secs - d.regen
                 row.dry = burn > 0 and d.mana / burn or nil       -- nil: it never runs you dry
                 d.rows[#d.rows + 1] = row
@@ -203,7 +213,7 @@ end
 --- The rows best first for a fight of `t` seconds.
 function FE.Best(d, t)
     local list = {}
-    for _, r in ipairs(d.rows) do list[#list + 1] = r end
+    for _, r in ipairs(d.rows) do if not r.partial then list[#list + 1] = r end end   -- `*` rows: not ranked
     table.sort(list, function(a, b) return FE.Total(a, t, d) > FE.Total(b, t, d) end)
     return list
 end
@@ -409,16 +419,22 @@ function FE.Paint()
     FE.data = d
     f.sub:SetText(("+%d healing   %.1f%% crit   %s mana   %.1f mana a second back while casting"):format(
         d.bonus, d.crit, comma(d.mana), d.regen))
-    local bestHpm, bestHps
+    local bestHpm, bestHps, partial
     for _, r in ipairs(d.rows) do
-        if not bestHpm or r.hpm > bestHpm.hpm then bestHpm = r end
-        if not bestHps or r.hps > bestHps.hps then bestHps = r end
+        if r.partial then
+            partial = true
+        else
+            if not bestHpm or r.hpm > bestHpm.hpm then bestHpm = r end
+            if not bestHps or r.hps > bestHps.hps then bestHps = r end
+        end
     end
+    f.note:SetText(partial and "* group heals and heal-then-HoT spells: shown, not worked out yet - not ranked."
+        or "Your gear, +healing and talents are already in these numbers.")
     local best = FE.Best(d, FE.fight)
     for i, r in ipairs(d.rows) do
         local w = row(f, i)
         local c = w.cells
-        c[1]:SetText(r.label .. (r.chain and " (3 targets)" or ""))
+        c[1]:SetText(r.label .. (r.chain and " (3 targets)" or "") .. (r.partial and " *" or ""))
         c[2]:SetText(comma(r.heal))
         c[3]:SetText(comma(r.cost))
         c[4]:SetText(("%.2f"):format(r.hpm))
