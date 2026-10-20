@@ -9070,6 +9070,39 @@ do
     FN.Layout()
 end
 
+-- THE GROUP CHANGES MID-FIGHT (Arn, 19 Oct 2026: "shaman are suppose to be blue but some are priest
+-- white might be bug when they leave during combat" - and a poison box lit on his own cell for someone
+-- else's poison). The client moves everyone up a slot; the cells may not be re-pointed in a fight, so
+-- their bar, colour, markers and click follow the slot - and the name must too.
+do
+    local keepName, keepUnits = _G.UnitName, STATE.units
+    local NAMES = { player = "Arn", party1 = "Chain", party2 = "Tor" }
+    _G.UnitName = function(u) return NAMES[u], nil end
+    STATE.units = { player = true, party1 = true, party2 = true }
+    STATE.inCombat = false
+    local dd = NS.DB()
+    local keepShown = dd.shown
+    dd.shown = true                                   -- an earlier test left the grid hidden
+    FG.Layout()
+    local cell
+    for _, f in ipairs(FG.frames or {}) do if f.unit == "party1" then cell = f end end
+    ok(cell and cell.name.__text == "Chain", "party1's cell says Chain", cell and tostring(cell.name.__text))
+    -- Chain leaves mid-fight: Tor moves up to party1
+    STATE.inCombat = true
+    NAMES.party1, NAMES.party2 = "Tor", nil
+    STATE.units.party2 = nil
+    FG.dirtyAll = false
+    fire(FG.events, "GROUP_ROSTER_UPDATE")
+    ok(cell.unit == "party1", "in a fight the cell keeps its slot (it may not be re-pointed)")
+    ok(cell.name.__text == "Tor", "but its name now says who that slot holds - who a click heals",
+       tostring(cell.name.__text))
+    ok(FG.dirtyAll == true, "and every cell is repainted at once: bar, colour, markers")
+    STATE.inCombat = false
+    _G.UnitName, STATE.units, dd.shown = keepName, keepUnits, keepShown
+    fire(FG.events, "PLAYER_REGEN_ENABLED")
+    FG.Layout()
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
