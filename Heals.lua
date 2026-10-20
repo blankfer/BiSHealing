@@ -361,15 +361,20 @@ function FE.Win()
     binds:SetText("mouse binds")
     binds:SetScript("OnClick", function() if NS.DO and NS.DO.mouse then NS.DO.mouse() end end)
     f.binds = binds
+    -- the answer on one line and its detail on the next - one long line wrapped into the note (19 Oct)
     f.answer = cell(f, "GameFontNormal")
     f.answer:SetJustifyH("LEFT")
-    f.answer:SetPoint("BOTTOMLEFT", 46, 38)
+    f.answer:SetPoint("BOTTOMLEFT", 46, 46)
     f.answer:SetWidth(FE.W - 58)
+    f.next = cell(f)
+    f.next:SetJustifyH("LEFT")
+    f.next:SetPoint("BOTTOMLEFT", 46, 32)
+    f.next:SetWidth(FE.W - 58)
     f.note = cell(f)
     f.note:SetJustifyH("LEFT")
     f.note:SetPoint("BOTTOMLEFT", 12, 12)
     f.note:SetWidth(FE.W - 24)
-    f.note:SetText("Read from your spells right now: your gear, +healing and talents are already in the game's numbers.")
+    f.note:SetText("Your gear, +healing and talents are already in these numbers.")
     FE.win = f
     return f
 end
@@ -442,11 +447,14 @@ function FE.Paint()
     end
     if not top then
         f.answer:SetText("No heals of yours could be read - out of combat, the tooltips say more.")
+        f.next:SetText("")
     else
-        f.answer:SetText(("Spam %s for %s: %s healing%s%s"):format(top.label, fightWord(FE.fight),
-            comma(FE.Total(top, FE.fight, d)),
-            top.dry and top.dry < FE.fight and (" (dry at " .. FE.Clock(top.dry) .. ", then regen)") or "",
-            second and ("  -  next: " .. second.label .. " " .. comma(FE.Total(second, FE.fight, d))) or ""))
+        f.answer:SetText(("Spam %s for %s: %s healing"):format(top.label, fightWord(FE.fight),
+            comma(FE.Total(top, FE.fight, d))))
+        local bits = {}
+        if top.dry and top.dry < FE.fight then bits[#bits + 1] = "dry at " .. FE.Clock(top.dry) .. ", then regen" end
+        if second then bits[#bits + 1] = "next: " .. second.label .. " " .. comma(FE.Total(second, FE.fight, d)) end
+        f.next:SetText(table.concat(bits, "   -   "))
     end
     f:Show()
     return d, best
@@ -461,22 +469,24 @@ function FE.Dock(opt)
     local f = FE.Win()
     f:SetParent(opt or UIParent)
     f:ClearAllPoints()
+    -- ITS OWN SIZE, SCALED TO THE OPTIONS' HEIGHT (Arn's screenshot, 19 Oct: "some words get cutoff"):
+    -- it took the options' height in THEIR units, and his options are scaled up - so it came out
+    -- narrower than its columns, and "per sec" and "dry in" fell off its edge. Now it keeps the size it
+    -- is laid out for and scales as a whole, so every column fits at any scale.
+    f:SetSize(FE.W, FE.H)
     if opt then
         local okH, oh = pcall(opt.GetHeight, opt)
-        local H = (okH and type(oh) == "number" and oh >= 200) and math.floor(oh + 0.5) or FE.H
-        f:SetSize(math.floor(H * 1.43 + 0.5), H)
-        f:SetPoint("TOPLEFT", opt, "TOPRIGHT", 4, 0)
+        local s = (okH and type(oh) == "number" and oh >= 200) and oh / FE.H or 1
+        f:SetScale(s)
+        f:SetPoint("TOPLEFT", opt, "TOPRIGHT", 4 / s, 0)
         f:SetMovable(false)
         if NS.FN and NS.FN.preview then NS.FN.preview:Hide() end
     else
-        f:SetSize(FE.W, FE.H)
+        f:SetScale(1)
         f:SetPoint("CENTER")
         f:SetMovable(true)
     end
     FE.dockedTo = opt
-    local W = f:GetWidth() or FE.W
-    f.answer:SetWidth(W - 58)
-    f.note:SetWidth(W - 24)
     return FE.Paint()
 end
 

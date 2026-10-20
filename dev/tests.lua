@@ -9238,6 +9238,30 @@ do
     ok(w:IsShown() and w:GetParent() == opt and p == "TOPLEFT" and rel == opt and rp == "TOPRIGHT",
        "from the options: hung off their right edge", tostring(p) .. " " .. tostring(rp))
     ok(math.abs(w:GetWidth() / w:GetHeight() - 1.43) < 0.01, "1.43:1, the preview's shape")
+    -- ITS OWN SIZE, SCALED (Arn's screenshot, 19 Oct: "some words get cutoff" - it had taken the
+    -- options' height in their units and came out narrower than its columns)
+    local _, oh = pcall(opt.GetHeight, opt)
+    ok(w:GetWidth() == NS.FE.W and w:GetHeight() == NS.FE.H, "docked, it keeps the size its columns are laid out for")
+    ok(type(oh) ~= "number" or oh < 200 or math.abs(w:GetScale() * NS.FE.H - oh) < 0.5,
+       "and scales as a whole to the options' height", tostring(oh) .. " " .. tostring(w:GetScale()))
+    local colEnd = 0
+    for _, c in ipairs(NS.FE.COLS) do colEnd = colEnd + c[2] + 6 end
+    ok(12 + colEnd <= NS.FE.W - 24, "every column, 'dry in' too, inside the window", 12 + colEnd)
+    -- THE MOUSE BINDS DOCK TO ITS RIGHT (Arn: "when i click the mouse bind button it should dock it to
+    -- the right of the window"), as they dock to the spellbook - and go back when it closes
+    local keepBook = NS.FM.Book
+    NS.FM.Book = function() return nil end
+    w.binds:Click()
+    local mw = NS.FM.win
+    local mp, mrel, mrp = mw:GetPoint(1)
+    ok(mw:IsShown() and mp == "TOPLEFT" and mrel == w and mrp == "TOPRIGHT", "the mouse binds open docked to its right",
+       tostring(mp) .. " " .. tostring(mrp))
+    w:Hide()
+    NS.FM.Place(mw)
+    ok(mw.dockedTo == nil and select(2, mw:GetPoint(1)) ~= w, "the mana window shut: the binds go back where they were")
+    mw:Hide()
+    NS.FM.Book = keepBook
+    row.action()
     ok(NS.FE.Docked() and not (NS.FN.preview and NS.FN.preview:IsShown()), "the tank preview stands aside")
     row.action()
     ok(not w:IsShown(), "a second press closes it")
