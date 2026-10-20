@@ -5702,7 +5702,8 @@ do
             _G.UnitClass = function() return "Druid", "DRUID" end
             BOOK[28] = { name = "Rebirth", rank = "" }
             bookSaid()
-            ok(FM.ResSpell() == "Rebirth", "a druid without Revive yet: Rebirth")
+            -- Arn: "Let's not do rebirth unless they bind it ... that super long cooldown is ... for in combat battle rez"
+            ok(FM.ResSpell() == nil, "a druid with only Rebirth: no res click - its long cooldown is never spent for you")
             BOOK[29] = { name = "Revive", rank = "" }
             bookSaid()
             ok(FM.ResSpell() == "Revive", "with Revive trained: Revive, the out-of-combat one")

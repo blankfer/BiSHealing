@@ -464,8 +464,11 @@ FM.PALETTE_MAX = 11                 -- what fits across the bind window
 -- each class's res, the first one trained wins. DRUIDS GOT REVIVE ON FOREVER (Arn, 20 Oct 2026: "I think druids got
 -- a resurrection spell"): an out-of-combat res at level 12 beside Classic's Rebirth (Icy Veins' and
 -- ForeverChanges' WoW Forever druid pages) - asked for by name, so it is used once the spellbook has it.
+-- NEVER REBIRTH (Arn, 20 Oct: "Let's not do rebirth unless they bind it on their mouse ... that super long
+-- cooldown is usually only reserved for in combat battle rez"): the addon never spends it by itself - a druid
+-- without Revive gets no res click at all; Rebirth bound on a button by hand is that button's, as ever.
 FM.RES = { SHAMAN = { "Ancestral Spirit" }, PRIEST = { "Resurrection" }, PALADIN = { "Redemption" },
-           DRUID = { "Revive", "Rebirth" } }
+           DRUID = { "Revive" } }
 
 function FM.ResSpell()
     local d = NS.DB and NS.DB()
