@@ -2031,6 +2031,9 @@ function FG.Paint(f)
     local c = CLASS_COLOR[class or ""] or { 0.2, 0.7, 0.3 }
     local dead = UnitIsDeadOrGhost and NS.Plain(UnitIsDeadOrGhost(unit))
     if dead then c = DEAD end
+    -- DEAD OUT OF COMBAT, EVERY CLICK A RES (Mouse.lua FM.ResCheck): asked only when the cell's clicks and
+    -- its death disagree - a res cell that stood up, a dead one not yet all-res
+    if NS.FM and NS.FM.ResCheck and ((dead and not f.__res) or (not dead and f.__res)) then NS.FM.ResCheck(f) end
     local d = NS.DB and NS.DB()
     local byHealth = type(d) == "table" and d.color == "health"
     -- AN ENEMY SHOULD NOT LOOK LIKE A FRIEND. Arn, 28 Sep, on his hunter: the target and tot cells
