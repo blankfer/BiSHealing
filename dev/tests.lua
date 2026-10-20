@@ -100,6 +100,8 @@ local function newFrame(kind, name, parent)
     -- be stored in the wrong units and no test noticed (Arn, 23 Sep: "when i increased the scale
     -- size ... the target frames moved up and to the right").
     function f:GetParent() return self.__parent end
+    -- a frame can change parents, as in the client (the mana window docks onto the options, 19 Oct)
+    function f:SetParent(p) self.__parent = p end
     function f:GetEffectiveScale()
         local s = self.__scale or 1
         local p = self.__parent
@@ -9201,6 +9203,25 @@ do
     ok(lit == 1, "and lights that one row")
     w.buttons[2]:Click()
     ok(FE.fight == 30 and w.answer:GetText():find("Healing Wave 4", 1, true), "30 s: it says Healing Wave 4")
+    -- DOCKED BESIDE THE OPTIONS (Arn, 19 Oct: "a button that i click and the window pops up where the
+    -- 3d model is at"): the options' row hangs it off their right edge, as the tank preview
+    w:Hide()
+    local opt = NS.CFG.Build()
+    local row
+    for _, sec in ipairs(NS.CFG.Sections()) do
+        for _, o in ipairs(sec.options) do if o.key == "efficiency" then row = o end end
+    end
+    row.action()
+    local p, rel, rp = w:GetPoint(1)
+    ok(w:IsShown() and w:GetParent() == opt and p == "TOPLEFT" and rel == opt and rp == "TOPRIGHT",
+       "from the options: hung off their right edge", tostring(p) .. " " .. tostring(rp))
+    ok(math.abs(w:GetWidth() / w:GetHeight() - 1.43) < 0.01, "1.43:1, the preview's shape")
+    ok(NS.FE.Docked() and not (NS.FN.preview and NS.FN.preview:IsShown()), "the tank preview stands aside")
+    row.action()
+    ok(not w:IsShown(), "a second press closes it")
+    NS.DO.efficiency()
+    p = w:GetPoint(1)
+    ok(w:IsShown() and w:GetParent() == UIParent and p == "CENTER", "/bish efficiency alone: free, in the middle")
     -- a secret tooltip (mid-fight) is a rank left out, never an error
     C_Spell.GetSpellDescription = function() return secret() end
     ok(#FE.Data().rows == 0, "secret tooltips: nothing to show, no error")

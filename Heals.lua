@@ -414,6 +414,39 @@ function FE.Paint()
     return d, best
 end
 
+--- DOCKED BESIDE THE OPTIONS (Arn, 19 Oct: "in the options i also want just a button that i click and the
+--- window pops up where the 3d model is at"): from the options' row the window hangs off their right
+--- edge, as the tank mark's preview does - the options' height, 1.43:1 - and closes with them. The
+--- preview stands aside while it is up (Now.lua's hover asks FE.Docked). `/bish efficiency` alone still
+--- opens it free, in the middle of the screen.
+function FE.Dock(opt)
+    local f = FE.Win()
+    f:SetParent(opt or UIParent)
+    f:ClearAllPoints()
+    if opt then
+        local okH, oh = pcall(opt.GetHeight, opt)
+        local H = (okH and type(oh) == "number" and oh >= 200) and math.floor(oh + 0.5) or FE.H
+        f:SetSize(math.floor(H * 1.43 + 0.5), H)
+        f:SetPoint("TOPLEFT", opt, "TOPRIGHT", 4, 0)
+        f:SetMovable(false)
+        if NS.FN and NS.FN.preview then NS.FN.preview:Hide() end
+    else
+        f:SetSize(FE.W, FE.H)
+        f:SetPoint("CENTER")
+        f:SetMovable(true)
+    end
+    FE.dockedTo = opt
+    local W = f:GetWidth() or FE.W
+    f.answer:SetWidth(W - 24)
+    f.note:SetWidth(W - 24)
+    return FE.Paint()
+end
+
+--- Is it hanging off the options right now? (the tank preview then keeps out of its way)
+function FE.Docked()
+    return FE.dockedTo ~= nil and FE.win ~= nil and FE.win:IsShown() and true or false
+end
+
 --- `/bish heals`: the readout, selected, ready to copy.
 function FE.Show()
     local f = FE.Box()

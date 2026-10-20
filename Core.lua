@@ -1121,8 +1121,8 @@ end
 --- `/bish efficiency` (and the options' "which heal, mana for mana"): every rank of your heals - heal,
 --- mana, per mana, per second, how long spamming it lasts - and the one that heals most in a fight of
 --- 15 s to 5 min (Arn, 19 Oct: "mana for mana what is the best healing spell i can spam").
-function NS.DO.efficiency()
-    if NS.FE and NS.FE.Paint then return NS.FE.Paint() end
+function NS.DO.efficiency(dock)
+    if NS.FE and NS.FE.Dock then return NS.FE.Dock(dock) end
 end
 
 function NS.DO.cpu()
