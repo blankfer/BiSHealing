@@ -461,15 +461,23 @@ FM.PALETTE_MAX = 11                 -- what fits across the bind window
 --- else, the line does nothing and the heal goes out as it always did. Nothing is read, nothing
 --- changes in a fight, and `nocombat` keeps a druid's Rebirth from going on a misclick mid-pull.
 --- By name, from the book: a character who has not trained it gets no line. `/bish res off` stops it.
-FM.RES = { SHAMAN = "Ancestral Spirit", PRIEST = "Resurrection", PALADIN = "Redemption", DRUID = "Rebirth" }
+-- each class's res, the first one trained wins. DRUIDS GOT REVIVE ON FOREVER (Arn, 20 Oct 2026: "I think druids got
+-- a resurrection spell"): an out-of-combat res at level 12 beside Classic's Rebirth (Icy Veins' and
+-- ForeverChanges' WoW Forever druid pages) - asked for by name, so it is used once the spellbook has it.
+-- NEVER REBIRTH (Arn, 20 Oct: "Let's not do rebirth unless they bind it on their mouse ... that super long
+-- cooldown is usually only reserved for in combat battle rez"): the addon never spends it by itself - a druid
+-- without Revive gets no res click at all; Rebirth bound on a button by hand is that button's, as ever.
+FM.RES = { SHAMAN = { "Ancestral Spirit" }, PRIEST = { "Resurrection" }, PALADIN = { "Redemption" },
+           DRUID = { "Revive" } }
 
 function FM.ResSpell()
     local d = NS.DB and NS.DB()
     if type(d) == "table" and d.resClick == false then return nil end
     local class = UnitClass and NS.Plain(select(2, UnitClass("player"))) or nil
-    local name = FM.RES[class or ""]
-    if not name or #FM.BookIds(name) == 0 then return nil end
-    return name
+    for _, name in ipairs(FM.RES[class or ""] or {}) do
+        if #FM.BookIds(name) > 0 then return name end
+    end
+    return nil
 end
 
 --- The line that goes first in a heal click, or "" when there is no res to cast.
@@ -1047,6 +1055,24 @@ end
 function FM.ApplyTo(cell)
     if InCombatLockdown and InCombatLockdown() then return false end
     if not cell or not cell.SetAttribute then return false end
+    -- DEAD, OUT OF COMBAT: EVERY CLICK RESURRECTS (FM.ResNow) - whatever is bound, and on an empty
+    -- button too; the binds come back when they stand up or a fight starts
+    local res = not FM.CliqueOn() and FM.ResNow(cell)
+    cell.__res = res and true or nil
+    if res then
+        for _, slot in ipairs(FM.SLOTS) do
+            if slot.attr then
+                for _, m in ipairs(FM.MODS) do
+                    local prefix = m.key == "" and "*" or m.key
+                    cell:SetAttribute(prefix .. "type" .. slot.attr, "spell")
+                    cell:SetAttribute(prefix .. "spell" .. slot.attr, res)
+                    cell:SetAttribute(prefix .. "macrotext" .. slot.attr, nil)
+                end
+            end
+        end
+        cliqueRegister(cell, false)
+        return true, 0
+    end
     if FM.CliqueOn() then
         -- clear everything of ours first, so nothing of ours is left for Clique to fight
         for _, slot in ipairs(FM.SLOTS) do
@@ -1168,6 +1194,49 @@ function FM.ApplyWheel(owner)
     end
     return true, n
 end
+
+--- CLICK A DEAD FRIEND, RES THEM (Arn, 20 Oct 2026, from his cousin: "when he clicked the frame of someone that
+--- had died, it did not res that person ... if out of combat, you click someone that's dead, it'll cast res no
+--- matter what is binded"). The res used to ride only in front of a bound heal (FM.ResLine), so an empty
+--- button - which targets - or a ping never carried it. Now, out of combat, a dead player's cell is ALL res:
+--- every button, every modifier, your class's own (FM.RES; the options' res switch still turns it off).
+--- The res spell for this cell now, or nil: a player, dead (or a ghost), you out of combat and not about to
+--- be (FM.fighting: PLAYER_REGEN_DISABLED comes a moment before the lockdown, the last chance to put the binds
+--- back).
+function FM.ResNow(cell)
+    if FM.fighting or (InCombatLockdown and InCombatLockdown()) then return nil end
+    local unit = cell and (cell.unit or (cell.GetAttribute and cell:GetAttribute("unit")))
+    if type(unit) ~= "string" or (NS.Secret and NS.Secret(unit)) then return nil end
+    local okP, player = pcall(UnitIsPlayer, unit)
+    if not (okP and NS.Plain(player) == true) then return nil end
+    local okD, dead = pcall(UnitIsDeadOrGhost, unit)
+    if not (okD and NS.Plain(dead) == true) then return nil end
+    return FM.ResSpell()
+end
+
+--- Each paint asks (Grid.lua FG.Paint): has this cell's "all res" changed? Only then are its clicks rewritten.
+function FM.ResCheck(cell)
+    if not cell or (InCombatLockdown and InCombatLockdown()) or FM.CliqueOn() then return false end
+    local want = FM.ResNow(cell) and true or nil
+    if want == cell.__res then return false end
+    return FM.ApplyTo(cell)
+end
+
+-- the fight's edges: binds back on every all-res cell the moment it starts; the cells look again when it ends
+FM.resEvents = CreateFrame("Frame")
+FM.resEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
+FM.resEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+FM.resEvents:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        FM.fighting = true
+        for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do
+            if cell.__res then FM.ApplyTo(cell) end
+        end
+    else
+        FM.fighting = nil
+        for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do FM.ResCheck(cell) end
+    end
+end)
 
 --- Push every bind onto every cell and the wheel. Queued when the fight is on.
 function FM.Apply()

@@ -1,5 +1,9 @@
 # BiS Healing
 
+## 0.15.0
+
+- **Click a dead friend, res them.** Out of combat, every click on a dead player's cell - any button, any modifier, even one with nothing bound - casts your resurrection: Resurrection, Redemption, Ancestral Spirit, and for druids **Revive**, Forever's new out-of-combat res. Rebirth is never cast for you - its long cooldown stays yours for a battle res, on a button you bind it to. The moment they're up, or a fight starts, the cell is your binds again. `/bish res off` still turns it off.
+
 ## 0.14.0
 
 - **Mana for mana: which heal to spam.** A new window - press **open** on "which heal, mana for mana" in the options, or `/bish efficiency` - lists every rank of every heal you know with what it heals, what it costs, per mana, per second, and how long you can spam it before you run dry. Pick a fight length from 15 seconds to 5 minutes and it names the rank that heals the most in that time, with its icon to drag onto a bar or a mouse button. It reads your spells as they are right now, so your gear, +healing and talents are already in it. **mouse binds** opens the mouse window right beside it. Group heals and heals with a HoT after them (Prayer of Healing, Holy Nova, Regrowth, Tranquility) show with a `*` and aren't ranked yet.

@@ -5660,6 +5660,58 @@ do
         ok(cell.__attrs["*type1"] == "spell" and cell.__attrs["*spell1"] == "Spell331", "/bish res off: plain heals again")
         NS.DO.res(true)
         ok(cell.__attrs["*type1"] == "macro", "/bish res on: back")
+        -- DEAD, OUT OF COMBAT: EVERY CLICK RESES (Arn, 20 Oct 2026, his cousin: "when he clicked the frame of
+        -- someone that had died, it did not res that person ... no matter what is binded") - an empty button
+        -- targets, a ping pings: neither carried the res line
+        do
+            local keepUIP = _G.UnitIsPlayer
+            _G.UnitIsPlayer = function() return true end
+            local unit = cell.unit
+            STATE.dead[unit] = true
+            FG.Paint(cell)
+            ok(cell.__res and cell.__attrs["*type1"] == "spell" and cell.__attrs["*spell1"] == "Ancestral Spirit",
+               "dead, out of combat: the left click is the res itself", tostring(cell.__attrs["*spell1"]))
+            ok(cell.__attrs["*type4"] == "spell" and cell.__attrs["*spell4"] == "Ancestral Spirit"
+               and cell.__attrs["alt-type5"] == "spell" and cell.__attrs["alt-spell5"] == "Ancestral Spirit"
+               and cell.__attrs["ctrl-macrotext3"] == nil,
+               "every button, every modifier - the empty ones too")
+            -- a fight starts: the binds come back before the lockdown (PLAYER_REGEN_DISABLED is the last chance)
+            ok(fire(FM.resEvents, "PLAYER_REGEN_DISABLED"), "the fight's start reaches the res watcher")
+            ok(not cell.__res and cell.__attrs["*type1"] == "macro", "a fight starts: your binds again, at once")
+            STATE.inCombat = true
+            FG.Paint(cell)
+            ok(not cell.__res, "in the fight a dead cell stays as you bound it")
+            STATE.inCombat = false
+            fire(FM.resEvents, "PLAYER_REGEN_ENABLED")
+            ok(cell.__res and cell.__attrs["*spell1"] == "Ancestral Spirit", "the fight over, still dead: all res again")
+            -- they stand up
+            STATE.dead[unit] = nil
+            FG.Paint(cell)
+            ok(not cell.__res and cell.__attrs["*type1"] == "macro" and cell.__attrs["*macrotext1"]:find("Spell331", 1, true),
+               "up again: the binds come back")
+            -- an enemy or a pet: never
+            _G.UnitIsPlayer = function() return false end
+            STATE.dead[unit] = true
+            FG.Paint(cell)
+            ok(not cell.__res, "not a player: no res")
+            STATE.dead[unit] = nil
+            _G.UnitIsPlayer = keepUIP
+            FG.Paint(cell)
+            -- DRUIDS GOT REVIVE ON FOREVER (Arn: "I think druids got a resurrection spell")
+            local keepUC = _G.UnitClass
+            _G.UnitClass = function() return "Druid", "DRUID" end
+            BOOK[28] = { name = "Rebirth", rank = "" }
+            bookSaid()
+            -- Arn: "Let's not do rebirth unless they bind it ... that super long cooldown is ... for in combat battle rez"
+            ok(FM.ResSpell() == nil, "a druid with only Rebirth: no res click - its long cooldown is never spent for you")
+            BOOK[29] = { name = "Revive", rank = "" }
+            bookSaid()
+            ok(FM.ResSpell() == "Revive", "with Revive trained: Revive, the out-of-combat one")
+            BOOK[29] = nil
+            BOOK[28] = { name = "Ancestral Spirit", rank = "" }
+            _G.UnitClass = keepUC
+            bookSaid()
+        end
         BOOK[28] = k28
         bookSaid()
         FM.ApplyTo(cell)
