@@ -1,6 +1,6 @@
 # BiS Healing
 
-## Unreleased
+## 0.15.2
 
 - **You show up in FojjiCore's windows.** A party member running FojjiCore now sees your level and experience in its Experience window and your campfire in its Campfires window, instead of "No Addon" (the shared BiS lib, version 16 - quiet if you run FojjiCore's Dungeon Journal yourself, which says the same).
 
