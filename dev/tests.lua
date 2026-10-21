@@ -1659,7 +1659,7 @@ do
     ok(toc:find("Libs\\LibBiSComm-1.0\\LibBiSComm-1.0.lua", 1, true) ~= nil, "the TOC loads it")
     local loaded, err = pcall(function() assert(loadfile("Libs/LibBiSComm-1.0/LibBiSComm-1.0.lua"))() end)
     local lib = _G.LibBiSComm
-    ok(loaded and lib and lib.MINOR == 14, "LibBiSComm minor 14 loads in this client's shape", tostring(err))
+    ok(loaded and lib and lib.MINOR == 15, "LibBiSComm minor 15 loads in this client's shape", tostring(err))
     if lib then
         ok(NS.Comm.Boot() and lib:AddonsBlob():find("BiSHealing", 1, true), "booted at login, BiS Healing named in it",
            lib:AddonsBlob())
