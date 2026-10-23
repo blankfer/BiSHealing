@@ -1607,7 +1607,13 @@ do
            "the gate: a clipped window just past the right edge, hung on the bar frame (a fixed size)")
         ok((w:GetFrameLevel() or 0) > (g:GetFrameLevel() or 0), "and above the ghost, so the ghost never covers its sliver")
         local mpt = (w.mark.points or {})[1] or {}
-        ok(mpt[2] == gFill and mpt[3] == "TOPRIGHT", "its red sliver rides the ghost's end - inside the window only on an overheal")
+        local mpt2 = (w.mark.points or {})[2] or {}
+        ok(mpt[2] == gFill and mpt[3] == "TOPLEFT" and mpt2[2] == gFill and mpt2[3] == "BOTTOMRIGHT", "its red mark spans the whole ghost - the window shows any part past the edge (a 6 px mark at its end missed big overheals)")
+        -- the client works a bar's width out of its anchors; the mock cannot, so the bar is given the wide cell's
+        cell.bar:SetSize(170, 32)
+        FG.Paint(cell)
+        ok(g:GetWidth() == 170 and g:GetHeight() == 32, "the ghost as wide as this cell's bar (his own cell is two wide)",
+           tostring(g:GetWidth()))
         -- time up: gone
         FG.ghostUntil = (GetTime() or 0) - 1
         FG.Paint(cell)

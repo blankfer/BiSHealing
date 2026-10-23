@@ -1999,11 +1999,14 @@ function FG.Ghost(f)
         local lvl = g:GetFrameLevel()
         if type(lvl) == "number" then w:SetFrameLevel(lvl + 1) end
     end
+    -- THE MARK SPANS THE WHOLE GHOST (Arn's second screenshot, 23 Oct: the Sergeant's cell lit, his own did not).
+    -- A 6 px mark riding the ghost's end only showed while the end was less than 12 px past the edge: a big
+    -- heal on a small health pool ran clean past the window. Spanning the ghost, the window shows whatever part
+    -- of the heal is past the edge - a full sliver for any overheal of 6 px or more, nothing when it fits.
     w.mark = w:CreateTexture(nil, "OVERLAY")
     w.mark:SetColorTexture(FG.GHOST_MARK[1], FG.GHOST_MARK[2], FG.GHOST_MARK[3], FG.GHOST_MARK[4])
-    w.mark:SetPoint("TOPRIGHT", gFill, "TOPRIGHT", 0, 0)
+    w.mark:SetPoint("TOPLEFT", gFill, "TOPLEFT", 0, 0)
     w.mark:SetPoint("BOTTOMRIGHT", gFill, "BOTTOMRIGHT", 0, 0)
-    w.mark:SetWidth(FG.GHOST_LANE)
     g:Hide()
     w:Hide()
     return g
@@ -2073,6 +2076,9 @@ function FG.Paint(f)
     if f.ghost then
         local on = FG.ghostUntil and FG.ghostHeal and GetTime and GetTime() < FG.ghostUntil
         if on then
+            -- as wide as THIS cell's bar: the pyramid's cells are not all FRAME_W (his own cell is two wide)
+            local bw, bh = f.bar:GetWidth(), f.bar:GetHeight()
+            if type(bw) == "number" and bw > 0 and type(bh) == "number" and bh > 0 then f.ghost:SetSize(bw, bh) end
             if FG.maxOK then pcall(f.ghost.SetMinMaxValues, f.ghost, 0, max) end
             f.ghost:SetValue(FG.ghostHeal)
             f.ghost:Show()
