@@ -1958,8 +1958,11 @@ end
 --- sliver in a fixed window just past the cell's right edge riding the ghost's end: there only when the
 --- heal would overheal. `/bish ghost` puts both on every cell for FG.GHOST_FOR seconds to see whether
 --- the client draws them on OTHER people's cells (secret health) - nothing else is built on it yet.
---- The ghost is masked, never clipped, to the empty part of the bar (solved.md: a clip anchored to a
---- secret-sized region draws nothing); the window's own edges hang on the bar frame, never the fill.
+--- The ghost is masked to the WHOLE BAR, a fixed shape: the part of the heal that fits shows inside the cell,
+--- the rest is cut at the edge - where the gate's sliver says so. (First try, Arn's screenshot 23 Oct: masked
+--- to the EMPTY part of the bar, which is zero wide at full health - the ghost was not masked at all and ran
+--- out past the cell, over the gate. A mask with no area seems to be no mask.) The window's own edges hang on
+--- the bar frame, never the fill, and it sits ABOVE the ghost.
 FG.GHOST_FOR, FG.GHOST_LANE = 15, 6
 FG.GHOST_COLOUR = { 0.45, 0.80, 1.00, 0.55 }
 FG.GHOST_MARK = { 1.00, 0.25, 0.10, 1.00 }
@@ -1982,8 +1985,7 @@ function FG.Ghost(f)
     local gFill = g:GetStatusBarTexture()
     if f.bar.CreateMaskTexture and gFill and gFill.AddMaskTexture then
         f.ghostMask = f.bar:CreateMaskTexture()
-        f.ghostMask:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
-        f.ghostMask:SetPoint("BOTTOMRIGHT", f.bar, "BOTTOMRIGHT", 0, 0)
+        f.ghostMask:SetAllPoints(f.bar)
         f.ghostMask:SetTexture("Interface\\Buttons\\WHITE8X8", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "NEAREST")
         gFill:AddMaskTexture(f.ghostMask)
     end
@@ -1993,6 +1995,10 @@ function FG.Ghost(f)
     w:SetPoint("TOPLEFT", f.bar, "TOPRIGHT", 0, 0)
     w:SetPoint("BOTTOMRIGHT", f.bar, "BOTTOMRIGHT", FG.GHOST_LANE, 0)
     if w.SetClipsChildren then w:SetClipsChildren(true) end
+    if w.SetFrameLevel and g.GetFrameLevel then
+        local lvl = g:GetFrameLevel()
+        if type(lvl) == "number" then w:SetFrameLevel(lvl + 1) end
+    end
     w.mark = w:CreateTexture(nil, "OVERLAY")
     w.mark:SetColorTexture(FG.GHOST_MARK[1], FG.GHOST_MARK[2], FG.GHOST_MARK[3], FG.GHOST_MARK[4])
     w.mark:SetPoint("TOPRIGHT", gFill, "TOPRIGHT", 0, 0)

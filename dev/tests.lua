@@ -1600,10 +1600,12 @@ do
         local gFill = g:GetStatusBarTexture()
         local masked = false
         for _, m in ipairs(gFill.__masks or {}) do if m == cell.ghostMask then masked = true end end
-        ok(masked, "masked to the empty part of the bar - never a clip on a secret-sized region")
+        ok(masked and cell.ghostMask.__allpoints == cell.bar,
+           "masked to the whole bar, a fixed shape (Arn's screenshot: a mask on the empty part is zero wide at full health - no mask)")
         local wp, wrel, wrp = w:GetPoint(1)
         ok(w:IsShown() and w:DoesClipChildren() and wrel == cell.bar and wrp == "TOPRIGHT",
            "the gate: a clipped window just past the right edge, hung on the bar frame (a fixed size)")
+        ok((w:GetFrameLevel() or 0) > (g:GetFrameLevel() or 0), "and above the ghost, so the ghost never covers its sliver")
         local mpt = (w.mark.points or {})[1] or {}
         ok(mpt[2] == gFill and mpt[3] == "TOPRIGHT", "its red sliver rides the ghost's end - inside the window only on an overheal")
         -- time up: gone
