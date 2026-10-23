@@ -2040,6 +2040,7 @@ function FG.Paint(f)
     -- cast on hostile units perfectly well - "the frames cant distinguish when its an enemy right
     -- now enemies look like friendlies". Hostility beats both the class colour and the health
     -- colour: a red bar on a mob is the point, and "how hurt is it" is the same question either way.
+    if f.mayBeHostile then FG.FoeAuras(f, unit) end
     if not (f.mayBeHostile and FG.PaintHostile(f, unit, c)) then
         if dead or not (byHealth and FG.PaintByHealth(f)) then
             f.bar:SetStatusBarColor(c[1], c[2], c[3])
@@ -2334,6 +2335,27 @@ FG.hostileSeen = nil
 ---
 --- Only the target and the tot cells ask. Your party is not hostile, and a question asked of
 --- forty raid cells ten times a second for an answer that is always no is forty questions wasted.
+--- NO CURE BOXES ON AN ENEMY (Arn, 23 Oct, a poison box on Thunderaan's target cell: "enemies are still getting
+--- poison boxes for me to debuff"). On a mob the harmful auras are your group's own poisons and curses, and the
+--- dispel filter does not stop at friends. So on a cell that may hold an enemy, the whole aura layer - cures, hots,
+--- the watched buff - goes to alpha 0 when the client says it can be attacked. That answer may be secret: then the
+--- client turns it into the alpha itself (EvaluateColorValueFromBoolean, the range dimming's road) and we never test it.
+function FG.FoeAuras(f, unit)
+    local a = f.auras
+    if not (a and a.SetAlpha and unit and UnitCanAttack) then return nil end
+    local asked, hostile = pcall(UnitCanAttack, "player", unit)
+    if not asked then return nil end
+    if NS.Secret and NS.Secret(hostile) then
+        local curve = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+        if not curve then return nil end
+        local ok, alpha = pcall(curve, hostile, 0, 1)
+        if ok then pcall(a.SetAlpha, a, alpha) end
+        return ok and "secret" or nil
+    end
+    a:SetAlpha(hostile == true and 0 or 1)
+    return hostile == true
+end
+
 function FG.PaintHostile(f, unit, friendly)
     if not (f and f.bar and unit and UnitCanAttack) then return false end
     local asked, hostile = pcall(UnitCanAttack, "player", unit)
