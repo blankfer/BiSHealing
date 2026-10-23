@@ -1,5 +1,10 @@
 # BiS Healing
 
+## 0.15.3
+
+- **The Deeprun Tram's timetable, for the whole guild.** With the shared BiS lib's new version, riding the Deeprun Tram with any BiS addon times it for your guild, the way the zeppelins and boats already are - BiS Tools' ride card and BiS Shell's TRAM-TRAK read it.
+- **No cure boxes on an enemy.** Target a mob your group has poisoned and its cell no longer shows a poison box for you to cure - the target and target-of-target cells hide their cure boxes, hots and buff marker whenever the unit is something you can attack. In a fight the game keeps "can I attack it" hidden from addons, so the game itself picks the cell's transparency from its own answer.
+
 ## 0.15.2
 
 - **You show up in FojjiCore's windows.** A party member running FojjiCore now sees your level and experience in its Experience window and your campfire in its Campfires window, instead of "No Addon" (the shared BiS lib, version 16 - quiet if you run FojjiCore's Dungeon Journal yourself, which says the same).

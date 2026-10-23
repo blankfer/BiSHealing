@@ -1659,7 +1659,7 @@ do
     ok(toc:find("Libs\\LibBiSComm-1.0\\LibBiSComm-1.0.lua", 1, true) ~= nil, "the TOC loads it")
     local loaded, err = pcall(function() assert(loadfile("Libs/LibBiSComm-1.0/LibBiSComm-1.0.lua"))() end)
     local lib = _G.LibBiSComm
-    ok(loaded and lib and lib.MINOR == 16, "LibBiSComm minor 16 loads in this client's shape", tostring(err))
+    ok(loaded and lib and lib.MINOR == 17, "LibBiSComm minor 17 loads in this client's shape", tostring(err))
     if lib then
         ok(NS.Comm.Boot() and lib:AddonsBlob():find("BiSHealing", 1, true), "booted at login, BiS Healing named in it",
            lib:AddonsBlob())
@@ -2753,11 +2753,16 @@ do
     ok(t.bar.__color and math.abs(t.bar.__color[1] - FG.HOSTILE[1]) < 0.01,
        "a unit you can attack paints hostile", t.bar.__color and t.bar.__color[1])
     ok(FG.hostileSeen == "plain", "read plainly out of combat", tostring(FG.hostileSeen))
+    -- NO CURE BOXES ON AN ENEMY (Arn, 23 Oct: "enemies are still getting poison boxes for me to debuff")
+    if not t.auras and NS.FA and NS.FA.Attach then NS.FA.Attach(t, "target") FG.Paint(t) end
+    ok(t.auras and t.auras:GetAlpha() == 0, "an enemy: its cure boxes and hots fade to nothing",
+       t.auras and tostring(t.auras:GetAlpha()))
 
     STATE.hostile.target = false
     FG.Paint(t)
     ok(math.abs(t.bar.__color[1] - FG.HOSTILE[1]) > 0.01,
        "and a friendly one does not", t.bar.__color[1])
+    ok(t.auras and t.auras:GetAlpha() == 1, "a friend: the boxes back")
 
     -- IN COMBAT THE ANSWER IS SECRET, which is exactly when you are looking at the thing you are
     -- fighting. The client's own ternary picks each channel; nothing here tests the boolean.
@@ -2771,6 +2776,8 @@ do
         if getmetatable(t.bar.__color[i]) == getmetatable(secret()) then chans = chans + 1 end
     end
     ok(chans == 3, "and every channel reaches the bar unread, not just the first", chans)
+    ok(t.auras and getmetatable(t.auras:GetAlpha()) == getmetatable(secret()),
+       "in a fight the client picks the boxes' alpha from its own secret answer - never tested here")
 
     -- a client that will not take it leaves the cell in its friendly colour rather than throwing
     local realCurve = _G.C_CurveUtil.EvaluateColorValueFromBoolean
