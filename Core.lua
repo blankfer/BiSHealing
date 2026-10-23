@@ -1755,6 +1755,26 @@ function NS.DO.colour(byHealth)
     return d.color
 end
 
+--- /bish chain [on|off] - CHAIN HEAL MODE (Grid.lua FG.Chain): every cell black, red only on someone missing
+--- at least a whole Chain Heal - a target none of it would be wasted on. No argument flips it.
+function NS.DO.chain(on)
+    local d = DB()
+    if on == nil then on = not d.chain end
+    if on and not NS.FG.ChainSize() then
+        d.chain = nil
+        Print("Chain Heal mode needs a Chain Heal this character knows, with a readable tooltip"
+            .. " - out of a fight, once it is learned")
+        repaint()
+        return nil
+    end
+    d.chain = on and true or nil
+    repaint()
+    remember()
+    Print(on and ("Chain Heal mode: cells black, red where a whole Chain Heal (%d) lands - none wasted")
+        or "Chain Heal mode off - the cells as usual", math.floor(NS.FG.chainHeal or 0))
+    return d.chain
+end
+
 --- /bish ring me | target - which cell wears the gold ring. No argument flips it.
 function NS.DO.ring(how)
     local d = DB()
@@ -1979,6 +1999,10 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.overheal(msg:match("test"))
     elseif msg == "ghost" then
         NS.DO.ghost()
+    elseif msg == "chain" or msg == "chain heal" then
+        NS.DO.chain()
+    elseif msg == "chain on" or msg == "chain off" then
+        NS.DO.chain(msg == "chain on")
     elseif msg == "byid" then
         NS.DO.byid()
     elseif msg == "curve" then
