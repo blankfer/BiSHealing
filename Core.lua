@@ -1219,6 +1219,46 @@ function NS.DO.overheal(test)
     end
 end
 
+--- THE HEAL GHOST PROBE (23 Oct 2026; FG.Ghost says what and why). Your left-click heal - its rank, or
+--- the highest you know - sized from its own tooltip like the mana-for-mana window, drawn after every
+--- cell's health for FG.GHOST_FOR seconds, with a red sliver past the edge where it would overheal.
+function NS.DO.ghost()
+    local FG, FM, FE = NS.FG, NS.FM, NS.FE
+    if not (FG and FM and FE) then Print("ghost: not ready") return nil end
+    local cast = FM.Get("", "left")
+    local name, rank = FM.Split(cast)
+    local ids = FM.BookIds(name)
+    if #ids == 0 then
+        local _, class = UnitClass("player")
+        local def = FM.CLASS_DEFAULTS[NS.Plain(class) or ""]
+        name, rank = def and def.left, nil
+        ids = FM.BookIds(name)
+    end
+    local id = ids[tonumber(rank and rank:match("%d+")) or #ids]
+    if not id then Print("ghost: no heal on your left click that this character knows") return nil end
+    local r = FE.Rank(id)
+    local secretDesc = NS.Secret(r.desc)
+    local h = FE.Parse(NS.Plain(r.desc))
+    local fight = NS.Plain(UnitAffectingCombat and UnitAffectingCombat("player"))
+    Print("ghost: |cffb980ff%s|r (id %d) - its tooltip reads %s%s", tostring(name), id,
+        secretDesc and "|cfff08cb0SECRET|r" or "|cff4fd0cfplain|r",
+        fight == true and " (in a fight)" or fight == false and " (out of a fight)" or "")
+    if not h then Print("  no heal numbers in that tooltip: %s", secretDesc and "it is secret" or tostring(r.desc)) return nil end
+    FG.ghostHeal = (h.lo + h.hi) / 2
+    FG.ghostUntil = (GetTime and GetTime() or 0) + FG.GHOST_FOR
+    for _, f in ipairs(FG.frames or {}) do
+        FG.Ghost(f)
+        if f.unit then FG.Paint(f) end
+    end
+    if FG.target and FG.target.unit then FG.Ghost(FG.target) FG.Paint(FG.target) end
+    Print("  heals %d to %d - the ghost is %d, on every cell for %d seconds:", h.lo, h.hi, math.floor(FG.ghostHeal), FG.GHOST_FOR)
+    Print("  |cff73ccffpale blue|r after the health = how far it would fill them;"
+        .. " |cffff4019a red sliver|r just past the right edge = it would overheal")
+    Print("  |cff968eadat full health every cell should show red; hurt by more than %d, none. Your own cell and"
+        .. " a target's (or a party's) - does it draw on theirs?|r", math.floor(FG.ghostHeal))
+    return FG.ghostHeal
+end
+
 function NS.DO.range()
     local FG = NS.FG
     -- written out, not `NS.FM and NS.FM.RangeSpell()`: an `and` keeps only the first return
@@ -1937,6 +1977,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.range()
     elseif msg == "overheal" or msg == "overheal test" then
         NS.DO.overheal(msg:match("test"))
+    elseif msg == "ghost" then
+        NS.DO.ghost()
     elseif msg == "byid" then
         NS.DO.byid()
     elseif msg == "curve" then

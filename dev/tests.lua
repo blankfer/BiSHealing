@@ -1574,6 +1574,51 @@ do
     FG.overhealTest = nil
     _G.DEFAULT_CHAT_FRAME = keptChat
 end
+-- /bish ghost (23 Oct 2026, from DoesItDie): your left-click heal after every cell's health for a few
+-- seconds, and a red sliver past the edge riding its end - a probe of whether the client draws them
+do
+    local FM, FE = NS.FM, NS.FE
+    local keptChat = _G.DEFAULT_CHAT_FRAME
+    local heard = {}
+    _G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, t) heard[#heard + 1] = t end }
+    local keep = { get = FM.Get, ids = FM.BookIds, desc = C_Spell.GetSpellDescription }
+    FM.Get = function(mod, key) if mod == "" and key == "left" then return "Healing Wave(Rank 2)" end end
+    FM.BookIds = function(name) if name == "Healing Wave" then return { 331, 332, 547 } end return {} end
+    C_Spell.GetSpellDescription = function(id) return id == 332 and "Heals a friendly target for 64 to 78." or "" end
+    local heal = NS.DO.ghost()
+    ok(heal == 71, "the ghost: your bound rank (Rank 2), sized from its tooltip - the middle of 64 to 78", tostring(heal))
+    local all = table.concat(heard, "\n")
+    ok(all:find("Healing Wave", 1, true) and all:find("plain", 1, true) and all:find("red sliver", 1, true),
+       "it says which heal, whether its tooltip is readable, and what to look for", all)
+    local cell = FG.frames and FG.frames[1]
+    if cell and cell.unit then
+        local g, w = cell.ghost, cell.ghostGate
+        ok(g and g:IsShown() and g:GetValue() == 71, "on a cell: the ghost, shown, at your heal")
+        local fill = cell.bar:GetStatusBarTexture()
+        local p, rel, rp = g:GetPoint(1)
+        ok(rel == fill and rp == "TOPRIGHT", "starting where their health ends")
+        local gFill = g:GetStatusBarTexture()
+        local masked = false
+        for _, m in ipairs(gFill.__masks or {}) do if m == cell.ghostMask then masked = true end end
+        ok(masked, "masked to the empty part of the bar - never a clip on a secret-sized region")
+        local wp, wrel, wrp = w:GetPoint(1)
+        ok(w:IsShown() and w:DoesClipChildren() and wrel == cell.bar and wrp == "TOPRIGHT",
+           "the gate: a clipped window just past the right edge, hung on the bar frame (a fixed size)")
+        local mpt = (w.mark.points or {})[1] or {}
+        ok(mpt[2] == gFill and mpt[3] == "TOPRIGHT", "its red sliver rides the ghost's end - inside the window only on an overheal")
+        -- time up: gone
+        FG.ghostUntil = (GetTime() or 0) - 1
+        FG.Paint(cell)
+        ok(not g:IsShown() and not w:IsShown(), "after its seconds: both gone")
+    end
+    -- nothing to size it from: says so, draws nothing
+    C_Spell.GetSpellDescription = function() return secret() end
+    heard = {}
+    ok(NS.DO.ghost() == nil and table.concat(heard, "\n"):find("SECRET", 1, true), "a secret tooltip: it says so and draws nothing")
+    FM.Get, FM.BookIds, C_Spell.GetSpellDescription = keep.get, keep.ids, keep.desc
+    FG.ghostUntil, FG.ghostHeal = nil, nil
+    _G.DEFAULT_CHAT_FRAME = keptChat
+end
 -- NO DOUBLE RES (10 Oct 2026, Rez.lua). RezComm puts every BiS user's res casts on BiSInnervate's
 -- pipe; BiS Healing now listens, and a dead cell says who is already ressing them.
 do

@@ -1947,6 +1947,62 @@ end
 
 --- Everything a cell may change DURING a fight. Nothing here reads a number back: the health
 --- value goes from the client into the bar and is never touched on the way.
+--- THE HEAL GHOST - A PROBE (23 Oct 2026). Arn saw DoesItDie (Joe Greive) in a video: it marks on a
+--- target's health bar how much its DoTs still have to deal, and lights a skull on the portrait when they
+--- will kill - on a client where target health is secret. Its trick: hand a StatusBar max = health
+--- (secret) and value = damage (plain); the BAR compares, Lua never does. And the skull rides the fill's
+--- right end inside a fixed, clipped window, so it shows only when the fill reaches it.
+---
+--- For a healer, the same two ideas: a GHOST of your next heal after the health fill (max = their max
+--- health, value = your heal, read from its tooltip out of combat - Heals.lua already does), and a red
+--- sliver in a fixed window just past the cell's right edge riding the ghost's end: there only when the
+--- heal would overheal. `/bish ghost` puts both on every cell for FG.GHOST_FOR seconds to see whether
+--- the client draws them on OTHER people's cells (secret health) - nothing else is built on it yet.
+--- The ghost is masked, never clipped, to the empty part of the bar (solved.md: a clip anchored to a
+--- secret-sized region draws nothing); the window's own edges hang on the bar frame, never the fill.
+FG.GHOST_FOR, FG.GHOST_LANE = 15, 6
+FG.GHOST_COLOUR = { 0.45, 0.80, 1.00, 0.55 }
+FG.GHOST_MARK = { 1.00, 0.25, 0.10, 1.00 }
+
+function FG.Ghost(f)
+    if f.ghost or not (f.bar and f.bar.GetStatusBarTexture) then return f.ghost end
+    local fill = f.bar:GetStatusBarTexture()
+    local g = CreateFrame("StatusBar", nil, f.bar)
+    f.ghost = g
+    g:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+    g:SetSize(FRAME_W - 2, FRAME_H - 2)
+    g:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    g:SetStatusBarColor(FG.GHOST_COLOUR[1], FG.GHOST_COLOUR[2], FG.GHOST_COLOUR[3], FG.GHOST_COLOUR[4])
+    g:SetMinMaxValues(0, 1)
+    g:SetValue(0)
+    if g.SetFrameLevel and f.bar.GetFrameLevel then
+        local lvl = f.bar:GetFrameLevel()
+        if type(lvl) == "number" then g:SetFrameLevel(lvl + 4) end
+    end
+    local gFill = g:GetStatusBarTexture()
+    if f.bar.CreateMaskTexture and gFill and gFill.AddMaskTexture then
+        f.ghostMask = f.bar:CreateMaskTexture()
+        f.ghostMask:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+        f.ghostMask:SetPoint("BOTTOMRIGHT", f.bar, "BOTTOMRIGHT", 0, 0)
+        f.ghostMask:SetTexture("Interface\\Buttons\\WHITE8X8", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "NEAREST")
+        gFill:AddMaskTexture(f.ghostMask)
+    end
+    -- the gate: a window FG.GHOST_LANE wide just past the right edge, hung on the bar frame (a fixed size)
+    local w = CreateFrame("Frame", nil, f)
+    f.ghostGate = w
+    w:SetPoint("TOPLEFT", f.bar, "TOPRIGHT", 0, 0)
+    w:SetPoint("BOTTOMRIGHT", f.bar, "BOTTOMRIGHT", FG.GHOST_LANE, 0)
+    if w.SetClipsChildren then w:SetClipsChildren(true) end
+    w.mark = w:CreateTexture(nil, "OVERLAY")
+    w.mark:SetColorTexture(FG.GHOST_MARK[1], FG.GHOST_MARK[2], FG.GHOST_MARK[3], FG.GHOST_MARK[4])
+    w.mark:SetPoint("TOPRIGHT", gFill, "TOPRIGHT", 0, 0)
+    w.mark:SetPoint("BOTTOMRIGHT", gFill, "BOTTOMRIGHT", 0, 0)
+    w.mark:SetWidth(FG.GHOST_LANE)
+    g:Hide()
+    w:Hide()
+    return g
+end
+
 --- Does the client hide everyone's max health? Asked through C_Secrets; a yes turns FG.maxOK off.
 function FG.AskMaxSecret()
     if FG.maxOK and C_Secrets and C_Secrets.ShouldUnitHealthMaxBeSecret then
@@ -2006,6 +2062,19 @@ function FG.Paint(f)
     if f.overheal and FG.overhealTest and GetTime and GetTime() < FG.overhealTest then
         f.overheal:SetMinMaxValues(0, 1)
         f.overheal:SetValue(0.6)
+    end
+    -- /bish ghost: your heal after the fill, and the overheal sliver (FG.Ghost), while the probe runs
+    if f.ghost then
+        local on = FG.ghostUntil and FG.ghostHeal and GetTime and GetTime() < FG.ghostUntil
+        if on then
+            if FG.maxOK then pcall(f.ghost.SetMinMaxValues, f.ghost, 0, max) end
+            f.ghost:SetValue(FG.ghostHeal)
+            f.ghost:Show()
+            f.ghostGate:Show()
+        elseif f.ghost:IsShown() then
+            f.ghost:Hide()
+            f.ghostGate:Hide()
+        end
     end
 
     -- THE SHIELD (5 Oct 2026). Arn: "ellesmear draws the shield on the frames can we do the same?"
