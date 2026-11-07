@@ -1,5 +1,9 @@
 # BiS Healing
 
+## Unreleased
+
+- **A test of asking for a spell (`/bish intest`).** The first working piece of "BiS> in", where a mana user asks for Innervate and the druid answers. Power Word: Fortitude stands in for Innervate for now. Both characters type `/bish intest` in a group. The asker gets an **Ask** button in BiS> now; the priest gets the asker's 3D face, dim until they ask, lit while they do. One click on the face casts Fortitude on them, and the asker is told who is coming. Off at every login; nothing changes for anyone who doesn't type it.
+
 ## 0.17.0
 
 - **Right-click the minimap button for your mouse binds.** Left-click still opens the options window.
