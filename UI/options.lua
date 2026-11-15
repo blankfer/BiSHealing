@@ -71,6 +71,11 @@ function CFG.Sections()
             { key = "clique", kind = "toggle", label = "let Clique handle clicks", help = "If you use Clique, let it own the clicks on our cells; our own binds step aside.",
               get = function(db) return db.clique == true end,
               set = function(_, on) if DO.clique then DO.clique(on) end end },
+            -- HEALING WITH A CONTROLLER (Arn, 15 Nov 2026, option A of three sketches; PadHeal.lua)
+            { key = "pad", kind = "toggle", label = "heal with a controller",
+              help = "D-pad up/down lights a person (left/right a whole group); A, B, X, Y cast your left, right, middle and thumb binds on them. The sticks stay the game's.",
+              get = function(db) return db.padHeal == true end,
+              set = function(_, on) if DO.pad then DO.pad(on) end end },
         } },
         { title = "frames", options = {
             { key = "shown", kind = "toggle", label = "show the cells", help = "Show or hide the healing cells. Hidden, nothing is drawn and nothing is clicked.",
@@ -605,8 +610,8 @@ function CFG.Entries()
         { key = "clicks", title = "binds & clicks",
           desc = "What a click on a cell casts. Drag a spell onto a mouse button in the binds window - or, if you use Clique, let it own the clicks.",
           open = { label = "mouse binds", func = function() if NS.DO.mouse then NS.DO.mouse() end end },
-          options = pick("clique", "efficiency", "minimap"), db = db,
-          usage = "/bish mouse  -  /bish clique  -  /bish efficiency" },
+          options = pick("clique", "pad", "efficiency", "minimap"), db = db,
+          usage = "/bish mouse  -  /bish clique  -  /bish pad  -  /bish efficiency" },
         { key = "look", title = "look",
           desc = "What each cell shows: the number on it, the bar colour, the gold ring, the mouse crosshair, how far it dims out of range and the size of the debuff markers.",
           options = pick("look", "number", "colour", "ring", "hover", "dim", "markers"), db = db,

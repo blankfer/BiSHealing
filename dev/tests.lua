@@ -113,6 +113,9 @@ local function newFrame(kind, name, parent)
     -- be stored in the wrong units and no test noticed (Arn, 23 Sep: "when i increased the scale
     -- size ... the target frames moved up and to the right").
     function f:GetParent() return self.__parent end
+    -- ITS NAME, as the client answers it (15 Nov 2026: the pad's keys click a cell BY NAME; the mock answered nil)
+    function f:GetName() return self.__name end
+    if type(name) == "string" and name ~= "" then rawset(_G, name, f) end
     -- a frame can change parents, as in the client (the mana window docks onto the options, 19 Oct)
     function f:SetParent(p) self.__parent = p end
     function f:GetEffectiveScale()
@@ -788,6 +791,12 @@ local function lockdownGuard(f)
     end
     return f
 end
+-- the census's SecureHandlerSetFrameRef (the frame METHOD SetFrameRef is not on it): refused in a fight, like any secure write
+_G.SecureHandlerSetFrameRef = function(f, label, ref)
+    if STATE.inCombat then error("ADDON_ACTION_BLOCKED: SecureHandlerSetFrameRef in combat", 2) end
+    f.__refs = f.__refs or {}
+    f.__refs[label] = ref
+end
 _G.CreateFrame = function(kind, name, parent, template)
     local f = _G.CreateFrameUnguarded(kind, name, parent, template)
     if type(f) == "table" and type(template) == "string" and template:find("Secure", 1, true) then lockdownGuard(f) end
@@ -1144,8 +1153,15 @@ _G.C_Spell.GetSpellSubtext = function(id)
 end
 
 local BOUND = {}
-_G.SetOverrideBindingClick = function(_, _, key, button) BOUND[key] = button end
-_G.ClearOverrideBindings = function() BOUND = {} end
+-- PER OWNER, like the client (15 Nov 2026): ClearOverrideBindings(owner) takes back only that owner's keys - the mock
+-- used to wipe every owner's, so the pad's keys vanished whenever the wheel was re-armed
+do
+    local by = {}
+    _G.SetOverrideBindingClick = function(owner, _, key, button) BOUND[key] = button by[key] = owner end
+    _G.ClearOverrideBindings = function(owner)
+        for k, o in pairs(by) do if o == owner then BOUND[k], by[k] = nil, nil end end
+    end
+end
 -- (14 Nov 2026) the wheel is armed either way: a global binding ("everywhere") or on our own frames' hover (the default)
 local function wheelArmed(k)
     if BOUND[k] then return true end
@@ -6235,6 +6251,68 @@ do
         rawset(_G, "PartyMemberFrame1", keepParty)
         FM.WheelOthers()
     end
+    -- HEALING WITH A CONTROLLER (Arn, 15 Nov: option A - "A now, C later"): the D-pad lights one person, A B X Y are your
+    -- binds on them. Off by default; on, the list and the keys are written out of a fight.
+    do
+        local PH = NS.PH
+        ok(PH and not PH.On(), "controller healing is off by default")
+        BOUND = {}
+        FM.ApplyWheel(anchor)
+        ok(BOUND["PADDUP"] == nil and BOUND["PAD1"] == nil, "off: no pad key is taken")
+        NS.DO.pad("on")
+        local H = PH.header
+        ok(H and BOUND["PADDUP"] == "BiSHealingPadNav1" and BOUND["PADDDOWN"] == "BiSHealingPadNav2"
+           and BOUND["PADDLEFT"] == "BiSHealingPadNav3" and BOUND["SHIFT-PADDDOWN"] == "BiSHealingPadNav2",
+           "/bish pad on: the D-pad is bound to the stepping buttons (with a modifier held too)", tostring(BOUND["PADDUP"]))
+        ok(H.__attrs["n"] == #PH.cells and #PH.cells >= 1 and PH.cells[1] == FG.frames[1] and H.__attrs["nk"] == 16
+           and H.__refs and H.__refs["cell1"] == FG.frames[1] and PH.nav[1].__refs and PH.nav[1].__refs["header"] == H
+           and H.__attrs["key1"] == "PAD1" and H.__attrs["btn1"] == "LeftButton" and H.__attrs["key6"] == "SHIFT-PAD2"
+           and H.__attrs["btn6"] == "RightButton", "the header holds the cells in order and A B X Y (x4 modifiers) -> left right middle thumb",
+           tostring(H.__attrs["n"]))
+        ok(BOUND["PAD1"] == nil and H.__attrs["sel"] == 0, "nobody lit yet: A is not taken")
+        -- the snippet a D-pad press runs, on a stand-in for the secure handle
+        local refs, binds = {}, {}
+        for i, c in ipairs(PH.cells) do refs["cell" .. i] = c end
+        local exists = {}
+        for i, c in ipairs(PH.cells) do exists[c:GetAttribute("unit")] = i ~= 2 end   -- the second slot is empty
+        local hd = { GetAttribute = function(_, k) return H.__attrs[k] end, SetAttribute = function(_, k, v) H.__attrs[k] = v end,
+                     GetFrameRef = function(_, k) return refs[k] and { GetAttribute = function(_, a) return refs[k]:GetAttribute(a) end, it = refs[k] } end,
+                     SetBindingClick = function(_, _, key, c, btn) binds[key] = { c.it, btn } end }
+        local function press(step)
+            local run = loadstring(PH.NAV)
+            setfenv(run, { self = { GetFrameRef = function() return hd end, GetAttribute = function(_, k) return k == "step" and step or nil end },
+                           UnitExists = function(u) return exists[u] == true end })
+            run()
+        end
+        press(1)
+        ok(H.__attrs["sel"] == 1 and binds["PAD1"] and binds["PAD1"][1] == PH.cells[1] and binds["PAD1"][2] == "LeftButton"
+           and binds["SHIFT-PAD4"] and binds["SHIFT-PAD4"][2] == "Button4", "D-pad down: the first person lit, A = a left click on their cell")
+        if #PH.cells >= 3 then
+            press(1)
+            ok(H.__attrs["sel"] == 3, "down again: an empty slot is skipped", tostring(H.__attrs["sel"]))
+            press(-1)
+            ok(H.__attrs["sel"] == 1, "up: back past the empty slot", tostring(H.__attrs["sel"]))
+        end
+        press(-1)
+        ok(H.__attrs["sel"] == #PH.cells or (exists[PH.cells[#PH.cells]:GetAttribute("unit")] == false), "up from the top wraps to the bottom")
+        H.__attrs["sel"] = 1
+        ok(PH.Paint() and PH.glow:IsShown() and select(2, PH.glow:GetPoint(1)) == PH.cells[1],
+           "the magenta bracket sits on whoever is lit")
+        -- a new layout keeps them lit
+        BOUND = {}
+        FM.ApplyWheel(anchor)
+        ok(H.__attrs["sel"] == 1 and BOUND["PAD1"] == PH.cells[1]:GetName(), "a new layout: the same person stays lit, A still on them")
+        -- in a fight nothing is written; it waits for the fight's end
+        local wasFight = STATE.inCombat
+        STATE.inCombat = true
+        ok(PH.Arm() == false and PH.pending, "in a fight: the list waits")
+        STATE.inCombat = wasFight
+        PH.events.__scripts.OnEvent(PH.events, "PLAYER_REGEN_ENABLED")
+        ok(not PH.pending, "the fight ends: written then")
+        NS.DO.pad("off")
+        ok(BOUND["PADDUP"] == nil and BOUND["PAD1"] == nil and not PH.glow:IsShown() and NS.DB().padHeal == false,
+           "/bish pad off: every pad key given back, the bracket gone")
+    end
     local wheelBtn = _G["BiSHealWheelwheelup"]
     ok(wheelBtn and wheelBtn.__attrs["macrotext"]
        and wheelBtn.__attrs["macrotext"]:find("[@mouseover] Lesser Healing Wave", 1, true) ~= nil,
@@ -7169,7 +7247,9 @@ do
         -- SIXTEEN ON THE LEFT (12 Nov 2026): the radar's overheal word - what decides it (off / any / half / 75%) and which
         -- button's heal a hover judges; Arn: "add to options ... if they want to change what determines it". Still shorter
         -- than the right column, so the window does not grow
-        ok(tall[1] <= 16 and tall[2] <= 17, ("each column stays short: %d and %d"):format(tall[1], tall[2]))
+        -- SEVENTEEN ON THE LEFT (15 Nov 2026): "heal with a controller" under binds & clicks (Arn picked option A; it
+        -- starts off, so it needs a switch a player can find) - now level with the right column
+        ok(tall[1] <= 17 and tall[2] <= 17, ("each column stays short: %d and %d"):format(tall[1], tall[2]))
         -- TWENTY-ONE (19 Oct): Arn asked for the mana-for-mana window "in the option", by name - a
         -- door, not a setting, under the mouse binds where a healer's first look already goes
         -- TWENTY-THREE (7 Nov, Forever 1.0): a new install starts with the crosshair, the LOS flash, the
@@ -7177,7 +7257,8 @@ do
         -- player can find - so the LOS flash and the buff reminder got rows
         -- TWENTY-FOUR (8 Nov 2026): the PvP mode row, above; TWENTY-FIVE: its cast alert; TWENTY-SIX: the look
         -- TWENTY-EIGHT (12 Nov 2026): the overheal word and its hover heal, above
-        ok(#NS.UI.Rows() <= 28, "and the whole window has no more than twenty-eight rows: " .. #NS.UI.Rows())
+        -- TWENTY-NINE (15 Nov 2026): heal with a controller, above
+        ok(#NS.UI.Rows() <= 29, "and the whole window has no more than twenty-nine rows: " .. #NS.UI.Rows())
         -- THE HELP STRIP (Arn, 14 Oct: "yes do the help strip"): every setting says what it does
         local undocumented = {}
         for _, o in ipairs(NS.UI.Rows()) do if not o.help then undocumented[#undocumented + 1] = o.label end end

@@ -1358,6 +1358,7 @@ function FM.ApplyWheel(owner)
     owner = owner or (NS.FG and NS.FG.anchor) or UIParent
     if ClearOverrideBindings then pcall(ClearOverrideBindings, owner) end
     FM.wheelMap = {}
+    if NS.PH and NS.PH.Arm then NS.PH.Arm() end     -- the pad's list of cells, written with every layout (PadHeal.lua)
     if FM.CliqueOn() then                          -- Clique owns the wheel too: let it go
         for cell in pairs(FM.wheelCells) do FM.WheelArm(cell, FM.wheelForeign[cell]) end
         return true, 0

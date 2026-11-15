@@ -45,6 +45,8 @@ Guard.lua
 TestCam.lua
 # the radar's bottom rail; its code lives only in a private key addon (BiSBlackBox), never here
 BlackBox.lua
+# healing with a controller: the D-pad lights one person, A/B/X/Y are your binds on them (off by default)
+PadHeal.lua
 # last before the UI-only files: BiSHealingAPI, for other addons (playbook 5a)
 API.lua
 

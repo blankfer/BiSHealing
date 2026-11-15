@@ -1917,6 +1917,22 @@ function NS.DO.trinkets(tab, which)
     return FM.TabTrinkets(mod)
 end
 
+--- /bish pad [on|off] - heal with a controller (Arn, 15 Nov 2026, option A): the D-pad lights one person, A/B/X/Y are
+--- your left/right/middle/thumb binds on them. Off by default (PadHeal.lua).
+function NS.DO.pad(how)
+    local d = DB()
+    local on
+    if how == "on" or how == true then on = true
+    elseif how == "off" or how == false then on = false
+    else on = d.padHeal ~= true end
+    d.padHeal = on and true or false
+    if NS.PH and NS.PH.Arm then NS.PH.Arm() end
+    remember()
+    Print(on and "controller healing on: D-pad up/down lights a person, left/right a group; A B X Y = your left, right, middle, thumb binds on them"
+        or "controller healing off")
+    return on
+end
+
 function NS.DO.hover(how)
     local d = DB()
     local on
@@ -2084,7 +2100,8 @@ function NS.DO.help()
     Print("  |cffb980ffbuffs|r BiS> now's buff buttons   |cffb980fftrinkets|r trinkets first, per modifier")
     Print("  |cffb980ffcures|r |cffb980ffhover|r |cffb980ffflash|r |cffb980ffoverword|r |cffb980ffbetween|r  on or off")
     Print("  |cffb980ffoverword|r off / any / half / 75%   |cffb980ffoverbutton|r left / right / wheel / thumb1 / thumb2")
-    Print("  |cffb980ffwheel|r frames / everywhere  where the wheel binds work")
+    Print("  |cffb980ffwheel|r frames / ours / everywhere  where the wheel binds work")
+    Print("  |cffb980ffpad|r on / off  heal with a controller (D-pad lights a person, A B X Y = your binds)")
     Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
     Print("  the grey word after a command is the short way to type it")
 end
@@ -2364,6 +2381,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.overbutton(msg:match("^overbutton%s+(%S+)"))
     elseif msg == "wheel" or msg:match("^wheel%s") then
         NS.DO.wheel(msg:match("^wheel%s+(%S+)"))
+    elseif msg == "pad" or msg:match("^pad%s") then
+        NS.DO.pad(msg:match("^pad%s+(%a+)"))
     elseif msg == "dim" or msg:match("^dim%s") then
         NS.DO.dim(msg:match("^dim%s+([%d%.]+)"))
     elseif msg == "clique" then
