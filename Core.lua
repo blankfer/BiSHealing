@@ -1989,12 +1989,14 @@ end
 function NS.DO.wheel(word)
     local d = DB()
     if word == "everywhere" or word == "all" then d.wheelWhere = "everywhere"
-    elseif word == "frames" or word == "ours" then d.wheelWhere = nil end
+    elseif word == "ours" then d.wheelWhere = "ours"
+    elseif word == "frames" then d.wheelWhere = nil end
     if NS.FM and NS.FM.Apply then NS.FM.Apply() end
     remember()
-    local w = (d.wheelWhere == "everywhere") and "everywhere" or "frames"
-    Print(w == "frames" and "the wheel binds work over BiS Healing's frames only - the camera zooms everywhere else (/bish wheel everywhere)"
-        or "the wheel binds work over any unit under the mouse, any addon's frames too - the camera loses the wheel (/bish wheel frames)")
+    local w = (d.wheelWhere == "everywhere" or d.wheelWhere == "ours") and d.wheelWhere or "frames"
+    Print(w == "frames" and "the wheel binds work over unit frames - BiS Healing's, the party frames, other addons' - the camera zooms over the world (/bish wheel ours | everywhere)"
+        or w == "ours" and "the wheel binds work over BiS Healing's frames only - the camera zooms everywhere else (/bish wheel frames | everywhere)"
+        or "the wheel binds work over any unit under the mouse, in the world too - the camera loses the wheel (/bish wheel frames)")
     return w
 end
 

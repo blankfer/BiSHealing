@@ -6206,6 +6206,35 @@ do
     ok(BOUND["MOUSEWHEELUP"] ~= nil and cell.__attrs["bis-wn"] == 0, "/bish wheel everywhere: a global binding again, and no hover map")
     NS.DO.wheel("frames")
     ok(BOUND["MOUSEWHEELUP"] == nil and cell.__attrs["bis-wn"] >= 1, "/bish wheel frames: back on our frames only")
+    -- THE PARTY FRAMES TOO (Arn, 15 Nov: "it used to carry the bishealing bind ... can we still make it work when its on a
+    -- party frame"): "frames" = our frames AND every unit frame - ClickCastFrames (EllesmereUI, VuhDo) and the game's own
+    do
+        local keepCCF, keepParty = rawget(_G, "ClickCastFrames"), rawget(_G, "PartyMemberFrame1")
+        local theirs = CreateFrame("Button", "EllesmereTestParty1", UIParent, "SecureUnitButtonTemplate")
+        local blizz = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        rawset(_G, "ClickCastFrames", { [theirs] = true })
+        rawset(_G, "PartyMemberFrame1", blizz)
+        FM.ApplyWheel(anchor)
+        ok((theirs.__attrs["bis-wn"] or 0) >= 1 and theirs.__attrs["bis-wb1"] == cell.__attrs["bis-wb1"],
+           "another addon's party frame (in ClickCastFrames) carries the wheel's map too", tostring(theirs.__attrs["bis-wn"]))
+        ok((blizz.__attrs["bis-wn"] or 0) >= 1, "and the game's own party frame")
+        ok(BOUND["MOUSEWHEELUP"] == nil, "still no binding over the world: the camera keeps the wheel there")
+        NS.DO.wheel("ours")
+        ok(theirs.__attrs["bis-wn"] == 0 and blizz.__attrs["bis-wn"] == 0 and cell.__attrs["bis-wn"] >= 1,
+           "/bish wheel ours: BiS Healing's frames only (1.5.1's way)")
+        NS.DO.wheel("frames")
+        ok(theirs.__attrs["bis-wn"] >= 1, "/bish wheel frames: the party frames again")
+        local fresh = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        ClickCastFrames[fresh] = true
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        ok((fresh.__attrs["bis-wn"] or 0) >= 1, "a frame another addon makes later (a new party member) takes it at the roster change")
+        ClickCastFrames[theirs] = nil
+        FM.WheelOthers()
+        ok(theirs.__attrs["bis-wn"] == 0, "a frame taken back out of ClickCastFrames keeps nothing of ours")
+        rawset(_G, "ClickCastFrames", keepCCF)
+        rawset(_G, "PartyMemberFrame1", keepParty)
+        FM.WheelOthers()
+    end
     local wheelBtn = _G["BiSHealWheelwheelup"]
     ok(wheelBtn and wheelBtn.__attrs["macrotext"]
        and wheelBtn.__attrs["macrotext"]:find("[@mouseover] Lesser Healing Wave", 1, true) ~= nil,
