@@ -17,7 +17,7 @@
       "some people might want something else other than left click") for the modifier held now (shift / ctrl / alt switch it,
       MODIFIER_STATE_CHANGED) - and when that button holds no heal (Nature's Swiftness on the left, Arn's cousin, 12 Nov)
       the next button that does (OV.HoverHeal); a macro bind counts the first heal its /cast lines name (OV.MacroHeal) -
-      followed while you hover (UNIT_HEALTH / UNIT_HEAL_PREDICTION for that one unit only).
+      followed while you hover (UNIT_HEALTH / UNIT_HEAL_PREDICTION, registered once at load; only that one unit is read).
     * CLICK - the heal on the button you pressed: measured AT the click (PostClick, before the cast starts - once it does,
       the client counts your own heal as incoming and every heal would look wasted), shown when the cast really starts
       (UNIT_SPELLCAST_START, or _SUCCEEDED for an instant), held still and faded by itself in OV.FLASH_FOR.
@@ -317,16 +317,11 @@ local ev = CreateFrame("Frame")
 OV.events = ev
 
 --- Listen to one unit's health (the hovered one), or to nobody.
+--- (15 Nov 2026, the gamepad audit: this used to (un)register UNIT_HEALTH per unit - and the flash's C_Timer reaches here,
+--- which Forever answers with "blocked" while the gamepad UI is on. Both events are registered ONCE at load now and the
+--- handler drops every unit but this one: a name compared, no client call.)
 function OV.Listen(unit)
-    if not ev.UnregisterEvent then return end
-    ev:UnregisterEvent("UNIT_HEALTH")
-    ev:UnregisterEvent("UNIT_HEAL_PREDICTION")
-    OV.listening = nil
-    if unit and ev.RegisterUnitEvent then
-        pcall(ev.RegisterUnitEvent, ev, "UNIT_HEALTH", unit)
-        pcall(ev.RegisterUnitEvent, ev, "UNIT_HEAL_PREDICTION", unit)
-        OV.listening = unit
-    end
+    OV.listening = unit or nil
 end
 
 local function flashing(o) return o and o.flashUntil and now() < o.flashUntil end
@@ -437,7 +432,8 @@ end
 
 -- ------------------------------------------------------------------ events
 
-for _, e in ipairs({ "MODIFIER_STATE_CHANGED", "SPELLS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED" }) do
+for _, e in ipairs({ "MODIFIER_STATE_CHANGED", "SPELLS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
+                     "UNIT_HEALTH", "UNIT_HEAL_PREDICTION" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 if ev.RegisterUnitEvent then

@@ -12743,6 +12743,18 @@ do
         ok(select(2, o.bar:GetMinMaxValues()) == MISS2, "their health moves while you hover: handed again")
         sp2.heal.__scripts.OnLeave(sp2.heal)
         ok(not o.win.__shown and OV.listening == nil, "the mouse leaves: the word goes, nobody listened to")
+        -- GAMEPAD (15 Nov audit): the flash's C_Timer reaches OV.Listen, and Forever says "blocked" to a (un)register from
+        -- a timer while the gamepad UI is on - so listening never touches the event list; both are registered at load
+        do
+            local touched = 0
+            local keep = { OV.events.RegisterEvent, OV.events.UnregisterEvent, OV.events.RegisterUnitEvent }
+            OV.events.RegisterEvent = function() touched = touched + 1 end
+            OV.events.UnregisterEvent = function() touched = touched + 1 end
+            OV.events.RegisterUnitEvent = function() touched = touched + 1 end
+            OV.Listen("party1") OV.Listen(nil)
+            OV.events.RegisterEvent, OV.events.UnregisterEvent, OV.events.RegisterUnitEvent = keep[1], keep[2], keep[3]
+            ok(touched == 0, "listening to a unit never (un)registers an event (gamepad: no 'blocked' from the flash's timer)", touched)
+        end
         -- THE CLICK: measured at the click, shown when the cast starts, held still
         sp2.heal.__scripts.OnEnter(sp2.heal)
         local CLICKED = secret()
