@@ -1982,6 +1982,22 @@ function NS.DO.overbutton(word)
     return w
 end
 
+--- /bish wheel [frames|everywhere] - where the wheel binds work (14 Nov 2026, Arn's cousin: a wheel turn over a friend in
+--- the world cast on him, and the camera stopped zooming). frames (the default): only over BiS Healing's own frames, the
+--- camera zooms everywhere else. everywhere: over any addon's unit frames too (8 Nov, Arn's Ellesmere frames) - and the
+--- camera loses the wheel.
+function NS.DO.wheel(word)
+    local d = DB()
+    if word == "everywhere" or word == "all" then d.wheelWhere = "everywhere"
+    elseif word == "frames" or word == "ours" then d.wheelWhere = nil end
+    if NS.FM and NS.FM.Apply then NS.FM.Apply() end
+    remember()
+    local w = (d.wheelWhere == "everywhere") and "everywhere" or "frames"
+    Print(w == "frames" and "the wheel binds work over BiS Healing's frames only - the camera zooms everywhere else (/bish wheel everywhere)"
+        or "the wheel binds work over any unit under the mouse, any addon's frames too - the camera loses the wheel (/bish wheel frames)")
+    return w
+end
+
 --- /bish dim 40 - how bright an out-of-range cell stays, as a percentage, 20 to 90.
 function NS.DO.dim(pct)
     local d = DB()
@@ -2066,6 +2082,7 @@ function NS.DO.help()
     Print("  |cffb980ffbuffs|r BiS> now's buff buttons   |cffb980fftrinkets|r trinkets first, per modifier")
     Print("  |cffb980ffcures|r |cffb980ffhover|r |cffb980ffflash|r |cffb980ffoverword|r |cffb980ffbetween|r  on or off")
     Print("  |cffb980ffoverword|r off / any / half / 75%   |cffb980ffoverbutton|r left / right / wheel / thumb1 / thumb2")
+    Print("  |cffb980ffwheel|r frames / everywhere  where the wheel binds work")
     Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
     Print("  the grey word after a command is the short way to type it")
 end
@@ -2343,6 +2360,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.overword(msg:match("^overword%s+(%S+)"))
     elseif msg == "overbutton" or msg:match("^overbutton%s") then
         NS.DO.overbutton(msg:match("^overbutton%s+(%S+)"))
+    elseif msg == "wheel" or msg:match("^wheel%s") then
+        NS.DO.wheel(msg:match("^wheel%s+(%S+)"))
     elseif msg == "dim" or msg:match("^dim%s") then
         NS.DO.dim(msg:match("^dim%s+([%d%.]+)"))
     elseif msg == "clique" then

@@ -1146,6 +1146,12 @@ end
 local BOUND = {}
 _G.SetOverrideBindingClick = function(_, _, key, button) BOUND[key] = button end
 _G.ClearOverrideBindings = function() BOUND = {} end
+-- (14 Nov 2026) the wheel is armed either way: a global binding ("everywhere") or on our own frames' hover (the default)
+local function wheelArmed(k)
+    if BOUND[k] then return true end
+    for _, e in ipairs((NS and NS.FM and NS.FM.wheelMap) or {}) do if e.key == k then return true end end
+    return false
+end
 
 -- The tooltip, which is where a bind says what it is. It records lines rather than drawing them.
 local TIP = { lines = {} }
@@ -2146,7 +2152,7 @@ do
     BOUND = {}                               -- as a fresh session starts: nothing armed yet
     STATE.inCombat = false
     FG.Layout(anchor)
-    ok(BOUND["MOUSEWHEELUP"] ~= nil,
+    ok(wheelArmed("MOUSEWHEELUP"),
        "the layout arms the wheel, with no drag to prompt it: " .. tostring(BOUND["MOUSEWHEELUP"]))
     -- AND WITH THE GRID HIDDEN (Arn 8 Nov: "when i tried to do my heals on the ellesmere frames my binds used to work on
     -- that"): the wheel is a mouseover binding over ANY addon's frames, so a hidden grid must not leave it dead
@@ -2155,7 +2161,7 @@ do
     dd.shown = false
     BOUND = {}
     FG.Layout(anchor)
-    ok(BOUND["MOUSEWHEELUP"] ~= nil, "the grid hidden (/bish hide), a fresh layout: the wheel is still armed for other frames",
+    ok(wheelArmed("MOUSEWHEELUP"), "the grid hidden (/bish hide), a fresh layout: the wheel is still armed for other frames",
        tostring(BOUND["MOUSEWHEELUP"]))
     dd.shown = keepShown
     FG.Layout(anchor)
@@ -2432,8 +2438,8 @@ do
     -- armed separately
     BOUND = {}
     FM.ApplyWheel(FG.anchor)
-    ok(BOUND["MOUSEWHEELUP"] ~= nil, "the plain wheel is armed")
-    ok(BOUND["SHIFT-MOUSEWHEELUP"] ~= nil,
+    ok(wheelArmed("MOUSEWHEELUP"), "the plain wheel is armed")
+    ok(wheelArmed("SHIFT-MOUSEWHEELUP"),
        "and SHIFT-MOUSEWHEELUP is armed too - a different binding, easy to leave out")
 
     MACROS = {}
@@ -6175,7 +6181,31 @@ do
     -- the wheel is a binding, not a click
     BOUND = {}
     ok(select(1, FM.ApplyWheel(anchor)) == true, "the wheel binds")
-    ok(BOUND["MOUSEWHEELUP"] ~= nil, "through an override binding: " .. tostring(BOUND["MOUSEWHEELUP"]))
+    ok(wheelArmed("MOUSEWHEELUP"), "armed (on our frames' hover, by default): " .. tostring(BOUND["MOUSEWHEELUP"]))
+    -- WHERE THE WHEEL WORKS (Arn's cousin, 14 Nov: a wheel turn over a friend in the world cast on him, and the camera
+    -- stopped zooming): by default NO global binding - each of our frames carries the map, and its secure OnEnter sets it
+    ok(BOUND["MOUSEWHEELUP"] == nil, "by default the wheel is NOT bound over the whole screen (the camera keeps it)")
+    ok(cell.__attrs["bis-wn"] and cell.__attrs["bis-wn"] >= 1 and cell.__attrs["bis-wk1"] and cell.__attrs["bis-wb1"],
+       "a cell carries the wheel's map for its hover", tostring(cell.__attrs["bis-wn"]))
+    do
+        local set = {}
+        local handle = { GetAttribute = function(_, k) return cell.__attrs[k] end,
+                         SetBindingClick = function(_, pri, key, btn) set[key] = btn end, ClearBindings = function() set = {} end }
+        local enter = loadstring(FM.WHEEL_ENTER)
+        setfenv(enter, { self = handle })
+        enter()
+        ok(set["MOUSEWHEELUP"] == "BiSHealWheelwheelup", "the mouse comes over the cell: the wheel is bound to our button there",
+           tostring(set["MOUSEWHEELUP"]))
+        local leave = loadstring(FM.WHEEL_LEAVE)
+        setfenv(leave, { self = handle })
+        leave()
+        ok(next(set) == nil, "it leaves: the bindings go, and the wheel zooms the camera again")
+    end
+    -- the old way, for anyone who wants it (Arn's Ellesmere frames, 8 Nov): /bish wheel everywhere
+    NS.DO.wheel("everywhere")
+    ok(BOUND["MOUSEWHEELUP"] ~= nil and cell.__attrs["bis-wn"] == 0, "/bish wheel everywhere: a global binding again, and no hover map")
+    NS.DO.wheel("frames")
+    ok(BOUND["MOUSEWHEELUP"] == nil and cell.__attrs["bis-wn"] >= 1, "/bish wheel frames: back on our frames only")
     local wheelBtn = _G["BiSHealWheelwheelup"]
     ok(wheelBtn and wheelBtn.__attrs["macrotext"]
        and wheelBtn.__attrs["macrotext"]:find("[@mouseover] Lesser Healing Wave", 1, true) ~= nil,
@@ -11834,7 +11864,7 @@ do
     d.binds = { ["wheelup"] = "Healing Wave(Rank 1)" }
     BOUND = {}
     NS.FG.Layout(NS.FG.anchor)
-    ok(NS.FG.Hidden() and BOUND.MOUSEWHEELUP ~= nil, "the grid hidden behind the radar, a fresh layout: the wheel bind is armed",
+    ok(NS.FG.Hidden() and wheelArmed("MOUSEWHEELUP"), "the grid hidden behind the radar, a fresh layout: the wheel bind is armed",
        tostring(BOUND.MOUSEWHEELUP))
     d.binds = keepBinds
     NS.FG.Layout(NS.FG.anchor)

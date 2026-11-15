@@ -1148,6 +1148,7 @@ end
 function FM.ApplyTo(cell)
     if InCombatLockdown and InCombatLockdown() then return false end
     if not cell or not cell.SetAttribute then return false end
+    FM.WheelArm(cell)                             -- the wheel works over this frame (WHERE THE WHEEL WORKS)
     -- DEAD, OUT OF COMBAT: EVERY CLICK RESURRECTS (FM.ResNow) - whatever is bound, and on an empty
     -- button too; the binds come back when they stand up or a fight starts
     local res = not FM.CliqueOn() and FM.ResNow(cell)
@@ -1235,11 +1236,66 @@ end
 --- and modifier, holding a macro that aims at whatever the cursor is over.
 local wheelButtons = {}
 
+--[[ WHERE THE WHEEL WORKS (14 Nov 2026, Arn's cousin: "when he mouse wheels down it casts on his mouseover target and
+  it's not even in our frame - when he disables the addon mouse wheel down zooms out again"). The wheel binds were
+  BINDINGS over the whole screen (8 Nov: Arn wanted them on the Ellesmere frames too), so a wheel turn over a friend in
+  the world cast on him, and the camera never zoomed. Now `wheelWhere`:
+    "frames" (the default) - bound only while the mouse is over one of OUR frames (grid cells, PvP cells, radar pips and
+      pets): each is wrapped by a secure handler whose OnEnter sets the wheel's bindings on that frame and OnLeave / OnHide
+      clears them (FM.WheelArm, Clique's road - it runs in a fight too); everywhere else the wheel zooms the camera.
+    "everywhere" - the old way, over any unit frame of any addon (and the camera loses the wheel). `/bish wheel`. ]]
+function FM.WheelWhere()
+    local d = db()
+    return (d and d.wheelWhere == "everywhere") and "everywhere" or "frames"
+end
+
+FM.WHEEL_ENTER = [[
+    local n = self:GetAttribute("bis-wn") or 0
+    for i = 1, n do
+        local k, b = self:GetAttribute("bis-wk" .. i), self:GetAttribute("bis-wb" .. i)
+        if k and b then self:SetBindingClick(true, k, b) end
+    end
+]]
+FM.WHEEL_LEAVE = [[ self:ClearBindings() ]]
+FM.wheelMap, FM.wheelCells = {}, {}
+
+--- One of our frames takes the wheel while the mouse is over it: wrapped once (out of a fight), then handed this map.
+function FM.WheelArm(cell)
+    if not cell or (InCombatLockdown and InCombatLockdown()) or not cell.SetAttribute then return false end
+    if not FM.wheelHeader and CreateFrame then
+        local ok, h = pcall(CreateFrame, "Frame", "BiSHealingWheelHeader", UIParent, "SecureHandlerBaseTemplate")
+        FM.wheelHeader = ok and h or false
+    end
+    local H = FM.wheelHeader
+    if H and H.WrapScript and not FM.wheelCells[cell] then
+        local ok = pcall(H.WrapScript, H, cell, "OnEnter", FM.WHEEL_ENTER)
+        if ok then
+            pcall(H.WrapScript, H, cell, "OnLeave", FM.WHEEL_LEAVE)
+            pcall(H.WrapScript, H, cell, "OnHide", FM.WHEEL_LEAVE)
+            FM.wheelCells[cell] = true
+        end
+    end
+    local map = (FM.WheelWhere() == "frames" and not FM.CliqueOn()) and FM.wheelMap or {}
+    local was = tonumber(cell:GetAttribute("bis-wn")) or 0
+    for i, e in ipairs(map) do
+        cell:SetAttribute("bis-wk" .. i, e.key)
+        cell:SetAttribute("bis-wb" .. i, e.button)
+    end
+    for i = #map + 1, was do cell:SetAttribute("bis-wk" .. i, nil) cell:SetAttribute("bis-wb" .. i, nil) end
+    cell:SetAttribute("bis-wn", #map)
+    return true
+end
+
 function FM.ApplyWheel(owner)
     if InCombatLockdown and InCombatLockdown() then return false end
     owner = owner or (NS.FG and NS.FG.anchor) or UIParent
     if ClearOverrideBindings then pcall(ClearOverrideBindings, owner) end
-    if FM.CliqueOn() then return true, 0 end      -- Clique owns the wheel too: let it go
+    FM.wheelMap = {}
+    if FM.CliqueOn() then                          -- Clique owns the wheel too: let it go
+        for cell in pairs(FM.wheelCells) do FM.WheelArm(cell) end
+        return true, 0
+    end
+    local everywhere = FM.WheelWhere() == "everywhere"
     local n = 0
     for _, slot in ipairs(FM.SLOTS) do
         if slot.bind then
@@ -1296,14 +1352,20 @@ function FM.ApplyWheel(owner)
                     b:SetAttribute("macro", macro)
                 end
                 spell = heal or harm
-                if spell and SetOverrideBindingClick then
+                if spell then
                     local key = (m.key == "" and "" or m.key:upper():gsub("%-", "-")) .. slot.bind
-                    pcall(SetOverrideBindingClick, owner, true, key, name, "LeftButton")
+                    if everywhere then
+                        if SetOverrideBindingClick then pcall(SetOverrideBindingClick, owner, true, key, name, "LeftButton") end
+                    else
+                        FM.wheelMap[#FM.wheelMap + 1] = { key = key, button = name }
+                    end
                     n = n + 1
                 end
             end
         end
     end
+    -- our frames only: every frame we have wrapped takes the new map (new frames take it in FM.ApplyTo)
+    for cell in pairs(FM.wheelCells) do FM.WheelArm(cell) end
     return true, n
 end
 
