@@ -1,5 +1,9 @@
 # BiS Healing
 
+## 1.5.1
+
+- **The mouse wheel heals only over BiS Healing's frames.** A wheel bind used to fire over anyone under the mouse - a friendly player out in the world got healed, and the wheel stopped zooming the camera. Now the wheel heals over your grid cells and radar pips, and zooms the camera everywhere else. Want the old way (wheel heals over other addons' frames too)? `/bish wheel everywhere` - and `/bish wheel frames` to come back.
+
 ## 1.5.0
 
 - **A new bind window.** Every mouse button is a full row you can read at a glance: the button's name, the spell's icon and the spell written out - left and right click, wheel up and down, the wheel click and both thumb buttons, all the same size. Drop a spell anywhere on a row; right-click a row to clear it. It wears the cockpit look.
