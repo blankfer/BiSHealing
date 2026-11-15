@@ -1004,7 +1004,20 @@ function FM.Window()
             f.edgeColor = ec
             if not f.lit then for _, e in ipairs(f.edges or {}) do e:SetVertexColor(ec[1], ec[2], ec[3], 1) end end
             if f.callSpell then
-                f.callSpell:SetText(FM.CallWords(spell, f.slot))
+                local words = FM.CallWords(spell, f.slot)
+                -- EMPTY HERE, BOUND ON ANOTHER TAB (Arn, 14 Nov: a cousin's wheel click sat on ctrl - "it's on us for not
+                -- making it more clear"): the row names the tab that has it
+                if not spell then
+                    for _, m in ipairs(FM.MODS) do
+                        local other = m.key ~= self.mod and FM.Get(self.set .. m.key, key)
+                        if other then
+                            words = ("empty here - on %s: %s"):format(m.key == "" and "no modifier" or m.label, FM.CallWords(other, f.slot))
+                            if #words > FM.LABEL_CHARS then words = words:sub(1, FM.LABEL_CHARS - 2) .. ".." end
+                            break
+                        end
+                    end
+                end
+                f.callSpell:SetText(words)
                 f.callSpell:SetTextColor(rgb(spell and "ink" or "muted"))
             end
         end

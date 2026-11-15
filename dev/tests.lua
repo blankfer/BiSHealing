@@ -6656,6 +6656,12 @@ do
                 w.mod = ""
                 w:Refresh()
                 ok(w.tabs[3].text.__text == "ctrl  1", "the ctrl tab shows it holds one bind", tostring(w.tabs[3].text.__text))
+                local keepMid = FM.Get("", "middle")
+                FM.Clear("", "middle")
+                w:Refresh()
+                ok(w.slots.middle.callSpell.__text == "empty here - on ctrl: Cure Poison",
+                   "an empty row names the tab that has it bound", tostring(w.slots.middle.callSpell.__text))
+                if keepMid then FM.Set("", "middle", keepMid) end
                 w.mod = "ctrl-"
                 w:Refresh()
                 ok(w.slots.middle.callSpell.__text == "Cure Poison" and w.slots.middle.callName.__text == "WHEEL CLICK",
