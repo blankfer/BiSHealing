@@ -6626,10 +6626,51 @@ do
             s5.__scripts.OnReceiveDrag(s5)
             ok(FM.Get("", "button5") == "Healing Wave(Rank 3)",
                "dropped on a button, it binds the heal at its top rank", tostring(FM.Get("", "button5")))
-            -- and a click does the same as a drag, for a mouse that is easier to click than drag
-            CURSOR = {}
-            w.palette[2].__scripts.OnClick(w.palette[2])
-            ok(CURSOR.kind == "spell" and CURSOR.c == 1004, "clicking an icon also puts it on the cursor")
+            -- PRESS TO BIND (Arn, 14 Nov 2026: "hover over the spells at the bottom and it binds it to what was clicked"):
+            -- the button you press is where it goes; a held modifier picks the tab; the wheel rolled binds the wheel
+            do
+                local kept = {}
+                for k, v in pairs(NS.DB().binds) do kept[k] = v end
+                local s2 = w.palette[2].spell
+                local want = s2.name .. "(" .. s2.rank .. ")"
+                w.mod = ""
+                w.palette[2].__scripts.OnClick(w.palette[2], "MiddleButton")
+                ok(FM.Get("", "middle") == want, "hover a spell, press the wheel: it is on the wheel click", tostring(FM.Get("", "middle")))
+                local keepShift = _G.IsShiftKeyDown
+                _G.IsShiftKeyDown = function() return true end
+                w.palette[2].__scripts.OnClick(w.palette[2], "Button4")
+                _G.IsShiftKeyDown = keepShift
+                ok(FM.Get("shift-", "button4") == want and w.mod == "shift-", "shift held, thumb 1 pressed: shift + thumb 1, and the tab follows")
+                w.mod = ""
+                w.palette[1].__scripts.OnMouseWheel(w.palette[1], -1)
+                ok(FM.Get("", "wheeldown") == w.palette[1].spell.name .. "(" .. w.palette[1].spell.rank .. ")", "the wheel rolled down: wheel down")
+                STATE.inCombat = true
+                FM.Clear("", "button5")
+                w.palette[2].__scripts.OnClick(w.palette[2], "Button5")
+                ok(FM.Get("", "button5") == nil, "in a fight nothing is bound (binds wait for the fight)")
+                STATE.inCombat = false
+                -- the checklist (Arn picked B): each tab says how many binds it holds - a cousin's wheel click "did not
+                -- work" because "he had it on ctrl"; and a row says its spell in words
+                for k in pairs(NS.DB().binds) do if k:find("^ctrl%-") then NS.DB().binds[k] = nil end end
+                FM.Set("ctrl-", "middle", "Cure Poison")
+                w.mod = ""
+                w:Refresh()
+                ok(w.tabs[3].text.__text == "ctrl  1", "the ctrl tab shows it holds one bind", tostring(w.tabs[3].text.__text))
+                local keepMid = FM.Get("", "middle")
+                FM.Clear("", "middle")
+                w:Refresh()
+                ok(w.slots.middle.callSpell.__text == "empty here - on ctrl: Cure Poison",
+                   "an empty row names the tab that has it bound", tostring(w.slots.middle.callSpell.__text))
+                if keepMid then FM.Set("", "middle", keepMid) end
+                w.mod = "ctrl-"
+                w:Refresh()
+                ok(w.slots.middle.callSpell.__text == "Cure Poison" and w.slots.middle.callName.__text == "WHEEL CLICK",
+                   "the ctrl rows: WHEEL CLICK - Cure Poison, in words", tostring(w.slots.middle.callSpell.__text))
+                w.mod = ""
+                for k in pairs(NS.DB().binds) do NS.DB().binds[k] = nil end
+                for k, v in pairs(kept) do NS.DB().binds[k] = v end
+                w:Refresh()
+            end
             CURSOR = {}
             -- not in a fight: binds are written out of combat anyway
             STATE.inCombat = true
