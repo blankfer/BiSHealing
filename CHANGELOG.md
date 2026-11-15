@@ -1,5 +1,11 @@
 # BiS Healing
 
+## 1.5.0
+
+- **A new bind window.** Every mouse button is a full row you can read at a glance: the button's name, the spell's icon and the spell written out - left and right click, wheel up and down, the wheel click and both thumb buttons, all the same size. Drop a spell anywhere on a row; right-click a row to clear it. It wears the cockpit look.
+- **Press to bind.** Hover a spell in the bottom row and press the mouse button you want it on - or roll the wheel. Hold shift, ctrl or alt while you press to put it on that modifier. Dragging still works.
+- **No more lost binds on another modifier.** Each modifier tab shows how many binds it holds, and an empty row tells you when that button is bound on another tab ("empty here - on ctrl: Cure Poison").
+
 ## 1.4.4
 
 - **The radar catches up with the engineer's view.** Every pip gets a mini health bar on top, filling left to right in its green, amber or red, with heals on their way in cyan and the overheal in magenta. Hover someone and a fainter cyan shows your heal, a fainter magenta what it would waste. Like the pip, the bar only shows when someone is hurt.
