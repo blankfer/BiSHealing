@@ -6649,6 +6649,18 @@ do
                 w.palette[2].__scripts.OnClick(w.palette[2], "Button5")
                 ok(FM.Get("", "button5") == nil, "in a fight nothing is bound (binds wait for the fight)")
                 STATE.inCombat = false
+                -- the checklist (Arn picked B): each tab says how many binds it holds - a cousin's wheel click "did not
+                -- work" because "he had it on ctrl"; and a row says its spell in words
+                for k in pairs(NS.DB().binds) do if k:find("^ctrl%-") then NS.DB().binds[k] = nil end end
+                FM.Set("ctrl-", "middle", "Cure Poison")
+                w.mod = ""
+                w:Refresh()
+                ok(w.tabs[3].text.__text == "ctrl  1", "the ctrl tab shows it holds one bind", tostring(w.tabs[3].text.__text))
+                w.mod = "ctrl-"
+                w:Refresh()
+                ok(w.slots.middle.callSpell.__text == "Cure Poison" and w.slots.middle.callName.__text == "WHEEL CLICK",
+                   "the ctrl rows: WHEEL CLICK - Cure Poison, in words", tostring(w.slots.middle.callSpell.__text))
+                w.mod = ""
                 for k in pairs(NS.DB().binds) do NS.DB().binds[k] = nil end
                 for k, v in pairs(kept) do NS.DB().binds[k] = v end
                 w:Refresh()

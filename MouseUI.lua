@@ -36,20 +36,12 @@ local RAIL, EDGE, BOUND, PICK = { 0.13, 0.10, 0.18 }, { 0.42, 0.31, 0.63 }, { 0.
 local HARM_BG = { 0.30, 0.10, 0.13 }
 local HARM_EDGE = { 0.85, 0.30, 0.32 }
 FM.WIN_W, FM.WIN_H = 520, 364            -- 1.43:1, the family's window (before FM.SCALE)
-FM.RAIL_TOP, FM.RAIL_LEFT, FM.RAIL_FOOT = 26, 76, 74
--- Each button's box on the schematic, from the mouse outline's middle: x, y, w, h; `side` = which edge its label sits
--- on, `ly` = the label's height (spread so no two labels touch; an elbow line joins box and label).
-FM.BOX = {
-    left      = { x = -34, y = 64,  w = 40, h = 40, side = "L", ly = 64 },
-    right     = { x =  34, y = 64,  w = 40, h = 40, side = "R", ly = 64 },
-    wheelup   = { x =   0, y = 92,  w = 26, h = 22, side = "R", ly = 100 },
-    wheeldown = { x =   0, y = 64,  w = 26, h = 22, side = "R", ly = 28 },
-    middle    = { x =   0, y = 24,  w = 36, h = 36, side = "R", ly = -8 },
-    button4   = { x = -62, y = -22, w = 34, h = 34, side = "L", ly = -22 },
-    button5   = { x = -62, y = -64, w = 34, h = 34, side = "L", ly = -64 },
-}
-FM.MOUSE_W, FM.MOUSE_H, FM.LABEL_W, FM.LABEL_GAP = 110, 210, 140, 14
-FM.LABEL_CHARS = 24                       -- a spell's name on its label, at most (fits FM.LABEL_W)
+FM.RAIL_TOP, FM.RAIL_LEFT, FM.RAIL_FOOT = 26, 0, 74
+-- (A - the mouse as a schematic - came out "too busy" on Arn's screen; he took B, the FLIGHT CHECKLIST: one row per
+-- button, its name, its icon, its spell in words. The rows sit in w.mouse, an invisible frame kept for the slots.)
+FM.ROW_W, FM.ROW_H, FM.ROW_GAP, FM.ROWS_TOP = 500, 26, 3, -82
+FM.NAME_W, FM.ICON_X, FM.SPELL_X = 110, 116, 150
+FM.LABEL_CHARS = 52                       -- a spell's words on its row, at most (fits the row)
 -- press to bind (Arn, 14 Nov: "hover over the spells at the bottom and it binds it to what was clicked")
 FM.PRESS = { LeftButton = "left", RightButton = "right", MiddleButton = "middle", Button4 = "button4", Button5 = "button5" }
 
@@ -287,46 +279,6 @@ function FM.PressBind(w, s, slotKey)
     return slotKey
 end
 
---- The label beside a box: the button's name over its spell, joined to the box by an elbow line (out, along, in).
-local function makeCallout(parent, f, B, slot)
-    local m = parent.mouse
-    local half = FM.MOUSE_W / 2
-    local edgeX = (B.side == "L") and -(half + FM.LABEL_GAP) or (half + FM.LABEL_GAP)   -- where the label begins
-    local boxX = (B.side == "L") and (B.x - B.w / 2) or (B.x + B.w / 2)
-    local elbowX = (B.side == "L") and (edgeX + 6) or (edgeX - 6)
-    f.lines = {}
-    local function hline(x1, x2, y)
-        local t = texture(m, "ARTWORK", EDGE[1], EDGE[2], EDGE[3], 0.9)
-        t:SetSize(math.max(1, math.abs(x2 - x1)), 1)
-        t:SetPoint("CENTER", m, "CENTER", (x1 + x2) / 2, y)
-        f.lines[#f.lines + 1] = t
-    end
-    local function vline(x, y1, y2)
-        if math.abs(y2 - y1) < 1 then return end
-        local t = texture(m, "ARTWORK", EDGE[1], EDGE[2], EDGE[3], 0.9)
-        t:SetSize(1, math.abs(y2 - y1))
-        t:SetPoint("CENTER", m, "CENTER", x, (y1 + y2) / 2)
-        f.lines[#f.lines + 1] = t
-    end
-    hline(boxX, elbowX, B.y)
-    vline(elbowX, B.y, B.ly)
-    hline(elbowX, edgeX, B.ly)
-    f.callName = m:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    f.callSpell = m:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    for _, fs in ipairs({ f.callName, f.callSpell }) do
-        fs:SetWidth(FM.LABEL_W)
-        fs:SetJustifyH(B.side == "L" and "RIGHT" or "LEFT")
-        if fs.SetWordWrap then fs:SetWordWrap(false) end
-    end
-    local point = (B.side == "L") and "BOTTOMRIGHT" or "BOTTOMLEFT"
-    local point2 = (B.side == "L") and "TOPRIGHT" or "TOPLEFT"
-    local sx = (B.side == "L") and (edgeX - 3) or (edgeX + 3)
-    f.callName:SetPoint(point, m, "CENTER", sx, B.ly + 1)
-    f.callSpell:SetPoint(point2, m, "CENTER", sx, B.ly - 1)
-    f.callName:SetText(slot.label:upper())
-    f.callName:SetTextColor(rgb("accent"))
-end
-
 --- The short words a label shows for a bind: the spell and its rank number, cut to FM.LABEL_CHARS.
 function FM.CallWords(spell, slot)
     if not spell then return slot.attr and "empty - targets them" or "empty" end
@@ -344,34 +296,40 @@ function FM.CallWords(spell, slot)
     return words
 end
 
-local function makeSlot(parent, slot)
+local function makeSlot(parent, slot, index)
     local f = CreateFrame("Button", nil, parent)
-    local B = FM.BOX[slot.key] or { x = slot.x, y = slot.y, w = 30, h = 20, side = "R", ly = slot.y }
-    f:SetSize(B.w, B.h)
-    f:SetPoint("CENTER", parent.mouse, "CENTER", B.x, B.y)
+    f:SetSize(FM.ROW_W, FM.ROW_H)
+    f:SetPoint("TOPLEFT", parent.mouse, "TOPLEFT", 0, -((index or 1) - 1) * (FM.ROW_H + FM.ROW_GAP))
     f:RegisterForClicks("AnyUp")
     f:RegisterForDrag("LeftButton")
 
     f.bg = texture(f, "BACKGROUND", SLOT_BG[1], SLOT_BG[2], SLOT_BG[3], 0.95)
     f.bg:SetAllPoints()
-    -- its edge: green while something is bound, the plate's purple while it is empty
-    f.edges = {}
-    for i, sp in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 2 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 2 },
-                          { "TOPLEFT", "BOTTOMLEFT", 2, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 2, nil } }) do
-        local e = texture(f, "BORDER", EDGE[1], EDGE[2], EDGE[3], 1)
-        e:SetPoint(sp[1], 0, 0)
-        e:SetPoint(sp[2], 0, 0)
-        if sp[3] then e:SetWidth(sp[3]) else e:SetHeight(sp[4]) end
-        f.edges[i] = e
-    end
-    local isz = math.min(B.w, B.h) - 6
+    -- its left bar: green while something is bound (red on the hostile side), the plate's purple while empty, magenta
+    -- under the mouse (the family's hover: a wash and a left bar)
+    f.edges = { texture(f, "BORDER", EDGE[1], EDGE[2], EDGE[3], 1) }
+    f.edges[1]:SetPoint("TOPLEFT") f.edges[1]:SetPoint("BOTTOMLEFT") f.edges[1]:SetWidth(3)
+    f.callName = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.callName:SetPoint("LEFT", 12, 0)
+    f.callName:SetWidth(FM.NAME_W - 14)
+    f.callName:SetJustifyH("LEFT")
+    f.callName:SetText(slot.label:upper())
+    f.callName:SetTextColor(rgb("accent"))
+    local isz = FM.ROW_H - 6
+    f.well = texture(f, "BORDER", BODY[1], BODY[2], BODY[3], 1)       -- the icon's dark well
+    f.well:SetSize(isz + 2, isz + 2)
+    f.well:SetPoint("LEFT", FM.ICON_X - 1, 0)
     f.icon = f:CreateTexture(nil, "ARTWORK")
-    f.icon:SetPoint("CENTER")
+    f.icon:SetPoint("LEFT", FM.ICON_X, 0)
     f.icon:SetSize(isz, isz)
     f.icon:Hide()
-    makeCallout(parent, f, B, slot)
+    f.callSpell = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.callSpell:SetPoint("LEFT", FM.SPELL_X, 0)
+    f.callSpell:SetWidth(FM.ROW_W - FM.SPELL_X - 8)
+    f.callSpell:SetJustifyH("LEFT")
+    if f.callSpell.SetWordWrap then f.callSpell:SetWordWrap(false) end
     f.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    f.empty:SetPoint("CENTER")
+    f.empty:SetPoint("CENTER", f.icon, "CENTER", 0, 0)
     f.empty:SetText("--")
     -- A BOOSTER RIDING IN FRONT (8 Oct 2026): its own little icon in the top-left corner, so a
     -- slot reads "Nature's Swiftness, then this heal" at a glance
@@ -394,7 +352,7 @@ local function makeSlot(parent, slot)
     -- and wraps, so it is safe to click without reading.
     f.rankBtn = CreateFrame("Button", nil, f)
     f.rankBtn:SetSize(14, 9)
-    f.rankBtn:SetPoint("BOTTOMRIGHT", 2, -2)
+    f.rankBtn:SetPoint("BOTTOMLEFT", f.icon, "BOTTOMRIGHT", 1, -2)   -- (the rank, just right of the icon)
     f.rank = f.rankBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     f.rank:SetPoint("CENTER")
     FM.Pop(f.rankBtn, f.rank)
@@ -472,6 +430,7 @@ local function makeSlot(parent, slot)
     end)
     f:SetScript("OnEnter", function(self)
         self.bg:SetVertexColor(SLOT_ON[1], SLOT_ON[2], SLOT_ON[3], 1)
+        if self.edges then self.edges[1]:SetVertexColor(PICK[1], PICK[2], PICK[3], 1) end
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(slot.label, rgb("accent"))
@@ -499,6 +458,8 @@ local function makeSlot(parent, slot)
     end)
     f:SetScript("OnLeave", function(self)
         FM.SlotRest(self)
+        local ec = self.edgeColor or EDGE
+        if self.edges then self.edges[1]:SetVertexColor(ec[1], ec[2], ec[3], 1) end
         if GameTooltip then GameTooltip:Hide() end
     end)
     return f
@@ -553,7 +514,6 @@ function FM.Window()
     end
     w.railTop = rail({ "TOPLEFT", 0, 0 }, { "TOPRIGHT", 0, 0 }, nil, FM.RAIL_TOP, "BOTTOM")
     w.railFoot = rail({ "BOTTOMLEFT", 0, 0 }, { "BOTTOMRIGHT", 0, 0 }, nil, FM.RAIL_FOOT, "TOP")
-    w.railLeft = rail({ "TOPLEFT", 0, -FM.RAIL_TOP - 1 }, { "BOTTOMLEFT", 0, FM.RAIL_FOOT + 1 }, FM.RAIL_LEFT, nil, "RIGHT")
     for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 2 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 2 },
                          { "TOPLEFT", "BOTTOMLEFT", 2, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 2, nil } }) do
         local t = texture(w, "BORDER", EDGE[1], EDGE[2], EDGE[3], 1)
@@ -648,14 +608,14 @@ function FM.Window()
     -- every bind on that tab uses the ticked trinkets before its heal (FM.TabTrinkets).
     local firstLabel = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     w.firstLabel = firstLabel
-    firstLabel:SetPoint("TOPLEFT", 8, -158)      -- (the left rail, under the modifiers)
+    firstLabel:SetPoint("TOPLEFT", 318, -38)     -- (the checklist: beside the modifier tabs)
     firstLabel:SetText("FIRST")
     firstLabel:SetTextColor(rgb("muted"))
     w.trinketTicks = {}
     for i, s in ipairs(FM.TRINKET_SLOTS) do
         local b = CreateFrame("Button", nil, w)
-        b:SetSize(FM.RAIL_LEFT - 10, 16)
-        b:SetPoint("TOPLEFT", 6, -172 - (i - 1) * 20)
+        b:SetSize(78, 16)
+        b:SetPoint("TOPLEFT", 352 + (i - 1) * 82, -36)
         b.box = texture(b, "BACKGROUND", SLOT_BG[1], SLOT_BG[2], SLOT_BG[3], 0.95)
         b.box:SetSize(11, 11)
         b.box:SetPoint("LEFT", 0, 0)
@@ -728,22 +688,18 @@ function FM.Window()
     end
 
     -- the modifier tabs
-    -- (the cockpit look: down the left rail, like the shell's COMMANDS rail; the open one wears a magenta bar)
-    local modLabel = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    modLabel:SetPoint("TOPLEFT", 8, -32)
-    modLabel:SetText("MODIFIER")
-    modLabel:SetTextColor(rgb("muted"))
+    -- (the checklist: four tabs across under the top rail; the open one wears a magenta bar along its foot)
     w.tabs = {}
     for i, m in ipairs(FM.MODS) do
         local t = CreateFrame("Button", nil, w)
-        t:SetSize(FM.RAIL_LEFT - 12, 22)
-        t:SetPoint("TOPLEFT", 6, -46 - (i - 1) * 26)
+        t:SetSize(70, 20)
+        t:SetPoint("TOPLEFT", 10 + (i - 1) * 74, -34)
         t.bg = texture(t, "BACKGROUND", SLOT_BG[1], SLOT_BG[2], SLOT_BG[3], 0.9)
         t.bg:SetAllPoints()
         t.pick = texture(t, "ARTWORK", PICK[1], PICK[2], PICK[3], 1)
-        t.pick:SetPoint("TOPLEFT")
         t.pick:SetPoint("BOTTOMLEFT")
-        t.pick:SetWidth(3)
+        t.pick:SetPoint("BOTTOMRIGHT")
+        t.pick:SetHeight(2)
         t.pick:Hide()
         t.text = t:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         t.text:SetPoint("CENTER")
@@ -762,32 +718,27 @@ function FM.Window()
     -- The mouse, drawn from plain rectangles: two buttons across the top with a gap for the
     -- wheel, a waist under them, a body below, and two thumb buttons on the left flank. A shape
     -- you recognise beats a grid of icons you have to read.
-    -- THE MOUSE AS A SCHEMATIC (the cockpit look, Arn picked A): its outline in thin lines - the sides, the top, the
-    -- bottom, the split between the two buttons and the waist under them - in the middle of the plate right of the rail
+    -- THE ROWS' FRAME (the checklist, Arn picked B after A was "too busy"): invisible; each button's row hangs from it.
+    -- Column heads over it: BUTTON and SPELL.
     local mouse = CreateFrame("Frame", nil, w)
-    mouse:SetSize(FM.MOUSE_W, FM.MOUSE_H)
-    mouse:SetPoint("TOP", w, "TOP", FM.RAIL_LEFT / 2, -48)
+    mouse:SetSize(FM.ROW_W, #FM.SLOTS * (FM.ROW_H + FM.ROW_GAP))
+    mouse:SetPoint("TOPLEFT", w, "TOPLEFT", 10, FM.ROWS_TOP)
     w.mouse = mouse
-    local hw, hh = FM.MOUSE_W / 2, FM.MOUSE_H / 2
-    local function line(x, y, lw, lh)
-        local t = texture(mouse, "BACKGROUND", EDGE[1], EDGE[2], EDGE[3], 1)
-        t:SetSize(lw, lh)
-        t:SetPoint("CENTER", mouse, "CENTER", x, y)
-        return t
+    -- the rows' backdrop, red on the hostile side (Arn, 8 Nov: the whole side must read red at a glance)
+    local back = texture(mouse, "BACKGROUND", 0.12, 0.09, 0.17, 1)
+    back:SetPoint("TOPLEFT", -2, 2)
+    back:SetPoint("BOTTOMRIGHT", 2, 0)
+    w.mouseParts = { { t = back, heal = { 0.12, 0.09, 0.17 }, harm = { 0.22, 0.07, 0.09 } } }
+    for _, hd in ipairs({ { "BUTTON", 12 }, { "SPELL", FM.SPELL_X } }) do
+        local fs = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        fs:SetPoint("BOTTOMLEFT", mouse, "TOPLEFT", hd[2], 3)
+        fs:SetText(hd[1])
+        fs:SetTextColor(rgb("muted"))
     end
-    local body = texture(mouse, "BACKGROUND", 0.12, 0.09, 0.17, 1)       -- the shell, a shade off the plate
-    body:SetSize(FM.MOUSE_W, FM.MOUSE_H)
-    body:SetPoint("CENTER")
-    local parts = { line(-hw, 0, 1, FM.MOUSE_H), line(hw, 0, 1, FM.MOUSE_H), line(0, hh, FM.MOUSE_W, 1), line(0, -hh, FM.MOUSE_W, 1),
-                    line(0, (hh + 38) / 2, 1, hh - 38), line(0, 38, FM.MOUSE_W, 1) }
-    -- THE WHOLE MOUSE GOES RED on the hostile side (Arn's screenshot, 8 Nov: only the little slot boxes changed, so
-    -- at a glance the two sides looked the same). Each part: its heal colour, its hostile colour.
-    w.mouseParts = { { t = body, heal = { 0.12, 0.09, 0.17 }, harm = { 0.22, 0.07, 0.09 } } }
-    for _, p in ipairs(parts) do w.mouseParts[#w.mouseParts + 1] = { t = p, heal = EDGE, harm = HARM_EDGE } end
 
     w.slots = {}
-    for _, slot in ipairs(FM.SLOTS) do
-        w.slots[slot.key] = makeSlot(w, slot)
+    for i, slot in ipairs(FM.SLOTS) do
+        w.slots[slot.key] = makeSlot(w, slot, i)
     end
 
     -- THE PINGS, AS THINGS YOU CAN PUT ON A BUTTON (1 Oct 2026, Arn's design). A spell arrives on
@@ -919,8 +870,8 @@ function FM.Window()
     end
 
     local foot = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    foot:SetPoint("TOP", w, "TOP", FM.RAIL_LEFT / 2, -31)   -- (the cockpit look: a status line over the schematic)
-    foot:SetWidth(300)
+    foot:SetPoint("TOP", w, "TOP", -20, -8)            -- (the checklist: the status line in the top rail's middle)
+    foot:SetWidth(220)
     foot:SetText("binds are written out of combat")
 
     -- THE VERSION MARK (Arn, 6 Nov 2026: so you know which build you are on), faint, in the bottom-right
@@ -972,6 +923,11 @@ function FM.Window()
                                            on and SLOT_ON[2] or SLOT_BG[2],
                                            on and SLOT_ON[3] or SLOT_BG[3], on and 1 or 0.9)
             rest(self.tabs[i], on and "accent" or "muted")
+            -- HOW MANY BINDS EACH TAB HOLDS (Arn, 14 Nov: a cousin's wheel click "did not work" - "he had it on ctrl"):
+            -- a bind on another tab is seen without opening it
+            local n = 0
+            for _, sl in ipairs(FM.SLOTS) do if FM.Get(self.set .. m.key, sl.key) then n = n + 1 end end
+            self.tabs[i].text:SetText((m.key == "" and "none" or m.label) .. (n > 0 and ("  " .. n) or ""))
             if self.tabs[i].pick then if on then self.tabs[i].pick:Show() else self.tabs[i].pick:Hide() end end
         end
         for _, b in ipairs(self.pings or {}) do
@@ -1045,7 +1001,8 @@ function FM.Window()
             -- the cockpit look: a green edge while bound (red on the hostile side), the plate's purple while empty; the
             -- label beside it says what is there in words
             local ec = spell and (hostile and HARM_EDGE or BOUND) or EDGE
-            for _, e in ipairs(f.edges or {}) do e:SetVertexColor(ec[1], ec[2], ec[3], 1) end
+            f.edgeColor = ec
+            if not f.lit then for _, e in ipairs(f.edges or {}) do e:SetVertexColor(ec[1], ec[2], ec[3], 1) end end
             if f.callSpell then
                 f.callSpell:SetText(FM.CallWords(spell, f.slot))
                 f.callSpell:SetTextColor(rgb(spell and "ink" or "muted"))
