@@ -15628,6 +15628,21 @@ do
                 ok(not mq:IsShown() and EN.chain.links[1]:GetAlpha() == 0, "switched off: no box, no glow")
                 RD.SetSw("mana", true)
             end
+            -- ATTENTION OUTLINES (Arn: "at 10% ... red box outline ... cascade after that half 50% amber")
+            do
+                ok(RD.AttnLeft(nil) == "red" and RD.AttnLeft(0.05) == "red" and RD.AttnLeft(0.3) == "amber" and RD.AttnLeft(0.8) == nil,
+                   "a buff: missing or under 10% red, under half amber, else none")
+                local b = RD.chaff or RD.tide
+                RD.LitAlpha(b, true)
+                ok(b.attn and b.attn:IsShown() and b.attn.edges[1].__vertex and b.attn.edges[1].__vertex[2] < 0.3, "an icon lit full: the red box")
+                RD.LitAlpha(b, false)
+                ok(not b.attn:IsShown(), "not lit: no box")
+                RD.SetSw("attn", false)
+                RD.LitAlpha(b, true)
+                ok(not b.attn:IsShown(), "switched off: never a box")
+                RD.SetSw("attn", true)
+                RD.LitAlpha(b, false)
+            end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
             RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)

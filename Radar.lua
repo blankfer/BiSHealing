@@ -1724,6 +1724,7 @@ RD.SW = {
     { key = "names",  group = "LOOK",      name = "Names",                    tip = "The name on each box." },
     { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
     { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
+    { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
     { key = "target", group = "THE FIGHT", name = "Target + its target",      tip = "Your target and who it is hitting, in the top row." },
     { key = "kicks",  group = "THE FIGHT", name = "Kick buttons",             tip = "Your interrupt on a box when their target casts." },
     { key = "cures",  group = "THE FIGHT", name = "Cure chips",               tip = "A chip when they carry something you can remove." },
@@ -1739,7 +1740,7 @@ RD.SW = {
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
-    full = { names = true, edges = true, pets = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
+    full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
@@ -2279,12 +2280,82 @@ function RD.HideTools()
     if RD.manaBox then RD.manaBox:Hide() end
 end
 
+--[[ ATTENTION OUTLINES (16 Nov 2026, Arn: "I'm missing clicking on icons that are only lit 100% for example food ... I
+  miss it because I think it's still some time left. How about at 10% of whatever makes it light up is left it gets a red
+  box outline ... if it is ever 100% bright red outline, cascade after that half 50% amber"). A box round a deck icon:
+  RED = needed now (lit full, a buff missing or under RD.ATTN_RED_LEFT of its time, mana under the tool's own point), AMBER
+  = getting close (a buff under half its time, mana under twice the tool's point). A cooling tool gets none: red always
+  means "click me now". Its own switch (attn); the deck only. ]]
+RD.ATTN_RED = { 1.00, 0.15, 0.15, 1 }
+RD.ATTN_AMBER = { 1.00, 0.70, 0.15, 1 }
+RD.ATTN_RED_LEFT = 0.10
+RD.ATTN_AMBER_LEFT = 0.50
+RD.attnCurves = {}
+function RD.AttnOn() return RD.Deck and RD.Deck() and RD.Sw and RD.Sw("attn") end
+function RD.Attn(b)
+    if not b then return nil end
+    if b.attn then return b.attn end
+    local f = CreateFrame("Frame", nil, b)
+    f:SetPoint("TOPLEFT", b, "TOPLEFT", -2, 2)
+    f:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 2, -2)
+    if f.SetFrameLevel and b.GetFrameLevel then
+        local lvl = b:GetFrameLevel()
+        if type(lvl) == "number" then f:SetFrameLevel(lvl + 8) end
+    end
+    f.edges = edge(f, RD.ATTN_RED, 2)
+    f:Hide()
+    b.attn = f
+    return f
+end
+--- A plain colour ("red", "amber") or nil (no outline).
+function RD.AttnSet(b, which)
+    if not b then return false end
+    if not (which and RD.AttnOn()) then
+        if b.attn then b.attn:Hide() end
+        return false
+    end
+    local f = RD.Attn(b)
+    local c = (which == "amber") and RD.ATTN_AMBER or RD.ATTN_RED
+    for _, e in ipairs(f.edges) do e:SetVertexColor(c[1], c[2], c[3], c[4]) end
+    f:Show()
+    return true
+end
+--- A buff's time left (a fraction, nil = missing) as an outline: red under 10% or missing, amber under half.
+function RD.AttnLeft(left)
+    if left == nil or left <= RD.ATTN_RED_LEFT then return "red" end
+    if left <= RD.ATTN_AMBER_LEFT then return "amber" end
+    return nil
+end
+--- A mana tool's outline as a curve on your mana: red under its own point, amber under twice it, nothing above.
+function RD.AttnCurve(at)
+    at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.95))
+    local key = math.floor(at * 100 + 0.5)
+    if RD.attnCurves[key] then return RD.attnCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local Rd, A, x = RD.ATTN_RED, RD.ATTN_AMBER, key / 100
+    local amb = math.min(x * 2, 0.95)
+    pcall(c.AddPoint, c, 0.00, CreateColor(Rd[1], Rd[2], Rd[3], 1))
+    pcall(c.AddPoint, c, x, CreateColor(Rd[1], Rd[2], Rd[3], 1))
+    if amb > x + 0.01 then
+        pcall(c.AddPoint, c, x + 0.0001, CreateColor(A[1], A[2], A[3], 1))
+        pcall(c.AddPoint, c, amb, CreateColor(A[1], A[2], A[3], 1))
+    end
+    pcall(c.AddPoint, c, amb + 0.0001, CreateColor(A[1], A[2], A[3], 0))
+    pcall(c.AddPoint, c, 1.00, CreateColor(A[1], A[2], A[3], 0))
+    RD.attnCurves[key] = c
+    return c
+end
+
 --- A deck button's light: very bright when needed, dim otherwise (Arn: "dim and very bright when needed") - while it wears
 --- a real icon in the deck; anywhere else, as before: shown or not.
 --- DIMMER AND GREY WHILE IT WAITS (15 Nov 2026, Arn: "grounding totem dimmed too like the food until needed then bright"):
 --- at 30% a bright purple icon still read as lit. A waiting icon is RD.ICON_FADED (20%) and greyed; lit, full colour.
 function RD.LitAlpha(b, lit)
     if b and b.food and b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, not lit) end
+    if b and b ~= RD.rations then RD.AttnSet(b, lit and "red" or nil) end   -- lit full: the red box (the food has its own)
     if lit then return 1 end
     if RD.Deck and RD.Deck() and b and b.iconTex then return RD.ICON_FADED end
     return 0
@@ -4852,12 +4923,14 @@ function RD.PaintBuffDims()
     local r = RD.rations
     if r and r.face then
         local a = 0
+        local left
         if r.item then
-            local left = 0
+            left = 0
             if not r.wanted then left = RD.BuffLeft("Well Fed") or 0 end
             a = RD.CascadeAlpha(left) or 1
         end
         r.face:SetAlpha(a)
+        RD.AttnSet(r, r.item and RD.AttnLeft(left) or nil)     -- red under 10% of Well Fed (or none), amber under half
         if r.food and r.food.SetDesaturated then pcall(r.food.SetDesaturated, r.food, false) end
     end
     local sh = RD.shield
@@ -4865,6 +4938,7 @@ function RD.PaintBuffDims()
         local left = RD.BuffLeft(sh.shieldName)
         if left and left > 0 then RD.washHole:SetVertexColor(1, 1, 1, RD.CascadeAlpha(left)) end
     end
+    if sh and sh.shieldName then RD.AttnSet(sh, RD.AttnLeft(RD.BuffLeft(sh.shieldName))) end   -- your shield: the same outline
     return true
 end
 
@@ -6086,6 +6160,7 @@ function RD.PaintQuiet()
         local r = RD.rations
         if fight or not r.item then
             r.face:SetAlpha(RD.LitAlpha(r, false) * (r.item and 1 or 0))   -- no food: nothing; in a fight: dim (no eating)
+            RD.AttnSet(r, nil)
         else
             RD.PaintBuffDims()                                                -- out of a fight: the buff's time left
         end
@@ -6120,6 +6195,15 @@ function RD.PaintTools(fight)
                 local okS, scol = pcall(UnitPowerPercent, "player", 0, true, sw)
                 swipeTo(b.cd, okS and scol or nil)
             end
+        end
+        -- the outline: red under its own point, amber under twice it (the client's curve); none while it cools
+        local ac = drew and RD.AttnOn() and not (b.cd and b.cd.wait) and RD.AttnCurve(b.at)
+        if ac then
+            local f = RD.Attn(b)
+            local okA, acol = pcall(UnitPowerPercent, "player", 0, true, ac)
+            if okA and paint(f.edges, acol) then f:Show() else f:Hide() end
+        elseif b.attn then
+            b.attn:Hide()
         end
         b.face:SetAlpha(drew and 1 or 0)
     end
