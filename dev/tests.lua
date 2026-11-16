@@ -14851,6 +14851,10 @@ do
     ok(RD.Deck() and RD.Console() and RD.On(), "/bish alpha deck on: the radar look, laid out as the deck")
     local M = RD.DECK
     local mp = FG.DeckPlace(1, 2, true, M)
+    -- NARROW AND TALL (Arn: "also taller 9:16 ... i hate moving mouse lef and right"): five to a row, thin tall boxes
+    local raid40 = FG.DeckPlace(2, 38, false, M)
+    ok(raid40.w <= 310 and raid40.h >= 1.5 * raid40.w, "the deck stays narrow; a full raid comes out taller than wide (near 9:16)",
+       raid40.w .. " x " .. raid40.h)
     local tankSp, boxSp = nil, {}
     for _, sp in ipairs(RD.spokes) do
         if sp.unit == "party1" then tankSp = sp end

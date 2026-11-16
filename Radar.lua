@@ -2005,7 +2005,10 @@ end
 -- TALLER, THE ICONS UNDER THE BAR (Arn, 15 Nov: "lets go taller and put the kick dispells under"): a box is the name's
 -- line on top, the health bar the whole width, and a row of icons under it (`icons` tall) - the kick at its left, the cures
 -- at its right. The tank row taller still, so the target box's two cells are not squished under its label.
-RD.DECK = { cell = 84, row = 38, tank = 50, gap = 3, boxIn = 2, boxTop = 10, chip = 12, kick = 12, icons = 14 }
+-- NARROW AND TALL (Arn, 15 Nov: "also taller 9:16 just a number throwing out there i hate moving mouse lef and right"):
+-- five to a row still, each box thinner and taller - the deck about 320 wide instead of 450; a full raid comes out near
+-- 9:16, a party (two rows) stays wider than tall.
+RD.DECK = { cell = 58, row = 50, tank = 62, gap = 3, boxIn = 2, boxTop = 10, chip = 12, kick = 12, icons = 14 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
