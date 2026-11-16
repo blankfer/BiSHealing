@@ -4929,7 +4929,16 @@ end
   and then pings at your feet, the game's plain ping, so the whole group (BiS or not) sees where it stands. A click while
   it is down pings again: "stand close". An addon may not ping by itself (C_Ping.SendMacroPing is forbidden, measured
   14 Nov); a /ping inside a secure button's macro is the player's own click. ]]
-function RD.TideMacro() return "/cast " .. RD.TIDE .. "\n/ping [@player]" end
+--- AND THE SECOND CLICK PINGS THE TOTEM ITSELF (Arn, 16 Nov: "clicking once to drop and clicking the same place but now
+--- its a small target frame of the totem so it pings where its at" - he had pinged it on Ellesmere's target frame with
+--- the totem targeted: "Mana Tide Totem II"). One macro, both clicks: /target finds the standing totem (the first click's
+--- totem does not exist yet, so the ping falls to you, at the same spot), pings it, and goes back to your target - only
+--- when it really got the totem (a friendly that is not in your group); left on it with no target before, it clears.
+--- Every line is a secure slash command run by your own click, so it works in a fight.
+function RD.TideMacro()
+    return "/cast " .. RD.TIDE .. "\n/target " .. RD.TIDE .. "\n/ping [@target,help,noparty,noraid][@player]"
+        .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]"
+end
 
 --[[ MANA TIDE FOR BIS USERS (16 Nov 2026, Arn: "yes for bis users too"). Your cast sends TIDE over the shared BiS channel;
   every BiS Healing deck in the group shows "MANA TIDE" and the totem's seconds on YOUR box (yours too, at once). The

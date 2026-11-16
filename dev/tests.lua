@@ -15502,8 +15502,10 @@ do
                 _G.C_LossOfControl = keepLC
             end
             -- THE MANA TIDE PING (Arn: "every time i drop it" - "a ping can be a ping")
-            ok(RD.TideMacro():find("/cast Mana Tide Totem", 1, true) and RD.TideMacro():find("\n/ping [@player]", 1, true)
-               and not RD.TideMacro():find("assist", 1, true), "the Mana Tide click: drop it, then a plain ping at your feet")
+            local tm = RD.TideMacro()
+            ok(tm:find("^/cast Mana Tide Totem\n/target Mana Tide Totem\n/ping %[@target,help,noparty,noraid%]%[@player%]")
+               and tm:find("\n/targetlasttarget [help,noparty,noraid]", 1, true) and not tm:find("assist", 1, true) and #tm < 255,
+               "the Mana Tide click: drop it; the next click pings the standing totem (else you), then back to your target")
             do
                 local mine = RD.TideHeard(nil, 12, true)
                 ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
