@@ -12754,6 +12754,14 @@ do
         NI = false
         fire(KG.events, "UNIT_SPELLCAST_INTERRUPTIBLE", sp2.tok)
         ok(face.guard:GetAlpha() == 0, "the game says it can be interrupted now: the shield goes")
+        do  -- the mini cast bar can never put the kick out (Arn 15 Nov: "interrups dont show up now")
+            local keepStrip = RD.CastStrip
+            RD.CastStrip = function() error("the client refused") end
+            face:SetAlpha(0)
+            RD.Look()
+            ok(face:GetAlpha() == 1 and RD.stripErr, "a failing cast bar: the kick still lights, the failure kept")
+            RD.CastStrip, RD.stripErr = keepStrip, nil
+        end
         NS.FG.Casting, _G.UnitCanAttack, sp2.kick, STATE.units[sp2.tok] = keepCast, keepAtk, keepKick, keepT
         _G.UnitCastingInfo, _G.UnitChannelInfo = keepCI, keepCH
         RD.Look()
@@ -12779,7 +12787,12 @@ do
         local sp = { heal = pip, tok = "party3target" }
         local keepDeck = RD.Deck
         RD.Deck = function() return true end
-        ok(RD.CastStrip(sp, true) == false and sp.castStrip and sp.castStrip:GetAlpha() == 0,
+        ok(RD.CastStrip(sp, true) == false and not sp.castStrip, "not made yet: nothing, and nothing made at the cast")
+        STATE.inCombat = true
+        ok(RD.MakeCastStrip(sp) == nil, "never made in a fight (Arn: \"interrups dont show up now\")")
+        STATE.inCombat = false
+        ok(RD.MakeCastStrip(sp) and sp.castStrip, "made out of a fight, by the layout")
+        ok(RD.CastStrip(sp, true) == false and sp.castStrip:GetAlpha() == 0,
            "a client without timer bars: nothing shows")
         _G.Enum = setmetatable({ StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
                                  StatusBarInterpolation = { Immediate = 0 } }, { __index = keepEnum })

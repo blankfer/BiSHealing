@@ -2267,6 +2267,7 @@ function RD.DeckLayout(T, order)
             sp.bogey:SetFrameLevel(lvl + 3)
             RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
+        RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
         local x = right - 2
         for _, c in ipairs(sp.cures or {}) do
             c.box:SetSize(cs, cs)
@@ -5037,15 +5038,14 @@ RD.CAST_STRIP_H = 3
 RD.CAST_COL = { 1.00, 0.70, 0.10 }
 RD.CAST_SHIELDED = { 0.55, 0.57, 0.62 }
 
-function RD.CastStrip(sp, lit)
+--- Built OUT OF A FIGHT, from the deck's layout (Arn 15 Nov, "interrups dont show up now": built at the first cast, in a
+--- fight, it took the whole look down with it). A child of the secure pip, so it is made only while that is allowed.
+function RD.MakeCastStrip(sp)
     local pip = sp and sp.heal
-    if not pip then return false end
+    if not pip then return nil end
     local b = sp.castStrip
-    if not lit or not RD.Deck() then
-        if b then b:SetAlpha(0) end
-        return false
-    end
     if not b then
+        if combat() then return nil end
         b = CreateFrame("StatusBar", nil, pip)
         b:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         b:SetPoint("BOTTOMLEFT", pip, "BOTTOMLEFT", 1, 1)
@@ -5059,6 +5059,13 @@ function RD.CastStrip(sp, lit)
         b:SetAlpha(0)
         sp.castStrip = b
     end
+    return b
+end
+
+function RD.CastStrip(sp, lit)
+    local b = sp and sp.castStrip
+    if not b then return false end
+    if not lit or not RD.Deck() then b:SetAlpha(0) return false end
     if not b.SetTimerDuration or not Enum or not Enum.StatusBarTimerDirection then return false end
     local tok = sp.tok
     local dir, dur = Enum.StatusBarTimerDirection.RemainingTime, nil
@@ -5096,13 +5103,16 @@ end
 local function paintContact(sp, lit)
     local k = sp.bogey
     local col = lit and RD.COL.bogey or RD.CONTACT
-    RD.CastStrip(sp, lit)
     if lit then
         bogeyAlpha(k, 1, col)
         -- a cast you cannot interrupt wears a shield (Guard.lua, Arn 12 Nov)
-        if NS.KG then NS.KG.Paint(k.face, sp.tok, k.GetWidth and k:GetWidth()) end
+        if NS.KG then pcall(NS.KG.Paint, k.face, sp.tok, k.GetWidth and k:GetWidth()) end
+        -- the kick is lit FIRST; nothing the mini cast bar does can put it out (a failure is kept for /bish alpha)
+        local okS, err = pcall(RD.CastStrip, sp, true)
+        if not okS then RD.stripErr = err end
         return true
     end
+    if sp.castStrip then pcall(RD.CastStrip, sp, false) end
     bogeyAlpha(k, 0, col)
     -- ONLY WHEN IT CASTS (Arn, 8 Nov, four green triangles over a party on one mob: "why is it showing interrupt buttons
     -- when its not casting" - picked "only when casting"). The quiet green contact below is kept, switched off by
