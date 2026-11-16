@@ -1352,6 +1352,33 @@ function RD.StartWidthDrag(g, f, k, l, t, sx)
     return true
 end
 
+--- The window back to 100%, its top-left corner held, the spot saved. Out of a fight.
+function RD.ScaleHome()
+    local f = RD.frame
+    if not f or combat() then return false end
+    local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
+    if type(k) == "number" and type(l) == "number" and type(t) == "number" then
+        RD.ScaleAt(f, 1, l * k, t * k)
+    end
+    db().scale = 1
+    local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
+    p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
+    if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
+        db().pos = { p, type(rp) == "string" and rp or p, x, y }
+    end
+    return true
+end
+
+--- RESET (16 Nov 2026, Arn: "there should be a reset button where in full it resets to everything on and the size i had
+--- it ... i think it was 100%"): every switch on (FULL), the window's own width, the boxes at 100%, the window at 100%.
+function RD.SwReset()
+    if combat() or RD.inFight then return nil end
+    RD.SetDeckWidth(nil)
+    RD.SetBoxHeight(nil)
+    RD.ScaleHome()
+    return RD.SwPreset("full")
+end
+
 --- The grip's drag over: the scale and the corner saved.
 function RD.EndGrip()
     local g, f = RD.grip, RD.frame
@@ -1425,16 +1452,7 @@ function RD.BuildGrip(f)
     g:SetScript("OnClick", function(_, button)
         if button ~= "RightButton" or combat() then return end
         if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then RD.SetDeckWidth(nil) RD.Arm() return end
-        local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
-        if type(k) == "number" and type(l) == "number" and type(t) == "number" then
-            RD.ScaleAt(f, 1, l * k, t * k)
-        end
-        db().scale = 1
-        local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
-        p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
-        if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
-            db().pos = { p, type(rp) == "string" and rp or p, x, y }
-        end
+        RD.ScaleHome()
     end)
     RD.grip = g
     return g
@@ -3440,6 +3458,29 @@ function RD.BuildSwitches()
         p.rows[#p.rows + 1] = row
         y = y - RD.SW_ROW_H
     end
+    local reset = CreateFrame("Button", nil, p)
+    reset:SetSize(RD.SW_W - 16, 18)
+    reset:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 6)
+    reset.edges = edge(reset, { 1, 0.7, 0.28, 0.6 }, 1)
+    reset.text = reset:CreateFontString(nil, "OVERLAY")
+    reset.text:SetFont(font, 10, "")
+    reset.text:SetTextColor(1, 0.75, 0.3, 1)
+    reset.text:SetPoint("CENTER")
+    reset.text:SetText("RESET")
+    reset.hl = reset:CreateTexture(nil, "HIGHLIGHT")
+    reset.hl:SetAllPoints(reset)
+    reset.hl:SetColorTexture(1, 0.7, 0.28, 0.22)
+    reset:SetScript("OnClick", function() RD.SwReset() end)
+    reset:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("RESET")
+        GameTooltip:AddLine("Everything on, the window's own width, boxes and window at 100%.  Out of a fight.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    reset:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    p.reset = reset
+    y = y - 6 - 18
     p:SetSize(RD.SW_W, -y + 8)
     p:Hide()
     if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingSwitches") end   -- Esc closes it

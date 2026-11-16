@@ -15455,6 +15455,11 @@ do
             if RD.bbRail and RD.bbRail.status then
                 ok(NS.BB.FitWords(RD.bbRail, 150) == true and NS.BB.FitWords(RD.bbRail, 300) == false, "a narrow black box: the status under BLACK BOX")
             end
+            -- RESET (Arn: "resets to everything on and the size i had it")
+            RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
+            RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)
+            ok(RD.SwPresetNow() == "full" and RD.BoxHeight() == 100 and RD.DeckWidth() == nil and d.radar.scale == 1,
+               "RESET: everything on, own width, boxes and window at 100%")
             STATE.inCombat = true
             ok(RD.SetSw("names", true) == "after" and RD.pending, "in a fight: saved, laid out after it")
             STATE.inCombat = false
