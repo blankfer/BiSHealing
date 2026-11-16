@@ -5028,9 +5028,75 @@ local function bogeyAlpha(k, a, col)
 end
 RD.BogeyAlpha = bogeyAlpha
 
+-- THE MINI CAST BAR (Arn 15 Nov, a target frame's "Whirlwind 7.9": "can we show that as a mini mini cast bar along the
+-- bottom of the party member that is targeting him?"). In the deck only: a thin bar along the bottom of the box of whoever
+-- targets the caster, lit with the kick. The client runs it: the cast's own duration object handed untouched to
+-- SetTimerDuration (a channel drains, a cast fills), nothing read. Grey when the cast cannot be interrupted (the shield's
+-- flag through the client's ternary when secret), amber otherwise.
+RD.CAST_STRIP_H = 3
+RD.CAST_COL = { 1.00, 0.70, 0.10 }
+RD.CAST_SHIELDED = { 0.55, 0.57, 0.62 }
+
+function RD.CastStrip(sp, lit)
+    local pip = sp and sp.heal
+    if not pip then return false end
+    local b = sp.castStrip
+    if not lit or not RD.Deck() then
+        if b then b:SetAlpha(0) end
+        return false
+    end
+    if not b then
+        b = CreateFrame("StatusBar", nil, pip)
+        b:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        b:SetPoint("BOTTOMLEFT", pip, "BOTTOMLEFT", 1, 1)
+        b:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", -1, 1)
+        b:SetHeight(RD.CAST_STRIP_H)
+        local lvl = pip.GetFrameLevel and pip:GetFrameLevel()
+        if type(lvl) == "number" then b:SetFrameLevel(lvl + 4) end
+        b.bg = b:CreateTexture(nil, "BACKGROUND")
+        b.bg:SetAllPoints(b)
+        b.bg:SetColorTexture(0, 0, 0, 0.7)
+        b:SetAlpha(0)
+        sp.castStrip = b
+    end
+    if not b.SetTimerDuration or not Enum or not Enum.StatusBarTimerDirection then return false end
+    local tok = sp.tok
+    local dir, dur = Enum.StatusBarTimerDirection.RemainingTime, nil
+    if UnitChannelDuration then
+        local ok, d = pcall(UnitChannelDuration, tok)
+        if ok and type(d) ~= "nil" then dur = d end
+    end
+    if dur == nil and UnitCastingDuration then
+        local ok, d = pcall(UnitCastingDuration, tok)
+        if ok and type(d) ~= "nil" then dur, dir = d, Enum.StatusBarTimerDirection.ElapsedTime end
+    end
+    if dur == nil then b:SetAlpha(0) return false end
+    local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
+    if not pcall(b.SetTimerDuration, b, dur, interp, dir) then b:SetAlpha(0) return false end
+    local A, G = RD.CAST_COL, RD.CAST_SHIELDED
+    local ni = NS.KG and NS.KG.Protected(tok) or false
+    if NS.Secret and NS.Secret(ni) then
+        local tern = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+        local drew = false
+        if tern then
+            local o1, r = pcall(tern, ni, G[1], A[1])
+            local o2, g = pcall(tern, ni, G[2], A[2])
+            local o3, bl = pcall(tern, ni, G[3], A[3])
+            drew = o1 and o2 and o3 and pcall(b.SetStatusBarColor, b, r, g, bl)
+        end
+        if not drew then b:SetStatusBarColor(A[1], A[2], A[3]) end
+    else
+        local c = (ni == true) and G or A
+        b:SetStatusBarColor(c[1], c[2], c[3])
+    end
+    b:SetAlpha(1)
+    return true
+end
+
 local function paintContact(sp, lit)
     local k = sp.bogey
     local col = lit and RD.COL.bogey or RD.CONTACT
+    RD.CastStrip(sp, lit)
     if lit then
         bogeyAlpha(k, 1, col)
         -- a cast you cannot interrupt wears a shield (Guard.lua, Arn 12 Nov)

@@ -12758,6 +12758,61 @@ do
         _G.UnitCastingInfo, _G.UnitChannelInfo = keepCI, keepCH
         RD.Look()
     end
+    -- THE GAME'S OWN SHIELD + THE MINI CAST BAR (Arn 15 Nov: "use that one" / "a mini mini cast bar along the bottom of the
+    -- party member that is targeting him")
+    do
+        local KG, RD = NS.KG, NS.RD
+        local keepTex, keepEnum, keepOK = _G.C_Texture, _G.Enum, KG.atlasOK
+        local keepCI, keepCH = _G.UnitCastingInfo, _G.UnitChannelInfo
+        local keepCD, keepCHD = _G.UnitCastingDuration, _G.UnitChannelDuration
+        KG.atlasOK = nil
+        _G.C_Texture = { GetAtlasInfo = function(n) if n == "nameplates-InterruptShield" then return { width = 10, height = 12 } end end }
+        local face = CreateFrame("Frame", nil, UIParent)
+        local g = KG.Build(face, 22)
+        ok(g.icon and g.icon.__atlas == "nameplates-InterruptShield" and not g.lines, "the client has the art: the game's shield, no drawn lines")
+        KG.atlasOK = nil
+        _G.C_Texture = { GetAtlasInfo = function() return nil end }
+        local g2 = KG.Build(CreateFrame("Frame", nil, UIParent), 22)
+        ok(g2.lines and #g2.lines == 5 and not g2.icon, "a client without it: the drawn shield")
+        -- the cast bar
+        local pip = CreateFrame("Frame", nil, UIParent)
+        local sp = { heal = pip, tok = "party3target" }
+        local keepDeck = RD.Deck
+        RD.Deck = function() return true end
+        ok(RD.CastStrip(sp, true) == false and sp.castStrip and sp.castStrip:GetAlpha() == 0,
+           "a client without timer bars: nothing shows")
+        _G.Enum = setmetatable({ StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
+                                 StatusBarInterpolation = { Immediate = 0 } }, { __index = keepEnum })
+        local handed
+        sp.castStrip.SetTimerDuration = function(_, d, _, dir) handed = { d = d, dir = dir } end
+        local chanObj, castObj = { chan = 1 }, { cast = 1 }
+        local NI = false
+        _G.UnitChannelDuration = function(u) if u == "party3target" then return chanObj end end
+        _G.UnitCastingDuration = function() return nil end
+        _G.UnitChannelInfo = function(u) if u == "party3target" then return "Whirlwind", "", 0, 0, 1, false, NI end end
+        _G.UnitCastingInfo = function() return nil end
+        ok(RD.CastStrip(sp, true) and handed.d == chanObj and handed.dir == 1 and sp.castStrip:GetAlpha() == 1,
+           "a channel (Whirlwind): its own duration handed untouched, draining")
+        local c = sp.castStrip.__color
+        ok(c and c[1] == RD.CAST_COL[1] and c[2] == RD.CAST_COL[2], "one you can interrupt: amber")
+        NI = true
+        RD.CastStrip(sp, true)
+        c = sp.castStrip.__color
+        ok(c and c[1] == RD.CAST_SHIELDED[1], "one you cannot: grey, like the shield")
+        _G.UnitChannelDuration = function() return nil end
+        _G.UnitCastingDuration = function(u) if u == "party3target" then return castObj end end
+        RD.CastStrip(sp, true)
+        ok(handed.d == castObj and handed.dir == 0, "a cast: fills")
+        RD.CastStrip(sp, false)
+        ok(sp.castStrip:GetAlpha() == 0, "the cast over: gone")
+        RD.Deck = function() return false end
+        RD.CastStrip(sp, true)
+        ok(sp.castStrip:GetAlpha() == 0, "the radar and the engineer's view: none")
+        RD.Deck = keepDeck
+        _G.C_Texture, _G.Enum, KG.atlasOK = keepTex, keepEnum, keepOK
+        _G.UnitCastingInfo, _G.UnitChannelInfo = keepCI, keepCH
+        _G.UnitCastingDuration, _G.UnitChannelDuration = keepCD, keepCHD
+    end
 
     -- THE OVER WORD (Arn, 12 Nov 2026: "an overheal for the radar like the los and range" - "more than half, both"):
     -- the client compares, through a bar: max = what they miss (secret), value = half the heal. Full = OVER.
