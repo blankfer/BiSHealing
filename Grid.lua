@@ -252,10 +252,14 @@ function FG.DeckPlace(nTanks, nRest, party, m)
     return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = height }
 end
 
---- The deck is on: the alpha's "deck" feature. It STARTS OFF (`startsOff`: a test feature is otherwise on with the alpha,
---- and this one replaces the radar's whole shape) - `/bish alpha deck on` is the way in.
+--- The deck is on: OUT OF THE ALPHA since 15 Nov 2026 (Arn: "this new view is ready to get out of alpha and replace the old
+--- rader we can retire it") - the radar look IS the deck, unless the view button picked the engineer's view. The old radar
+--- disc is retired: nothing reaches it any more (its code stays until Arn says it can go).
 function FG.DeckOn()
-    return (NS.AlphaOn and NS.AlphaOn("deck")) == true
+    local RD = NS.RD
+    if not (RD and RD.On and RD.On()) then return false end
+    if RD.DiscView and RD.DiscView() then return false end      -- the retired disc: the suite's own door, until it is gone
+    return not (RD.EngineerView and RD.EngineerView())
 end
 
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid
@@ -4235,14 +4239,5 @@ end
 -- Booted by Core.lua at login. This file used to arm itself, because for two days it WAS the
 -- addon on this client and there was no core to do it.
 
--- THE FLIGHT DECK, a test feature (dev/FLIGHTDECK.md): starts OFF (FG.DeckOn), `/bish alpha deck on` to try it. It is a
--- view of the radar (the radar look): moving the switch re-arms the radar, which lays itself out as the deck or not.
-if NS.AlphaFeature then
-    NS.AlphaFeature{ key = "deck", name = "the deck", startsOff = true,
-        desc = "the radar's replacement, being built (radar look): tank row + target box, then rows of five",
-        apply = function()
-            if InCombatLockdown and InCombatLockdown() then return end
-            if NS.RD and NS.RD.Arm and NS.RD.On and NS.RD.On() then pcall(NS.RD.Arm) end
-        end,
-        cmd = function(rest) return NS.RD and NS.RD.StripStatus and NS.RD.StripStatus(rest) end }
-end
+-- THE FLIGHT DECK (dev/FLIGHTDECK.md) left the alpha on 15 Nov 2026: no switch any more (FG.DeckOn). Its status word is
+-- `/bish alpha radar strip` (RD.Command).

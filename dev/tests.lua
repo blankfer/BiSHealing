@@ -11840,11 +11840,15 @@ do
     for _, k in ipairs(NS.ALPHA_ORDER) do if NS.AlphaOn(k) then onNow = onNow + 1 end end
     ok(NS.AlphaHello() and said("alpha testing is on") and said(onNow .. " test feature"), "on: one line at login, so a tester never forgets")
     -- A FEATURE THAT STARTS OFF (15 Nov 2026, the flight deck replaces the grid's shape): the alpha alone never turns it on
-    ok(NS.ALPHA.deck and NS.ALPHA.deck.startsOff and not NS.AlphaOn("deck"), "the flight deck stays off when the alpha comes on")
-    SlashCmdList.BISHEALING("alpha deck on")
-    ok(NS.AlphaOn("deck") and d.alphaOn and d.alphaOn.deck == true, "/bish alpha deck on: on, kept in alphaOn")
-    SlashCmdList.BISHEALING("alpha deck off")
-    ok(not NS.AlphaOn("deck") and d.alphaOn.deck == nil, "/bish alpha deck off: off again")
+    NS.AlphaFeature{ key = "late", name = "a late one", startsOff = true }
+    ok(NS.ALPHA.late and NS.ALPHA.late.startsOff and not NS.AlphaOn("late"), "a feature that starts off stays off when the alpha comes on")
+    SlashCmdList.BISHEALING("alpha late on")
+    ok(NS.AlphaOn("late") and d.alphaOn and d.alphaOn.late == true, "/bish alpha late on: on, kept in alphaOn")
+    SlashCmdList.BISHEALING("alpha late off")
+    ok(not NS.AlphaOn("late") and d.alphaOn.late == nil, "/bish alpha late off: off again")
+    NS.ALPHA.late = nil
+    for i, k in ipairs(NS.ALPHA_ORDER) do if k == "late" then table.remove(NS.ALPHA_ORDER, i) break end end
+    ok(not NS.ALPHA.deck, "the deck is out of the alpha (Arn 15 Nov: \"ready to get out of alpha and replace the old rader\")")
     SlashCmdList.BISHEALING("alpha probe off")
     ok(NS.AlphaOn() and not NS.AlphaOn("probe") and d.alphaOff.probe == true, "/bish alpha probe off: that one back, the switch still on")
     SlashCmdList.BISHEALING("alpha probe on")
@@ -11866,6 +11870,8 @@ end
 do
     local RD = NS.RD
     local d = NS.DB()
+    -- RETIRED 15 Nov 2026 (the deck replaced it): the disc is reached through the suite's own door until its code goes
+    RD.FORCE_DISC = true
     local keep = { CU = _G.C_CurveUtil, CC = _G.CreateColor, E = _G.Enum, HP = _G.UnitHealthPercent, PP = _G.UnitPowerPercent,
                    raid = _G.IsInRaid, num = _G.GetNumGroupMembers, info = _G.GetRaidRosterInfo, isu = _G.UnitIsUnit,
                    cast = _G.UnitCastingDuration, chan = _G.UnitChannelDuration, b43 = BOOK[43], b44 = BOOK[44], b45 = BOOK[45] }
@@ -13580,8 +13586,7 @@ do
     -- look runs every RD.TICK in a fight, so it gets its own budget
     do
         local dd = NS.DB()
-        local ka, ko = dd.alpha, dd.alphaOn
-        dd.alpha, dd.alphaOn = true, { deck = true }
+        RD.FORCE_DISC = false                     -- the deck: the radar look's own view
         RD.Arm()
         local kicks = 0
         for i = 1, 40 do if RD.slots[i] and RD.slots[i].rb then kicks = kicks + 1 end end
@@ -13594,7 +13599,7 @@ do
         ok(deck40 <= 360, "the deck's 40-man look stays in its budget", deck40)
         STATE.inCombat = false
         fire(RD.events, "PLAYER_REGEN_ENABLED")
-        dd.alpha, dd.alphaOn = ka, ko
+        RD.FORCE_DISC = true
         RD.Arm()
     end
     STATE.inCombat = true
@@ -14964,9 +14969,10 @@ do
     local keepGUN = _G.GetUnitName
     _G.GetUnitName = function(u) return u == "party1" and "Ragefang Ironhide" or "Some One" end   -- Forever's two-part names
     d.look, d.alpha = "radar", true
-    SlashCmdList.BISHEALING("alpha deck on")              -- the real door: the radar is armed again, as the deck
+    d.radar = d.radar or {}
+    RD.FORCE_DISC, d.radar.view = false, nil              -- the radar look's own view now: the deck
     RD.Arm()
-    ok(RD.Deck() and RD.Console() and RD.On(), "/bish alpha deck on: the radar look, laid out as the deck")
+    ok(RD.Deck() and RD.Console() and RD.On(), "the radar look IS the deck now - no alpha switch")
     local M = RD.DECK
     local mp = FG.DeckPlace(1, 2, true, M)
     -- NARROW AND TALL (Arn: "also taller 9:16 ... i hate moving mouse lef and right"): five to a row, thin tall boxes
@@ -15300,9 +15306,12 @@ do
         _G.C_CurveUtil, _G.CreateColor, _G.Enum, _G.UnitHealthPercent = keep2.cc, keep2.cr, keep2.en, keep2.uhp
         RD.outlineCurves = {}
     end
-    SlashCmdList.BISHEALING("alpha deck off")
+    d.radar.view = "console"
     RD.Arm()
-    ok(not RD.Deck() and not RD.deckBox:IsShown(), "deck off: back to the radar as it was")
+    ok(RD.EngineerView() and not RD.Deck() and not RD.deckBox:IsShown(), "the view button's other side: the engineer's view")
+    d.radar.view, RD.FORCE_DISC = nil, true
+    RD.Arm()
+    ok(not RD.Deck() and not RD.deckBox:IsShown(), "the suite's door: the retired disc")
     ok(not tankSp.bogey.deckIcon:IsShown() and (not tankSp.bogey.lines or not tankSp.bogey.lines[1] or tankSp.bogey.lines[1]:IsShown()),
        "and the radar's kick is its drawn triangle again")
     d.alpha, d.alphaOn, STATE.classes.party1, d.look = keep.alpha, keep.alphaOn, keep.classes, keep.look

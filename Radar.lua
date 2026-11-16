@@ -1585,6 +1585,12 @@ end
 --- engineer's boxes - health bars, kick squares, cure chips, the fuel strip, the tools and totems - laid out as the deck.
 function RD.Deck() return (NS.FG and NS.FG.DeckOn and NS.FG.DeckOn()) == true end
 function RD.Console() return db().view == "console" or RD.Deck() end
+--- The view button picked the engineer's view (the deck is the radar look's own view otherwise).
+function RD.EngineerView() return db().view == "console" end
+--- The retired radar disc, reachable only by the suite (`RD.FORCE_DISC`, never set in the game), so its code stays tested
+--- until it is deleted.
+RD.FORCE_DISC = false
+function RD.DiscView() return RD.FORCE_DISC == true and not RD.EngineerView() end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
 --- place, so the highest slot says how many must fit). Answers the class and its number.
@@ -2601,14 +2607,13 @@ end
 function RD.PaintViewButton()
     local b = RD.viewBtn
     if not b then return end
-    local con = RD.Console()
-    -- no words on the radar: a drawn sign of where the click goes - four small squares (the engineer's console), a ring
-    -- (the radar)
+    -- since 15 Nov the two sides are the DECK and the engineer's view (the radar disc retired): a drawn sign of where the
+    -- click goes - four small squares (the engineer's view), a ring (back to the deck)
+    local con = RD.EngineerView() == true
     for _, t in ipairs(b.grid) do t:SetAlpha(con and 0 or 1) end
     for _, l in ipairs(b.ring) do l:SetAlpha(con and 1 or 0) end
-    b.tip = con and { "ENGINEER VIEW", "Click: back to the radar.  Out of a fight." }
-            or { "RADAR", "Click: the engineer's view - the same buttons on a plain grid (for anyone who would rather not "
-                 .. "have the radar).  Out of a fight." }
+    b.tip = con and { "ENGINEER VIEW", "Click: back to the deck.  Out of a fight." }
+            or { "DECK", "Click: the engineer's view - the same buttons on a plain grid.  Out of a fight." }
     local c = RD.classBtn
     if c then
         local T, k = RD.ConsoleTier()
@@ -5519,6 +5524,7 @@ function RD.Command(rest)
     local word, arg = tostring(rest or ""):match("^%s*(%S+)%s*(.-)%s*$")
     word = word and word:lower() or ""
     local P = NS.Print or print
+    if word == "strip" then return RD.StripStatus("strip") end
     if word == "heal" then
         if arg == "" or arg:lower() == "default" then
             db().heal = nil
