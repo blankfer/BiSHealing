@@ -15360,6 +15360,31 @@ do
         ok(rr.rest[37].h == S.pet5 and rr.rest[37].x == 0 and rr.rest[37].y > rr.rest[36].y, "the six pets last, on their own rows")
         ok(rr.w == S.w and rr.h < 640, "never wider; a full raid stays on the screen", rr.w .. " x " .. rr.h)
         ok(not RD.classBtn or not RD.classBtn:IsShown(), "no size button: the group decides (Arn: \"we can get rid of the button\")")
+        -- SHIFT + DRAG = THE WIDTH (Arn: "the boxes themselves don't get any bigger, just more fit")
+        local M = RD.DECK
+        local wide = FG.DeckPlace(1, 9, true, M, 700)
+        ok(wide.rest[1].y == wide.rest[9].y and math.abs(wide.rest[1].w - M.cell) < 15,
+           "a party dragged wide: all nine on one row, the boxes about their own size", wide.rest[1].w)
+        local raidW = FG.DeckPlace(2, 38, false, M, 600)
+        ok(raidW.rest[5].y == raidW.rest[1].y and raidW.rest[6].y > raidW.rest[1].y, "a raid at 600: still five across (ten do not fit)")
+        local raidXL = FG.DeckPlace(2, 38, false, M, 800)
+        ok(raidXL.rest[10].y == raidXL.rest[1].y and raidXL.rest[11].y > raidXL.rest[1].y,
+           "a raid dragged very wide: ten across - two raid groups to a row, never seven")
+        local e3 = FG.EngPlace(1, 4, 0, true, S, 330)
+        ok(e3.rest[1].y == e3.rest[3].y and e3.rest[4].y > e3.rest[1].y, "the engineer dragged wider: three to a row instead of two")
+        local floor = RD.FloorInner()
+        ok(floor + 2 * RD.CON.pad >= 230, "the floor is the totem row: two timers each side of CALL / BRING / RECALL", floor)
+        ok(RD.WidthFor(300, 500, 100, 1) == floor, "dragged past the floor: held at the floor")
+        ok(RD.WidthFor(300, 500, 560, 2) == 330, "the cursor's move in the frame's own pixels (a scaled frame)")
+        RD.SetDeckWidth(560)
+        RD.Arm()
+        ok(RD.DeckWidth() == 560 and math.abs(RD.frame.__w - (560 + 2 * RD.CON.pad)) < 1, "saved per view, and the window takes it",
+           RD.frame.__w)
+        RD.SetDeckWidth(10)
+        ok(RD.DeckWidth() == floor, "never under the floor")
+        RD.SetDeckWidth(nil)
+        RD.Arm()
+        ok(RD.DeckWidth() == nil, "Shift + right-click: its own width again")
         local keepTier = d.radar.tier
         d.radar.tier = 4
         local T = RD.ConsoleTier({ "player", "party1" })

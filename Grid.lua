@@ -217,10 +217,13 @@ end
   Pure - numbers in, rectangles out (x, y from the top-left, down positive) - so it is tested without a client. `m` = the
   sizes: cell, row, tank, gap, boxIn, boxTop. ]]
 FG.DECK_SIZES = { cell = FRAME_W, row = FRAME_H + NAME_BAND, tank = FRAME_H + NAME_BAND + 16, gap = PAD, boxIn = 3, boxTop = 11 }
-function FG.DeckPlace(nTanks, nRest, party, m)
+--- `W` (15 Nov 2026, Arn: "the boxes themselves don't get any bigger, just more fit"): the width the player dragged the
+--- window to (Shift + the corner grip); nil = five boxes across. As many boxes to a row as fit; a raid snaps to 5 or 10 so
+--- each raid group lines up; a party's short row stretches to fill.
+function FG.DeckPlace(nTanks, nRest, party, m, W)
     m = m or FG.DECK_SIZES
     local cell, P = m.cell, m.gap
-    local W = 5 * cell + 4 * P
+    W = W or (5 * cell + 4 * P)
     -- THE TOP ROW IN EQUAL SHARES (Arn, 15 Nov: "as wide as the boxes need to fit, so for us thats 3 boxes so thats how wide
     -- each box gets"): the tanks, your target and its target split the row evenly - one tank = thirds, two = quarters. No
     -- tank still keeps a tank's share empty, so the target pair never grows past two thirds. The pair has no outline of its
@@ -233,23 +236,30 @@ function FG.DeckPlace(nTanks, nRest, party, m)
     local box = { x = tx, y = 0, w = W - tx, h = m.tank }
     local tanks = {}
     for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = bw, h = m.tank } end
-    local rest, y, i, first = {}, m.tank + P, 1, true
+    local rest, y, i = {}, m.tank + P, 1
+    local per = FG.PerRow(W, cell, P, not party)
     while i <= nRest do
-        local per = (first and party) and math.max(1, 5 - nTanks) or 5
         -- A PARTY'S ROW STRETCHES (Arn, 15 Nov: "1st row tanks second row 5 - the tank. 1 tank the 4 party uses that whole
-        -- row they get longer. if 2 tanks the next row is 3 people longer to fill in"): its people share the whole width;
-        -- a raid's rows of five keep the one cell size.
+        -- row they get longer. if 2 tanks the next row is 3 people longer to fill in"): a short row's people share the
+        -- whole width; a raid's rows keep their columns, so the groups line up.
         local n = math.min(per, nRest - i + 1)
-        local w = (first and party) and math.floor((W - (n - 1) * P) / n) or cell
-        for c = 1, per do
-            if i > nRest then break end
-            rest[i] = { x = (c - 1) * (w + P), y = y, w = w, h = m.row }
+        local cols = party and n or per
+        local w = math.floor((W - (cols - 1) * P) / cols)
+        for c = 1, n do
+            rest[i] = { x = (c - 1) * (w + P), y = y, w = (c == cols) and (W - (c - 1) * (w + P)) or w, h = m.row }
             i = i + 1
         end
-        y, first = y + m.row + P, false
+        y = y + m.row + P
     end
     local height = (nRest > 0) and (y - P) or m.tank
     return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = height }
+end
+
+--- How many boxes of width `bw` fit across `W`; a raid snaps to 5 or 10 (a raid group, or two, to a row).
+function FG.PerRow(W, bw, P, raid)
+    local per = math.max(1, math.floor((W + P) / (bw + P)))
+    if raid then per = (per >= 10) and 10 or 5 end
+    return per
 end
 
 --[[ THE ENGINEER'S PLACES (15 Nov 2026, Arn: "if our deck is 16:9 engineering is 9:16" - picked A from the mockup, then
@@ -260,8 +270,8 @@ end
     a RAID:   the tanks their own row; your target and its target a short row under it (room for its header line above);
               then everyone five across in SHORT boxes so each raid group lines up; the pets last, five across, shorter.
   A short box (r.short) carries its icons in a thin column at its right end instead of a row under the bar. ]]
-function FG.EngPlace(nTanks, nPeople, nPets, party, m)
-    local W, P = m.w, m.gap
+function FG.EngPlace(nTanks, nPeople, nPets, party, m, Wd)
+    local W, P = Wd or m.w, m.gap
     local tanks, rest = {}, {}
     local target, tot, box, y
     local function across(count, per, h, short, stretch)
@@ -287,8 +297,9 @@ function FG.EngPlace(nTanks, nPeople, nPets, party, m)
         tot = { x = tx + bw + P, y = 0, w = W - (tx + bw + P), h = m.top }
         box = { x = tx, y = 0, w = W - tx, h = m.top }
         y = m.top + P
-        across(nPeople, 2, m.row2, false, true)
-        across(nPets, 2, m.pet2, true, true)
+        local per = math.max(2, FG.PerRow(W, m.pw or 100, P, false))   -- two to a row at its own width, more when dragged wider
+        across(nPeople, per, m.row2, false, true)
+        across(nPets, per, m.pet2, true, true)
     else
         y = 0
         if nTanks > 0 then
@@ -305,8 +316,9 @@ function FG.EngPlace(nTanks, nPeople, nPets, party, m)
         tot = { x = hw + P, y = y, w = W - hw - P, h = m.rtgt, short = true }
         box = { x = 0, y = y, w = W, h = m.rtgt }
         y = y + m.rtgt + P * 2
-        across(nPeople, 5, m.row5, true, false)
-        across(nPets, 5, m.pet5, true, false)
+        local per = FG.PerRow(W, m.rw or 39, P, true)
+        across(nPeople, per, m.row5, true, false)
+        across(nPets, per, m.pet5, true, false)
     end
     return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = y - P }
 end

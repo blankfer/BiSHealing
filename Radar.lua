@@ -1267,12 +1267,50 @@ function RD.SetScale(v)
     return s
 end
 
+--[[ SHIFT + DRAG = THE WIDTH (15 Nov 2026, Arn: "they could just resize on how many fit in the window by making the window
+  bigger"; mockup https://claude.ai/artifact/NzLCgjinETPrUVic2Xawxc). The top-left corner held; the cursor's sideways move
+  (in the frame's own pixels) is the new width of the boxes' area, never under the totem row's floor. The deck is laid out
+  again as it changes, at most every RD.WIDTH_EVERY seconds (secure buttons move: out of a fight only - a pull ends it). ]]
+RD.WIDTH_EVERY = 0.12
+function RD.WidthFor(startInner, sx, cx, k)
+    if type(k) ~= "number" or k <= 0 then return startInner end
+    return math.max(RD.FloorInner(), startInner + (cx - sx) / k)
+end
+function RD.StartWidthDrag(g, f, k, l, t, sx)
+    local fw = f:GetWidth()
+    if type(fw) ~= "number" then return false end
+    g.sizing = { width = true, start = RD.DeckWidth() or (fw - 2 * RD.CON.pad), sx = sx, k = k, last = 0 }
+    RD.ScaleAt(f, f:GetScale(), l * k, t * k)               -- held by the top-left from here on
+    local ok, p, _, rp, x, y = pcall(f.GetPoint, f)          -- and saved so: a reload keeps the corner where it was
+    p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
+    if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
+        db().pos = { p, type(rp) == "string" and rp or p, x, y }
+    end
+    g:SetScript("OnUpdate", function(self, elapsed)
+        local z = self.sizing
+        if not z or combat() then RD.EndGrip() return end
+        z.last = z.last + (tonumber(elapsed) or 0)
+        if z.last < RD.WIDTH_EVERY then return end
+        z.last = 0
+        local cx = GetCursorPosition()
+        local w = math.floor(RD.WidthFor(z.start, z.sx, cx, z.k) + 0.5)
+        if w ~= z.applied then
+            z.applied = w
+            RD.SetDeckWidth(w)
+            RD.Arm()
+        end
+    end)
+    return true
+end
+
 --- The grip's drag over: the scale and the corner saved.
 function RD.EndGrip()
     local g, f = RD.grip, RD.frame
     if not (g and g.sizing) then return false end
+    local widthDrag = g.sizing.width
     g.sizing = nil
     g:SetScript("OnUpdate", nil)
+    if widthDrag then return true end                       -- the width is already saved, the corner held
     if f then
         db().scale = f:GetScale()
         local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
@@ -1306,6 +1344,10 @@ function RD.BuildGrip(f)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("RESIZE  " .. math.floor(f:GetScale() * 100 + 0.5) .. "%")
         GameTooltip:AddLine("Drag to make it bigger or smaller.  Right-click: back to 100%.  Out of a fight.", 1, 1, 1, true)
+        if RD.Deck() then
+            GameTooltip:AddLine("Shift + drag: wider or narrower - the boxes keep their size, more or fewer fit in a row.  "
+                                .. "Shift + right-click: its own width again.", 0.6, 0.9, 1, true)
+        end
         GameTooltip:Show()
     end)
     g:SetScript("OnLeave", function() glow(0.45) if GameTooltip then GameTooltip:Hide() end end)
@@ -1315,6 +1357,7 @@ function RD.BuildGrip(f)
         local l, t = f:GetLeft(), f:GetTop()
         if not (type(k) == "number" and type(l) == "number" and type(t) == "number") then return end
         local sx, sy = GetCursorPosition()
+        if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then return RD.StartWidthDrag(self, f, k, l, t, sx) end
         self.sizing = { scale = f:GetScale(), left = l * k, top = t * k, sx = sx, sy = sy }
         RD.ScaleAt(f, self.sizing.scale, self.sizing.left, self.sizing.top)   -- held by the top-left from here on
         self:SetScript("OnUpdate", function()
@@ -1328,6 +1371,7 @@ function RD.BuildGrip(f)
     g:SetScript("OnHide", function() RD.EndGrip() end)
     g:SetScript("OnClick", function(_, button)
         if button ~= "RightButton" or combat() then return end
+        if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then RD.SetDeckWidth(nil) RD.Arm() return end
         local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
         if type(k) == "number" and type(l) == "number" and type(t) == "number" then
             RD.ScaleAt(f, 1, l * k, t * k)
@@ -1595,6 +1639,25 @@ function RD.DiscView() return RD.FORCE_DISC == true end
 function RD.Compact() return RD.EngineerView() and RD.Deck() end
 --- The deck's sizes for the view on screen.
 function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
+
+--- The narrowest the boxes' area may be: the totem row's floor, less the window's two pads.
+function RD.FloorInner()
+    local C = RD.CON
+    local W = 2 * (C.pad + 4 + 2 * RD.TIMER_MIN + C.toolGap) + 3 * RD.SYS_PX + 2 * C.toolGap
+    return W - 2 * C.pad
+end
+--- The width the player dragged this view to (Shift + the corner grip), never under the floor; nil = the view's own.
+function RD.DeckWidth()
+    local t = db().deckW
+    local w = type(t) == "table" and tonumber(t[RD.Compact() and "eng" or "deck"]) or nil
+    if not w then return nil end
+    return math.max(RD.FloorInner(), math.floor(w + 0.5))
+end
+function RD.SetDeckWidth(w)
+    local d = db()
+    d.deckW = type(d.deckW) == "table" and d.deckW or {}
+    d.deckW[RD.Compact() and "eng" or "deck"] = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
+end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
 --- place, so the highest slot says how many must fit). Answers the class and its number.
@@ -2063,7 +2126,12 @@ RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip
 -- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
 RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22,
                   -- the 9:16 engineer (FG.EngPlace): one narrow width; a party's rows, then a raid's short ones
-                  w = 206, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10 }
+                  w = 218, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10,
+                  pw = 100, rw = 39 }                -- the box widths a wider drag keeps (party, raid)
+-- THE FLOOR (Arn, 15 Nov: "the minimum is that bottom row ... the four totems and the call recall"): the totem row -
+-- CALL / BRING / RECALL in the middle, two timers each side at least RD.TIMER_MIN wide (an icon and "5m") - is the
+-- narrowest the window goes; the mockup showed the timers overlapping below it
+RD.TIMER_MIN = 34
 RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
 RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
@@ -2302,10 +2370,11 @@ function RD.DeckLayout(T, order)
     local firstPet = #crew + 1
     for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
     local place
+    local dw = RD.DeckWidth()
     if RD.Compact() then
-        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M)
+        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
     else
-        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
+        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw)
     end
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
     local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD   -- under the deck's taller alert strip
