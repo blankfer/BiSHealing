@@ -1980,8 +1980,10 @@ function RD.DeckPlate(sp)
     return p
 end
 
---- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals at the top-left of
---- the box's middle, as a tracker tags a flight. Plain only - a hidden name shows nothing, never a guess.
+--- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals across the TOP
+--- of the whole box (Arn, 15 Nov: "run the name across the whole box" - in the middle alone it was "CHA..."); the box's
+--- icons sit under that line, so the name never covers them. Plain only - a hidden name shows nothing, never a guess.
+RD.DECK_NAME_BAND = 9                              -- the top line the name owns; the icons hang below it
 function RD.Callsign(unit)
     if type(unit) ~= "string" then return "" end
     local ok, n = pcall(GetUnitName, unit, false)
@@ -1991,9 +1993,10 @@ function RD.Callsign(unit)
 end
 function RD.DeckTag(sp, w)
     local t = sp.deckTag
+    local plate = RD.DeckPlate(sp)
     if not t then
-        t = CreateFrame("Frame", nil, sp.heal)
-        t:SetAllPoints(sp.heal)
+        t = CreateFrame("Frame", nil, plate)          -- on the plate: the whole box, not the middle alone (takes no click)
+        t:SetAllPoints(plate)
         t.text = t:CreateFontString(nil, "OVERLAY")
         t.text:SetFont(RD.DECK_TAG.font, RD.DECK_TAG.size, "OUTLINE")
         t.text:SetPoint("TOPLEFT", t, "TOPLEFT", 3, -2)
@@ -2002,7 +2005,7 @@ function RD.DeckTag(sp, w)
         t.text:SetTextColor(c[1], c[2], c[3], c[4])
         sp.deckTag = t
     end
-    t:SetFrameLevel(sp.heal:GetFrameLevel() + 2)            -- over the engineer's bar (pip + 1), under the icons (+ 3)
+    t:SetFrameLevel(sp.heal:GetFrameLevel() + 5)            -- over the bar and the icons (they sit below its line)
     if w then t.text:SetWidth(math.max(8, w - 6)) end
     t.text:SetText(RD.Callsign(sp.unit))
     t:Show()
@@ -2105,7 +2108,10 @@ function RD.DeckLayout(T, order)
         local sp = RD.spokes[i]
         if not (sp and r) then return end
         local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
-        local ks, cs = math.min(M.kick, r.h - 4), math.min(M.chip, r.h - 6)
+        -- the icons in the box's lower part, under the name's line across the top
+        local band = RD.DECK_NAME_BAND
+        local ks, cs = math.min(M.kick, r.h - band - 2), math.min(M.chip, r.h - band - 3)
+        local icy = y0 + r.y + band + (r.h - band) / 2
         local nc = #(sp.cures or {})
         local lw = (kick and sp.bogey) and (ks + 4) or 0          -- the left side: the kick's slot
         local rw = nc > 0 and (nc * (cs + 2) + 2) or 0           -- the right side: the cures' slots
@@ -2122,19 +2128,19 @@ function RD.DeckLayout(T, order)
         local lvl = sp.heal:GetFrameLevel()
         if kick and sp.bogey then
             sp.bogey:SetSize(ks, ks)
-            at(sp.bogey, left + 2 + ks / 2, cy)
+            at(sp.bogey, left + 2 + ks / 2, icy)
             sp.bogey:SetFrameLevel(lvl + 3)
         end
         local x = right - 2
         for _, c in ipairs(sp.cures or {}) do
             c.box:SetSize(cs, cs)
-            at(c.box, x - cs / 2, cy)
+            at(c.box, x - cs / 2, icy)
             c.box:SetFrameLevel(lvl + 3)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
             x = x - cs - 2
         end
-        RD.DeckTag(sp, mw)
+        RD.DeckTag(sp, r.w)                               -- the name across the whole box
     end
     for k = 1, nT do put(order[k], place.tanks[k], true) end
     for r, i in ipairs(crew) do put(i, place.rest[r], true) end

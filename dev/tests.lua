@@ -14860,6 +14860,11 @@ do
        "the warrior (no role named: the guess) is the tank row's long box", tankSp and tankSp.deckPlate and tankSp.deckPlate.__w)
     ok(tankSp and tankSp.deckTag and tankSp.deckTag.text.__text == "RAGEFANG",
        "its callsign on the box, like a flight tracker (Arn: \"puts names on the boxes\")", tankSp and tankSp.deckTag and tankSp.deckTag.text.__text)
+    local meSp
+    for _, sp in ipairs(RD.spokes) do if sp.unit == "player" then meSp = sp end end
+    ok(meSp and meSp.deckTag and meSp.deckTag.text.__w == meSp.deckPlate.__w - 6 and meSp.deckTag.text.__w > meSp.heal.__w,
+       "the name runs across the whole box, not the middle alone (Arn: \"run the name across the whole box\")",
+       meSp and meSp.deckTag and meSp.deckTag.text.__w)
     -- NOTHING CLICKABLE OVER THE MIDDLE (Arn: "the middle part of the healing frame cast the cure disease"): the kick on the
     -- left side, the cures on the right, the heal pip alone between them
     local function rect(fr)
