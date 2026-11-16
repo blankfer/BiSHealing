@@ -4592,8 +4592,17 @@ function RD.ShieldWash(button)
     -- THE STENCIL IS THE ICON NOW (15 Nov 2026): the buff's own icon, dim, inset a few pixels - so while it is up the button
     -- is that icon, quiet on the dark cover (nothing asking for a click); on the last charge the orange square under it
     -- shows only in the ring round it - an orange outline. (It was the symbol cut out of the plate: an orange symbol.)
-    local t = hole:CreateTexture(nil, "ARTWORK")
     local inset = RD.SHIELD_RING
+    -- A SOLID BACK UNDER THE ICON (16 Nov 2026, Arn: "the amber outline still covers the whole icon when it's one charge
+    -- left ... can we change the amber to an outline so it does not block the water shield icon"): the icon is dim, so the
+    -- orange square showed through it; on the plate's own dark the orange is left only in the ring round it - an outline
+    local back = hole:CreateTexture(nil, "BACKGROUND")
+    back:SetPoint("TOPLEFT", hole, "TOPLEFT", inset, -inset)
+    back:SetPoint("BOTTOMRIGHT", hole, "BOTTOMRIGHT", -inset, inset)
+    local P = RD.PLATE or { 0.05, 0.04, 0.09 }
+    back:SetColorTexture(P[1], P[2], P[3], 1)
+    RD.washBack = back
+    local t = hole:CreateTexture(nil, "ARTWORK")
     t:SetPoint("TOPLEFT", hole, "TOPLEFT", inset, -inset)
     t:SetPoint("BOTTOMRIGHT", hole, "BOTTOMRIGHT", -inset, inset)
     if t.SetTexCoord then t:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
@@ -4938,7 +4947,12 @@ function RD.PaintBuffDims()
         local left = RD.BuffLeft(sh.shieldName)
         if left and left > 0 then RD.washHole:SetVertexColor(1, 1, 1, RD.CascadeAlpha(left)) end
     end
-    if sh and sh.shieldName then RD.AttnSet(sh, RD.AttnLeft(RD.BuffLeft(sh.shieldName))) end   -- your shield: the same outline
+    -- your shield: the red box when it is missing (or nearly out of time); its LAST CHARGE has its own amber ring (the
+    -- client's square, RD.ShieldWash), so no time-based amber here on top of it
+    if sh and sh.shieldName then
+        local sl = RD.BuffLeft(sh.shieldName)
+        RD.AttnSet(sh, (sl == nil or sl <= RD.ATTN_RED_LEFT) and "red" or nil)
+    end
     return true
 end
 

@@ -15632,6 +15632,8 @@ do
             do
                 ok(RD.AttnLeft(nil) == "red" and RD.AttnLeft(0.05) == "red" and RD.AttnLeft(0.3) == "amber" and RD.AttnLeft(0.8) == nil,
                    "a buff: missing or under 10% red, under half amber, else none")
+                ok(not RD.washHole or (RD.washBack and RD.washBack.__layer ~= "ARTWORK"),
+                   "Water Shield's last charge: a solid back under the icon, so the orange is only the ring round it")
                 local b = RD.chaff or RD.tide
                 RD.LitAlpha(b, true)
                 ok(b.attn and b.attn:IsShown() and b.attn.edges[1].__vertex and b.attn.edges[1].__vertex[2] < 0.3, "an icon lit full: the red box")
