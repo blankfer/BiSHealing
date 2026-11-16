@@ -13307,8 +13307,13 @@ do
         RD.Look()
         ok(not chaffLit(), "a FRIENDLY target casting: nothing to ground")
         STATE.hostile.party1target = true
-        ok(RD.OnCast("player", 8177) == "chaff" and RD.readyAt.chaff == CLOCK + RD.COOLS.chaff and not chaffLit(),
-           "you drop Grounding Totem: dark at once, spent 15 s by our clock")
+        -- STANDING, IT SHOWS (Arn, 15 Nov: "when i drop grounding it does not show full bright with its duration sweep")
+        ok(RD.OnCast("player", 8177) == "chaff" and RD.readyAt.chaff == CLOCK + RD.COOLS.chaff and chaffLit() and RD.GroundUp(),
+           "you drop Grounding Totem: lit while it stands, its cooldown 15 s by our clock")
+        ok(RD.GroundSweep(c, true) == "up", "and the game's own air-slot timer runs its sweep")
+        TICK(RD.TOTEM_CAST_WINDOW + 0.5)
+        RD.TotemSlotChanged(RD.AIR_SLOT)                 -- it ate a spell: the air slot empties, in the fight
+        ok(not RD.GroundUp() and RD.GroundSweep(c, false) == "cooling", "it went (the air slot changed): its cooldown sweep instead")
         RD.Look()
         ok(not chaffLit(), "still casting, flare and chaff both spent: nothing to click")
         TICK(16)
@@ -14968,6 +14973,15 @@ do
        "the deck's tools: no square round each, one outline round the mana group")
     ok(RD.LitAlpha({ iconTex = 1 }, true) == 1 and RD.LitAlpha({ iconTex = 1 }, false) == RD.ICON_FADED
        and RD.LitAlpha({}, false) == 0, "an icon is very bright when needed, dim when not (a drawn sign: shown or not)")
+    do
+        local seen
+        local fake = { iconTex = 1, food = { SetDesaturated = function(_, v) seen = v end } }
+        RD.LitAlpha(fake, false)
+        local waiting = seen
+        RD.LitAlpha(fake, true)
+        ok(waiting == true and seen == false and RD.ICON_FADED <= 0.2,
+           "waiting: greyed and at a fifth; lit: full colour (Arn: \"grounding totem dimmed too like the food until needed\")")
+    end
     -- THE TOTEM TIMERS (Arn: "4 boxes ... 5:00 timer ... grey air blue water brown earth and red fire") and A CLICK DROPS
     -- IT AGAIN ("will it remember what [totem icon timer] and i click it will it be able to drop it")
     do

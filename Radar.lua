@@ -1941,7 +1941,10 @@ end
 
 --- A deck button's light: very bright when needed, dim otherwise (Arn: "dim and very bright when needed") - while it wears
 --- a real icon in the deck; anywhere else, as before: shown or not.
+--- DIMMER AND GREY WHILE IT WAITS (15 Nov 2026, Arn: "grounding totem dimmed too like the food until needed then bright"):
+--- at 30% a bright purple icon still read as lit. A waiting icon is RD.ICON_FADED (20%) and greyed; lit, full colour.
 function RD.LitAlpha(b, lit)
+    if b and b.food and b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, not lit) end
     if lit then return 1 end
     if RD.Deck and RD.Deck() and b and b.iconTex then return RD.ICON_FADED end
     return 0
@@ -3907,7 +3910,7 @@ function RD.FoodIcon(id) return RD.ItemIcon(RD.rations, id) end
 
 --- An item tool's icon, lit by the client like its pieces were: full where the tool's own curve says it helps (below
 --- `at` on your mana), faded above - white, so the icon keeps its own colours.
-RD.ICON_FADED = 0.3
+RD.ICON_FADED = 0.2                                  -- a waiting icon: clearly dim (Arn, 15 Nov)
 RD.iconCurves = {}
 function RD.IconCurve(at)
     at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.98))
@@ -4195,6 +4198,9 @@ function RD.TotemSlotChanged(slot, now)
     if type(slot) ~= "number" or slot < 1 or slot > 4 then return false end
     now = now or (GetTime and GetTime()) or 0
     RD.slotSeen[slot] = now
+    if slot == RD.AIR_SLOT then                      -- Grounding: down right after your cast of it, gone on any other change
+        RD.groundUp = RD.groundCastAt ~= nil and (now - RD.groundCastAt) <= RD.TOTEM_CAST_WINDOW
+    end
     local down = (now - RD.lastTotemCast) <= RD.TOTEM_CAST_WINDOW
     RD.slotUp[slot] = down
     if down then
@@ -4471,11 +4477,54 @@ function RD.PaintChaff(casting)
     local b = RD.chaff
     if not b then return false end
     if casting == nil then casting = RD.anyCast end
-    local lit = RD.ChaffLit(RD.inFight or combat(), casting)
+    local up = RD.GroundUp() and not RD.KnobOff("chaff")      -- its knob switches this light off too
+    local lit = up or RD.ChaffLit(RD.inFight or combat(), casting)
     local c = RD.CHAFF_COL
     for _, t in ipairs(b.pieces or {}) do t:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0) end
     b.face:SetAlpha(RD.LitAlpha(b, lit))
+    RD.GroundSweep(b, up)
     return lit
+end
+
+--[[ GROUNDING STANDING (15 Nov 2026, Arn: "when i drop grounding it does not show full bright with its duration sweep not
+  sure about the cooldown sweep"). While your Grounding Totem stands its button is lit, full colour, and the GAME's own
+  timer for the air slot (GetTotemDuration) runs a sweep across it; gone (it ate a spell, or ran out - the air slot's
+  change says so, in a fight too), it is dim with its cooldown (our own clock, from your cast) as the sweep, then waits
+  for the next enemy cast as before. ]]
+RD.AIR_SLOT, RD.GROUND_LIFE = 4, 45
+function RD.GroundUp(now)
+    now = now or (GetTime and GetTime()) or 0
+    return RD.groundUp == true and RD.groundCastAt ~= nil and (now - RD.groundCastAt) < RD.GROUND_LIFE
+end
+function RD.GroundSweep(b, up)
+    if not (b and b.face) then return false end
+    if not b.groundCd then
+        local ok, cd = pcall(CreateFrame, "Cooldown", nil, b.face, "CooldownFrameTemplate")
+        if not (ok and cd) then return false end
+        cd:SetAllPoints(b)
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
+        b.groundCd = cd
+    end
+    local cd, now = b.groundCd, (GetTime and GetTime()) or 0
+    if up then
+        local obj
+        if GetTotemDuration then
+            local ok, o = pcall(GetTotemDuration, RD.AIR_SLOT)
+            if ok then obj = o end
+        end
+        if obj and cd.SetCooldownFromDurationObject and pcall(cd.SetCooldownFromDurationObject, cd, obj) then return "up" end
+        if cd.SetCooldown then cd:SetCooldown(RD.groundCastAt, RD.GROUND_LIFE) end
+        return "up"
+    end
+    local ready, start = RD.readyAt.chaff or 0, RD.coolStart.chaff
+    if ready > now and start and cd.SetCooldown then
+        cd:SetCooldown(start, ready - start)
+        return "cooling"
+    end
+    if cd.Clear then cd:Clear() end
+    return false
 end
 
 --- THE COOLING DISCS, FROM OUR OWN CLOCK (8 Nov 2026, Arn: "this mana tide sweep shows up whenever i click anything"):
@@ -4572,6 +4621,7 @@ function RD.OnCast(unit, spellID)
     end
     if name and RD.chaff and name == RD.chaff.spell then
         RD.readyAt.chaff, RD.coolStart.chaff = now + (RD.cdLen.chaff or RD.COOLS.chaff), now
+        RD.groundCastAt, RD.groundUp = now, true        -- down from now (the air slot's change follows)
         RD.PaintChaff()
         return "chaff"
     end
@@ -5332,10 +5382,17 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     end
     if event == "PLAYER_TOTEM_UPDATE" and (RD.inFight or combat()) then
         if RD.TotemSlotChanged(a1) and RD.Active() then RD.PaintTotems() end   -- a fight: the slot number only
+        RD.PaintChaff()                                          -- Grounding: still standing, or gone
         return
     end
     if event == "PLAYER_TOTEM_UPDATE" then
         if RD.ReadTotems() ~= nil and RD.Active() then RD.PaintTotems() end   -- out of a fight only (plain slots)
+        -- out of a fight the air slot's own name says whether your Grounding stands, and since when
+        local okG, _, gname, gstart = pcall(GetTotemInfo, RD.AIR_SLOT)
+        gname, gstart = okG and plain(gname) or nil, okG and plain(gstart) or nil
+        RD.groundUp = (RD.chaff and RD.chaff.spell and gname == RD.chaff.spell) and true or false
+        if RD.groundUp and type(gstart) == "number" and gstart > 0 then RD.groundCastAt = gstart end
+        RD.PaintChaff()
         return
     end
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
