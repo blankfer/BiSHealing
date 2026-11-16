@@ -1962,7 +1962,10 @@ end
   outlined target box on top, then rows of five, then the tools row and the totems under them, the black box under all.
   The kick and the cures hang inside each box's right end, over the bar (their own clicks). Empty places are hidden: the
   deck grows down instead. Out of a fight only, like every layout here. ]]
-RD.DECK = { cell = 84, row = 24, tank = 40, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }   -- tank 40: the box's two cells stand 28 tall, not squished under its label (Arn, 15 Nov)
+-- TALLER, THE ICONS UNDER THE BAR (Arn, 15 Nov: "lets go taller and put the kick dispells under"): a box is the name's
+-- line on top, the health bar the whole width, and a row of icons under it (`icons` tall) - the kick at its left, the cures
+-- at its right. The tank row taller still, so the target box's two cells are not squished under its label.
+RD.DECK = { cell = 84, row = 38, tank = 50, gap = 3, boxIn = 2, boxTop = 10, chip = 12, kick = 12, icons = 14 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -1983,7 +1986,7 @@ end
 --- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals across the TOP
 --- of the whole box (Arn, 15 Nov: "run the name across the whole box" - in the middle alone it was "CHA..."); the box's
 --- icons sit under that line, so the name never covers them. Plain only - a hidden name shows nothing, never a guess.
-RD.DECK_NAME_BAND = 9                              -- the top line the name owns; the icons hang below it
+RD.DECK_NAME_BAND = 9                              -- the top line the name owns
 function RD.Callsign(unit)
     if type(unit) ~= "string" then return "" end
     local ok, n = pcall(GetUnitName, unit, false)
@@ -2099,29 +2102,25 @@ function RD.DeckLayout(T, order)
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
     local x0, y0 = (W - place.w) / 2, C.pad + C.head
     local placed = {}
-    -- THREE PARTS A BOX (15 Nov 2026, Arn: "the sides of the healing box works the middle its clicks" - "the middle part of
-    -- the healing frame cast the cure disease"): the kick and the cures are secure buttons that keep their click while
-    -- unseen (a secure button's mouse may not change in a fight), so laid over the bar they ate the heal. Now each box is a
-    -- plate with the KICK's slot on its LEFT side, the CURES' slots on its RIGHT side, and the heal pip - your binds, the
-    -- bar and the name - only in the MIDDLE between them. Nothing overlaps the middle.
+    -- THE ICONS UNDER THE BAR (15 Nov 2026). The kick and the cures are secure buttons that keep their click while unseen
+    -- (a secure button's mouse may not change in a fight) - laid over the bar they ate the heal (Arn: "the middle part of
+    -- the healing frame cast the cure disease"). First they went to the box's sides; then (Arn: "lets go taller and put the
+    -- kick dispells under") into a ROW UNDER THE BAR: the heal pip - your binds, the name, the bar - takes the box's whole
+    -- width above, the icon row the bottom `icons` px, the kick at its left, the cures at its right. Nothing overlaps.
     local function put(i, r, kick)
         local sp = RD.spokes[i]
         if not (sp and r) then return end
         local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
-        -- the icons in the box's lower part, under the name's line across the top
-        local band = RD.DECK_NAME_BAND
-        local ks, cs = math.min(M.kick, r.h - band - 2), math.min(M.chip, r.h - band - 3)
-        local icy = y0 + r.y + band + (r.h - band) / 2
-        local nc = #(sp.cures or {})
-        local lw = (kick and sp.bogey) and (ks + 4) or 0          -- the left side: the kick's slot
-        local rw = nc > 0 and (nc * (cs + 2) + 2) or 0           -- the right side: the cures' slots
+        local ih = M.icons
+        local ph = r.h - ih - 1                                   -- the pip: everything above the icon row
+        local ks, cs = math.min(M.kick, ih - 2), math.min(M.chip, ih - 2)
+        local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         local plate = RD.DeckPlate(sp)
         plate:SetSize(r.w, r.h)
         at(plate, left + r.w / 2, cy)
         plate:Show()
-        local mw = math.max(8, r.w - lw - rw)
-        sp.heal:SetSize(mw, r.h - 2)
-        at(sp.heal, left + lw + mw / 2, cy)
+        sp.heal:SetSize(r.w - 2, ph)
+        at(sp.heal, left + r.w / 2, y0 + r.y + 1 + ph / 2)
         sp.heal:Show()
         settle(sp)
         placed[i] = r

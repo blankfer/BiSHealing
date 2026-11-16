@@ -14862,30 +14862,33 @@ do
        "its callsign on the box, like a flight tracker (Arn: \"puts names on the boxes\")", tankSp and tankSp.deckTag and tankSp.deckTag.text.__text)
     local meSp
     for _, sp in ipairs(RD.spokes) do if sp.unit == "player" then meSp = sp end end
-    ok(meSp and meSp.deckTag and meSp.deckTag.text.__w == meSp.deckPlate.__w - 6 and meSp.deckTag.text.__w > meSp.heal.__w,
+    ok(meSp and meSp.deckTag and meSp.deckTag.text.__w == meSp.deckPlate.__w - 6,
        "the name runs across the whole box, not the middle alone (Arn: \"run the name across the whole box\")",
        meSp and meSp.deckTag and meSp.deckTag.text.__w)
     -- NOTHING CLICKABLE OVER THE MIDDLE (Arn: "the middle part of the healing frame cast the cure disease"): the kick on the
     -- left side, the cures on the right, the heal pip alone between them
-    local function rect(fr)
+    local function rect(fr)                       -- left, right, bottom, top (a CENTER point from the frame's top-left)
         local q = fr.points and fr.points[1]
         if not q then return nil end
-        return q[4] - fr.__w / 2, q[4] + fr.__w / 2
+        return q[4] - fr.__w / 2, q[4] + fr.__w / 2, q[5] - fr.__h / 2, q[5] + fr.__h / 2
     end
     local overlaps = 0
     for _, sp in ipairs(RD.spokes) do
         if sp.unit and sp.heal:IsShown() and sp.deckPlate then
-            local a1, a2 = rect(sp.heal)
+            local a1, a2, a3, a4 = rect(sp.heal)
             local takers = {}
             if sp.bogey and sp.bogey:IsShown() then takers[#takers + 1] = sp.bogey end
             for _, c in ipairs(sp.cures or {}) do takers[#takers + 1] = c.box end
             for _, t in ipairs(takers) do
-                local b1, b2 = rect(t)
-                if a1 and b1 and b1 < a2 and b2 > a1 then overlaps = overlaps + 1 end
+                local b1, b2, b3, b4 = rect(t)
+                if a1 and b1 and b1 < a2 and b2 > a1 and b3 < a4 and b4 > a3 then overlaps = overlaps + 1 end
             end
         end
     end
-    ok(overlaps == 0, "no kick or cure button lies over any box's middle: a click there is always your heal", overlaps)
+    ok(overlaps == 0, "no kick or cure button lies over the bar: a click there is always your heal", overlaps)
+    local under = tankSp and tankSp.bogey.points and tankSp.heal.points
+        and tankSp.bogey.points[1][5] < tankSp.heal.points[1][5] - tankSp.heal.__h / 2 + 1
+    ok(under, "the kick sits in the row under the bar (Arn: \"put the kick dispells under\")")
     ok(tankSp and tankSp.bogey:GetAttribute("unit") == "party1target" and tankSp.bogey.__w <= M.kick,
        "its kick square hangs inside its box: your interrupt at whatever it is fighting")
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
