@@ -199,6 +199,20 @@ function OV.Mod()
     return ""
 end
 
+--- `/bish alpha radar over`: the last hover's answer, and what each button holds and would heal for.
+function OV.Status()
+    local P = NS.Print or print
+    local lines = { string.format("overheal: mode %s, hover button %s, last hover %s, heal %s - %s", tostring(OV.Mode()),
+        tostring(OV.HoverSlot()), tostring(OV.lastUnit or "none"), tostring(OV.lastHeal or "none"), tostring(OV.lastWhy or "no hover yet")) }
+    for _, b in ipairs(OV.BUTTONS or {}) do
+        local cast = OV.BindFor(b[2], OV.Mod and OV.Mod() or "")
+        local ok, amt = pcall(OV.Judge, cast)
+        lines[#lines + 1] = string.format("  %s: %s -> %s", tostring(b[2]), tostring(cast or "nothing"), tostring(ok and amt or "error"))
+    end
+    for _, l in ipairs(lines) do P(l) end
+    return table.concat(lines, "\n")
+end
+
 --- The bind on a button + modifier when it is a spell of ours (never with Clique in charge, never a ping).
 function OV.BindFor(slotKey, mod)
     local FM = NS.FM
@@ -337,9 +351,12 @@ function OV.PaintHover()
     local RD = NS.RD
     local heal = RD and RD.On and RD.On() and sp.unit and OV.HoverHeal(OV.Mod()) or nil
     if NS.EN then NS.EN.Ghost(sp, heal) end              -- the engineer's box: your heal as a ghost after the incoming
-    if not heal or OV.Mode() == "off" then hideWord(o) OV.Listen(nil) return false end
+    OV.lastUnit, OV.lastHeal = sp.unit, heal
+    if OV.Mode() == "off" then OV.lastWhy = "the overheal word is off (/bish overword)" hideWord(o) OV.Listen(nil) return false end
+    if not heal then OV.lastWhy = "no heal found on your buttons to judge" hideWord(o) OV.Listen(nil) return false end
     o = OV.Build(sp)
-    if not OV.Hand(o, sp.unit, heal) then hideWord(o) OV.Listen(nil) return false end
+    if not OV.Hand(o, sp.unit, heal) then OV.lastWhy = "the game refused the missing health" hideWord(o) OV.Listen(nil) return false end
+    OV.lastWhy = "judged: OVER shows when more than " .. OV.Mode() .. " of it would be wasted"
     show(o)
     if OV.listening ~= sp.unit then OV.Listen(sp.unit) end
     return true

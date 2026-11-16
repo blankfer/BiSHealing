@@ -15491,6 +15491,7 @@ do
                 EN.LossPaint()
                 ok(cc.loss.word.__text == "NATURE LOCKED", "a plain school lockout: the school named", tostring(cc.loss.word.__text))
                 ok(RD.Command("cc"):find("loss of control:", 1, true), "/bish alpha radar cc: the readout")
+                ok(RD.Command("over"):find("overheal: mode", 1, true), "/bish alpha radar over: why the last hover lit OVER or not")
                 _G.C_LossOfControl = { GetActiveLossOfControlData = function() return { displayText = "Interrupted",
                     locType = secret(), startTime = secret(), duration = secret(), timeRemaining = secret() } end }
                 EN.LossPaint()

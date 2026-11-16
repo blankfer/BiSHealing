@@ -6516,6 +6516,7 @@ function RD.Command(rest)
     if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
     if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
+    if word == "over" and NS.OV and NS.OV.Status then return NS.OV.Status() end
     if word == "sw" then
         local k, v = arg:lower():match("^(%S*)%s*(%S*)$")
         if k == "" then return RD.ToggleSwitches() end
