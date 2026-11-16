@@ -15457,6 +15457,35 @@ do
             local tot = { unit = "targettarget", en = { box = CreateFrame("Frame") } }
             EN.PaintRange(tot)
             ok(tot.en.box.mayBeHostile == true, "its target: dimmed by range, but a plain enemy there stays bright")
+            -- "the enemy bar gets a health out line which makes me think i need to heal it": no warning edge on an enemy
+            do
+                local keepUCA = _G.UnitCanAttack
+                local function plateFor(u)
+                    local s = { unit = u }
+                    RD.DeckPlate(s):Show()
+                    return s
+                end
+                local ts = plateFor("target")
+                ok(RD.PaintOutline(ts) == false, "the target box: never the amber / red warning edge")
+                _G.UnitCanAttack = function() return true end
+                local es = plateFor("targettarget")
+                ok(RD.PaintOutline(es) == false, "its target, a plain enemy: no warning edge")
+                _G.UnitCanAttack = function() return secret() end
+                local keepTT, keepUHP = STATE.units.targettarget, _G.UnitHealthPercent
+                STATE.units.targettarget = true
+                _G.UnitHealthPercent = function() return { GetRGBA = function() return 1, 0.7, 0.2, 1 end } end
+                local hs = plateFor("targettarget")
+                local keepOC = RD.OutlineCurve
+                RD.OutlineCurve = function() return {} end
+                RD.PaintOutline(hs)
+                ok(hs.deckPlate.edgeHold.__alphaFromSecret == true, "a hidden enemy answer: the client decides the edge, never tested")
+                _G.UnitCanAttack = function() return false end
+                local fs = plateFor("targettarget")
+                RD.PaintOutline(fs)
+                ok(fs.deckPlate.edgeHold.__alphaFromSecret ~= true, "a friend there: the warning edge as before")
+                _G.UnitCanAttack, STATE.units.targettarget, _G.UnitHealthPercent = keepUCA, keepTT, keepUHP
+                RD.OutlineCurve = keepOC
+            end
             local bl = RD.Command("box")
             ok(type(bl) == "string" and bl:find("target box:", 1, true), "/bish alpha radar box: the target box's numbers", bl)
         end

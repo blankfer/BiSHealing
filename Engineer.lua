@@ -319,7 +319,8 @@ function EN.FoldClass(unit, c)
             code = (same == true) and "yes" or tostring(same)
         end
         seen[#seen + 1] = u .. "=" .. code
-        if ok and same == true then return cc[1], cc[2], cc[3] end
+        -- secret first, THEN compare (Arn's BugGrabber, 16 Nov: "attempt to compare local 'same' (a secret boolean")
+        if ok and not secret(same) and same == true then return cc[1], cc[2], cc[3] end
     end
     return r, g, b
 end

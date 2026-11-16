@@ -383,8 +383,23 @@ function RD.PaintOutline(sp)
     local p = sp and sp.deckPlate
     if not (p and p.edges and p:IsShown()) then return false end
     local D = RD.DIM
-    local function dim() for _, e in ipairs(p.edges) do e:SetVertexColor(D[1], D[2], D[3], D[4]) end return false end
+    local hold = p.edgeHold
+    local function dim()
+        for _, e in ipairs(p.edges) do e:SetVertexColor(D[1], D[2], D[3], D[4]) end
+        if hold then hold:SetAlpha(1) end
+        return false
+    end
     if not (sp.unit and RD.Deck()) then return dim() end
+    -- NO WARNING EDGE ON AN ENEMY (16 Nov 2026, Arn: "the enemy bar gets a health out line which makes me think i need to
+    -- heal it"): your target box never warns (a mob, most of the time); its target warns unless it is an enemy - a plain
+    -- answer decides, a secret one goes to the client (each edge's alpha from the boolean: enemy = no warning colour)
+    if sp.unit == "target" then return dim() end
+    local foe
+    if sp.unit == "targettarget" and UnitCanAttack then
+        local okH, h = pcall(UnitCanAttack, "player", sp.unit)
+        if okH then foe = h end
+        if foe ~= nil and not (NS.Secret and NS.Secret(foe)) and foe == true then return dim() end
+    end
     local okE, there = pcall(UnitExists, sp.unit)
     if okE and plain(there) == false then return dim() end
     local okD, dead = pcall(UnitIsDeadOrGhost, sp.unit)
@@ -393,6 +408,11 @@ function RD.PaintOutline(sp)
     local ok, col = false, nil
     if curve and UnitHealthPercent then ok, col = pcall(UnitHealthPercent, sp.unit, true, curve) end
     if not (ok and paint(p.edges, col)) then return dim() end
+    -- a hidden "is it an enemy": the client shows the warning edge only for a friend
+    local hidden = foe ~= nil and NS.Secret and NS.Secret(foe)
+    if hold then
+        if not (hidden and hold.SetAlphaFromBoolean and pcall(hold.SetAlphaFromBoolean, hold, foe, 0, 1)) then hold:SetAlpha(1) end
+    end
     return true
 end
 
@@ -2188,7 +2208,9 @@ function RD.DeckPlate(sp)
         p.bg = p:CreateTexture(nil, "BACKGROUND")
         p.bg:SetAllPoints(p)
         p.bg:SetColorTexture(0, 0, 0, 0.35)
-        p.edges = edge(p, RD.DIM, 1.5)
+        p.edgeHold = CreateFrame("Frame", nil, p)        -- the edges on their own frame: a hidden "enemy?" sets its alpha
+        p.edgeHold:SetAllPoints(p)
+        p.edges = edge(p.edgeHold, RD.DIM, 1.5)
         sp.deckPlate = p
     end
     return p
