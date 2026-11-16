@@ -15510,7 +15510,7 @@ do
             end
             -- THE MANA TIDE PING (Arn: "every time i drop it" - "a ping can be a ping")
             local tm = RD.TideMacro()
-            ok(tm:find("^/cast Mana Tide Totem\n/target Mana Tide Totem\n/ping %[@target,help,noparty,noraid%]%[@player%]")
+            ok(tm:find("^/cast Mana Tide Totem\n/target Mana Tide Totem\n/ping %[@target,help,noparty,noraid%]\n")
                and tm:find("\n/targetlasttarget [help,noparty,noraid]", 1, true) and not tm:find("assist", 1, true) and #tm < 255,
                "the Mana Tide click: drop it; the next click pings the standing totem (else you), then back to your target")
             do

@@ -4944,8 +4944,9 @@ RD.TIDE_SPEC = { spell = RD.TIDE, key = "tide", word = "MANA TIDE",
                  len = function() return (RD.cdLen and RD.cdLen.tide) or RD.COOLS.tide end }
 RD.TEST_SPEC = { spell = "Grounding Totem", key = "groundTest", word = "GROUNDING", life = 45, len = 15 }
 
+--- NO PING ON THE FIRST CLICK (Arn, 16 Nov: "dont need to ping first click"): only a standing totem, targeted, is pinged.
 function RD.TideMacroFor(spell)
-    return "/cast " .. spell .. "\n/target " .. spell .. "\n/ping [@target,help,noparty,noraid][@player]"
+    return "/cast " .. spell .. "\n/target " .. spell .. "\n/ping [@target,help,noparty,noraid]"
         .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]"
 end
 function RD.TideMacro() return RD.TideMacroFor(RD.TIDE) end
