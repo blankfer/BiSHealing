@@ -6206,6 +6206,66 @@ do
     ok(BOUND["MOUSEWHEELUP"] ~= nil and cell.__attrs["bis-wn"] == 0, "/bish wheel everywhere: a global binding again, and no hover map")
     NS.DO.wheel("frames")
     ok(BOUND["MOUSEWHEELUP"] == nil and cell.__attrs["bis-wn"] >= 1, "/bish wheel frames: back on our frames only")
+    -- THE PARTY FRAMES TOO (Arn, 15 Nov: "it used to carry the bishealing bind ... can we still make it work when its on a
+    -- party frame"): "frames" = our frames AND every unit frame - ClickCastFrames (EllesmereUI, VuhDo) and the game's own
+    do
+        local keepCCF, keepParty = rawget(_G, "ClickCastFrames"), rawget(_G, "PartyMemberFrame1")
+        local theirs = CreateFrame("Button", "EllesmereTestParty1", UIParent, "SecureUnitButtonTemplate")
+        local blizz = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        rawset(_G, "ClickCastFrames", { [theirs] = true })
+        rawset(_G, "PartyMemberFrame1", blizz)
+        FM.ApplyWheel(anchor)
+        ok((theirs.__attrs["bis-wn"] or 0) >= 1 and theirs.__attrs["bis-wb1"] == cell.__attrs["bis-wb1"],
+           "another addon's party frame (in ClickCastFrames) carries the wheel's map too", tostring(theirs.__attrs["bis-wn"]))
+        ok((blizz.__attrs["bis-wn"] or 0) >= 1, "and the game's own party frame")
+        ok(BOUND["MOUSEWHEELUP"] == nil, "still no binding over the world: the camera keeps the wheel there")
+        NS.DO.wheel("ours")
+        ok(theirs.__attrs["bis-wn"] == 0 and blizz.__attrs["bis-wn"] == 0 and cell.__attrs["bis-wn"] >= 1,
+           "/bish wheel ours: BiS Healing's frames only (1.5.1's way)")
+        NS.DO.wheel("frames")
+        ok(theirs.__attrs["bis-wn"] >= 1, "/bish wheel frames: the party frames again")
+        local fresh = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        ClickCastFrames[fresh] = true
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        ok((fresh.__attrs["bis-wn"] or 0) >= 1, "a frame another addon makes later (a new party member) takes it at the roster change")
+        ClickCastFrames[theirs] = nil
+        FM.WheelOthers()
+        ok(theirs.__attrs["bis-wn"] == 0, "a frame taken back out of ClickCastFrames keeps nothing of ours")
+        -- CLIQUE LOADED (Arn's probe, 15 Nov: "ERFPartyHeaderUnitButton1 nil nil"): ClickCastFrames is Clique's EMPTY
+        -- stand-in (core.lua CaptureGlobalRegistry - writes go to Clique, pairs finds nothing, reads answer nil); the frames
+        -- live on Clique.ccframes / Clique.hccframes. The plain table above was kinder than the client.
+        local keepClique = rawget(_G, "Clique")
+        local clique = { ccframes = {}, hccframes = {} }
+        rawset(_G, "Clique", clique)
+        rawset(_G, "ClickCastFrames", setmetatable({}, { __newindex = function(_, k, v) clique.ccframes[k] = (v ~= nil and v ~= false) or nil end }))
+        local erf = CreateFrame("Button", "ERFPartyHeaderUnitButton1", UIParent, "SecureUnitButtonTemplate")
+        local hdr = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        ClickCastFrames[erf] = true                                  -- EllesmereUI's hand-over, as it really goes
+        clique.hccframes["ERFRaidHeaderUnitButton1"] = hdr
+        ok(next(ClickCastFrames) == nil and ClickCastFrames[erf] == nil, "the stand-in looks empty, as in the game")
+        FM.WheelOthers()
+        ok((erf.__attrs["bis-wn"] or 0) >= 1 and erf.__attrs["bis-wb1"] == cell.__attrs["bis-wb1"],
+           "with Clique loaded, Ellesmere's party frame still carries the wheel's map (read off Clique.ccframes)",
+           tostring(erf.__attrs["bis-wn"]))
+        ok((hdr.__attrs["bis-wn"] or 0) >= 1, "and a header frame Clique keeps by name (Clique.hccframes)")
+        ok((theirs.__attrs["bis-wn"] or 0) == 0, "a frame on neither list still keeps nothing of ours")
+        -- a frame made a moment after the roster change gets the second look
+        local late = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        local keepTimer, queued = rawget(_G, "C_Timer"), {}
+        rawset(_G, "C_Timer", { After = function(s, fn) queued[#queued + 1] = { s, fn } end })
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        ok(#queued == 1 and queued[1][1] == FM.WHEEL_LATER, "a roster change asks for ONE second look a moment later", tostring(#queued))
+        ClickCastFrames[late] = true
+        ok((late.__attrs["bis-wn"] or 0) == 0, "not armed before the second look")
+        queued[1][2]()
+        ok((late.__attrs["bis-wn"] or 0) >= 1 and FM.wheelLater == nil, "the second look arms the frame made late")
+        rawset(_G, "C_Timer", keepTimer)
+        rawset(_G, "Clique", keepClique)
+        rawset(_G, "ClickCastFrames", keepCCF)
+        rawset(_G, "PartyMemberFrame1", keepParty)
+        FM.WheelOthers()
+    end
     local wheelBtn = _G["BiSHealWheelwheelup"]
     ok(wheelBtn and wheelBtn.__attrs["macrotext"]
        and wheelBtn.__attrs["macrotext"]:find("[@mouseover] Lesser Healing Wave", 1, true) ~= nil,
@@ -12743,6 +12803,18 @@ do
         ok(select(2, o.bar:GetMinMaxValues()) == MISS2, "their health moves while you hover: handed again")
         sp2.heal.__scripts.OnLeave(sp2.heal)
         ok(not o.win.__shown and OV.listening == nil, "the mouse leaves: the word goes, nobody listened to")
+        -- GAMEPAD (15 Nov audit): the flash's C_Timer reaches OV.Listen, and Forever says "blocked" to a (un)register from
+        -- a timer while the gamepad UI is on - so listening never touches the event list; both are registered at load
+        do
+            local touched = 0
+            local keep = { OV.events.RegisterEvent, OV.events.UnregisterEvent, OV.events.RegisterUnitEvent }
+            OV.events.RegisterEvent = function() touched = touched + 1 end
+            OV.events.UnregisterEvent = function() touched = touched + 1 end
+            OV.events.RegisterUnitEvent = function() touched = touched + 1 end
+            OV.Listen("party1") OV.Listen(nil)
+            OV.events.RegisterEvent, OV.events.UnregisterEvent, OV.events.RegisterUnitEvent = keep[1], keep[2], keep[3]
+            ok(touched == 0, "listening to a unit never (un)registers an event (gamepad: no 'blocked' from the flash's timer)", touched)
+        end
         -- THE CLICK: measured at the click, shown when the cast starts, held still
         sp2.heal.__scripts.OnEnter(sp2.heal)
         local CLICKED = secret()

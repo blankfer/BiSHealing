@@ -1243,10 +1243,16 @@ local wheelButtons = {}
     "frames" (the default) - bound only while the mouse is over one of OUR frames (grid cells, PvP cells, radar pips and
       pets): each is wrapped by a secure handler whose OnEnter sets the wheel's bindings on that frame and OnLeave / OnHide
       clears them (FM.WheelArm, Clique's road - it runs in a fight too); everywhere else the wheel zooms the camera.
-    "everywhere" - the old way, over any unit frame of any addon (and the camera loses the wheel). `/bish wheel`. ]]
+    "everywhere" - the old way, over any unit frame of any addon (and the camera loses the wheel). `/bish wheel`.
+  15 Nov 2026 (Arn: "it used to carry the bishealing bind ... can we still make it work when its on a party frame"):
+    "frames" (still the default) now means OUR frames AND every unit frame - the shared ClickCastFrames list (EllesmereUI,
+      VuhDo, oUF frames put theirs there) and the game's own unit frames (FM.WHEEL_BLIZZARD) - the same hover road, so
+      the wheel heals over any party frame and zooms the camera over the world. (FM.WheelOthers)
+    "ours" - BiS Healing's frames only (what 1.5.1 did). ]]
 function FM.WheelWhere()
     local d = db()
-    return (d and d.wheelWhere == "everywhere") and "everywhere" or "frames"
+    local w = d and d.wheelWhere
+    return (w == "everywhere" or w == "ours") and w or "frames"
 end
 
 FM.WHEEL_ENTER = [[
@@ -1260,7 +1266,8 @@ FM.WHEEL_LEAVE = [[ self:ClearBindings() ]]
 FM.wheelMap, FM.wheelCells = {}, {}
 
 --- One of our frames takes the wheel while the mouse is over it: wrapped once (out of a fight), then handed this map.
-function FM.WheelArm(cell)
+--- `foreign` = another addon's (or the game's) unit frame: armed only while the setting is "frames".
+function FM.WheelArm(cell, foreign)
     if not cell or (InCombatLockdown and InCombatLockdown()) or not cell.SetAttribute then return false end
     if not FM.wheelHeader and CreateFrame then
         local ok, h = pcall(CreateFrame, "Frame", "BiSHealingWheelHeader", UIParent, "SecureHandlerBaseTemplate")
@@ -1275,7 +1282,9 @@ function FM.WheelArm(cell)
             FM.wheelCells[cell] = true
         end
     end
-    local map = (FM.WheelWhere() == "frames" and not FM.CliqueOn()) and FM.wheelMap or {}
+    local where = FM.WheelWhere()
+    local on = (where == "frames" or (where == "ours" and not foreign)) and not FM.CliqueOn()
+    local map = on and FM.wheelMap or {}
     local was = tonumber(cell:GetAttribute("bis-wn")) or 0
     for i, e in ipairs(map) do
         cell:SetAttribute("bis-wk" .. i, e.key)
@@ -1286,13 +1295,82 @@ function FM.WheelArm(cell)
     return true
 end
 
+--- THE OTHER UNIT FRAMES (15 Nov 2026): every frame in the shared ClickCastFrames list, and the game's own unit frames,
+--- take the wheel on hover too (setting "frames"). Out of a fight only; frames already wrapped are only re-handed the
+--- map when `all`. A frame another addon took back out of ClickCastFrames (EllesmereUI does, when its own click-casting
+--- is on) is handed an empty map. The game's frames are skipped while its gamepad UI is on (solved.md: no hooks on
+--- Blizzard frames then).
+FM.WHEEL_BLIZZARD = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" }
+for i = 1, 4 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "PartyMemberFrame" .. i end
+for i = 1, 5 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "CompactPartyFrameMember" .. i end
+for i = 1, 40 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "CompactRaidFrame" .. i end
+FM.wheelForeign = {}
+FM.WHEEL_LATER = 1                                  -- s after a roster change: the second look for late-made frames
+
+-- (BiS Memories' ns.Gamepad: C_GamePad.IsEnabled is on both censuses; C_InputInterfaceStyle on neither)
+local function gamepadUI()
+    local G = _G.C_GamePad
+    if not (G and G.IsEnabled) then return false end
+    local ok, on = pcall(G.IsEnabled)
+    return ok and on == true
+end
+
+local function armable(f)
+    if type(f) ~= "table" or not f.SetAttribute or not f.GetAttribute then return false end
+    if f.IsForbidden then
+        local ok, no = pcall(f.IsForbidden, f)
+        if not ok or no then return false end
+    end
+    return true
+end
+
+function FM.WheelOthers(all)
+    if InCombatLockdown and InCombatLockdown() then return 0 end
+    local want = {}
+    local function consider(f)
+        if armable(f) and not (FM.wheelCells[f] and not FM.wheelForeign[f]) then want[f] = true end
+    end
+    if type(ClickCastFrames) == "table" then
+        for f, v in pairs(ClickCastFrames) do if v then consider(f) end end
+    end
+    -- CLIQUE HOLDS THE LIST (15 Nov 2026, Arn's probe over an Ellesmere party frame: "ERFPartyHeaderUnitButton1 nil nil").
+    -- With Clique loaded - even unused - ClickCastFrames is an EMPTY stand-in whose writes go to Clique (Clique 5.1
+    -- core.lua CaptureGlobalRegistry): pairs() finds nothing and a read answers nil, so every frame EllesmereUI (or VuhDo,
+    -- oUF) handed over was invisible here. Clique keeps them on its public addon table: `ccframes` (frame -> true) and
+    -- `hccframes` (name -> button, frames that came through a secure header). Read only, never written.
+    local C = rawget(_G, "Clique")
+    if type(C) == "table" then
+        if type(C.ccframes) == "table" then for f, v in pairs(C.ccframes) do if v then consider(f) end end end
+        if type(C.hccframes) == "table" then for _, f in pairs(C.hccframes) do consider(f) end end
+    end
+    if not gamepadUI() then
+        for _, name in ipairs(FM.WHEEL_BLIZZARD) do consider(_G[name]) end
+    end
+    local n = 0
+    for f in pairs(want) do
+        if all or not FM.wheelForeign[f] then
+            FM.wheelForeign[f] = true
+            if FM.WheelArm(f, true) then n = n + 1 end
+        end
+    end
+    for f in pairs(FM.wheelForeign) do                  -- taken back out: nothing of ours stays on it
+        if not want[f] then
+            FM.wheelForeign[f] = nil
+            local was = tonumber(f:GetAttribute("bis-wn")) or 0
+            for i = 1, was do f:SetAttribute("bis-wk" .. i, nil) f:SetAttribute("bis-wb" .. i, nil) end
+            if was > 0 then f:SetAttribute("bis-wn", 0) end
+        end
+    end
+    return n
+end
+
 function FM.ApplyWheel(owner)
     if InCombatLockdown and InCombatLockdown() then return false end
     owner = owner or (NS.FG and NS.FG.anchor) or UIParent
     if ClearOverrideBindings then pcall(ClearOverrideBindings, owner) end
     FM.wheelMap = {}
     if FM.CliqueOn() then                          -- Clique owns the wheel too: let it go
-        for cell in pairs(FM.wheelCells) do FM.WheelArm(cell) end
+        for cell in pairs(FM.wheelCells) do FM.WheelArm(cell, FM.wheelForeign[cell]) end
         return true, 0
     end
     local everywhere = FM.WheelWhere() == "everywhere"
@@ -1364,8 +1442,9 @@ function FM.ApplyWheel(owner)
             end
         end
     end
-    -- our frames only: every frame we have wrapped takes the new map (new frames take it in FM.ApplyTo)
-    for cell in pairs(FM.wheelCells) do FM.WheelArm(cell) end
+    -- every frame we have wrapped takes the new map (our new frames take it in FM.ApplyTo); the other unit frames too
+    for cell in pairs(FM.wheelCells) do FM.WheelArm(cell, FM.wheelForeign[cell]) end
+    FM.WheelOthers(true)
     return true, n
 end
 
@@ -1403,7 +1482,19 @@ end
 FM.resEvents = CreateFrame("Frame")
 FM.resEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
 FM.resEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+pcall(FM.resEvents.RegisterEvent, FM.resEvents, "GROUP_ROSTER_UPDATE")   -- (new unit frames take the wheel's hover)
 FM.resEvents:SetScript("OnEvent", function(_, event)
+    if event == "GROUP_ROSTER_UPDATE" then
+        FM.WheelOthers()                                -- another addon's new frames take the wheel (out of a fight)
+        -- and once more a moment later: a group header makes its new button AFTER this event reaches us, and nothing else
+        -- would look again until the next fight ended. One look per burst of roster changes (the flag), no event touched.
+        if not FM.wheelLater and C_Timer and C_Timer.After then
+            FM.wheelLater = true
+            C_Timer.After(FM.WHEEL_LATER, function() FM.wheelLater = nil FM.WheelOthers() end)
+        end
+        return
+    end
+    if event == "PLAYER_REGEN_ENABLED" then FM.WheelOthers() end
     if event == "PLAYER_REGEN_DISABLED" then
         FM.fighting = true
         for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do
