@@ -80,16 +80,16 @@ RD.GAUGE_RAIL_H = 44                               -- the readout box, the tape,
 --   bracket  the corner brackets (`be` long, `bw` thick)        accent   the centre mark, the readout, the ship's name
 --   fuel     your mana on the tape                              track    the tape's empty groove
 RD.SHIPS = {
-    { key = "fighter", name = "FIGHTER", upTo = 5,
+    { key = "fighter", name = "PARTY", upTo = 5,
       plate = { 0.035, 0.015, 0.060 }, line = { 0.82, 0.38, 1.00 }, bracket = { 0.97, 0.93, 1.00 }, be = 18, bw = 2,
       accent = { 1.00, 0.45, 0.92 }, fuel = { 0.88, 0.56, 1.00, 0.95 }, track = { 0.10, 0.04, 0.16, 0.9 } },
-    { key = "gunship", name = "GUNSHIP", upTo = 10,
+    { key = "gunship", name = "RAID 10", upTo = 10,
       plate = { 0.035, 0.025, 0.070 }, line = { 0.64, 0.52, 1.00 }, bracket = { 1.00, 1.00, 1.00 }, be = 22, bw = 2,
       accent = { 0.82, 0.64, 1.00 }, fuel = { 0.80, 0.72, 1.00, 0.95 }, track = { 0.08, 0.06, 0.17, 0.9 } },
-    { key = "cruiser", name = "CRUISER", upTo = 20,
+    { key = "cruiser", name = "RAID 20", upTo = 20,
       plate = { 0.045, 0.045, 0.060 }, line = { 0.60, 0.64, 0.75 }, bracket = { 1.00, 1.00, 1.00 }, be = 28, bw = 2,
       accent = { 0.70, 0.44, 1.00 }, fuel = { 0.88, 0.90, 0.97, 0.95 }, track = { 0.10, 0.10, 0.14, 0.9 } },
-    { key = "capital", name = "CAPITAL", upTo = 40,
+    { key = "capital", name = "RAID 40", upTo = 40,
       plate = { 0.060, 0.062, 0.072 }, line = { 0.84, 0.86, 0.91 }, bracket = { 1.00, 1.00, 1.00 }, be = 34, bw = 3,
       accent = { 0.64, 0.40, 0.96 }, fuel = { 0.96, 0.96, 0.99, 0.95 }, track = { 0.13, 0.13, 0.16, 0.9 } },
 }
@@ -1105,7 +1105,7 @@ local function buildGauge(f)
         w:SetScript("OnEnter", function()
             if not GameTooltip then return end
             GameTooltip:SetOwner(RD.gaugeRail or g, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("FUEL")
+            GameTooltip:AddLine("MANA")      -- plain words, never the old flight words (Arn, 15 Nov: "call it what it is now")
             for _, l in ipairs(RD.FuelTip()) do GameTooltip:AddLine(l, 1, 1, 1, true) end
             GameTooltip:Show()
         end)
@@ -1129,7 +1129,7 @@ local function buildGauge(f)
     g.role:SetTextColor(1, 1, 1)
     g.ship = word(RD.SHIPS[1].name)
     g.ship:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -17)
-    g.fuelWord = word("FUEL")
+    g.fuelWord = word("MANA")
     g.fuelWord:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -29)
     RD.SizeGauge(RD.SIZE)
     return g
@@ -1380,12 +1380,12 @@ RD.CON = { pad = 8, colW = 39, ph = 18, sq = 26, cure = 12, pb = 18, pet = 18, g
   The view button steps radar -> fighter -> gunship -> cruiser -> capital -> radar, in any group (a preview: the empty
   places are empty squares, on the edge); a group too big for a class skips it. ]]
 RD.CON_TIERS = {
-    { n = 5,  ship = 1, name = "FIGHTER" },
+    { n = 5,  ship = 1, name = "PARTY" },
     -- TIDY (Arn, 11 Nov, three screenshots: "lets clean it up at least"): a full rectangle, one square size a class,
     -- the rank from the centre out within it; the bands told by brightness, not size
-    { n = 10, ship = 2, name = "GUNSHIP", cols = 5, rows = 2, sq = 26, ph = 17, colW = 41, rowGap = 6, chip = 9, kick = 22, pet = 18 },
-    { n = 20, ship = 3, name = "CRUISER", cols = 5, rows = 4, sq = 24, ph = 16, colW = 44, rowGap = 5, chip = 8, kick = 22, pet = 18 },
-    { n = 40, ship = 4, name = "CAPITAL", cols = 8, rows = 5, sq = 22, ph = 14, colW = 30, rowGap = 5, chip = 8, kick = 22, pet = 18 },
+    { n = 10, ship = 2, name = "RAID 10", cols = 5, rows = 2, sq = 26, ph = 17, colW = 41, rowGap = 6, chip = 9, kick = 22, pet = 18 },
+    { n = 20, ship = 3, name = "RAID 20", cols = 5, rows = 4, sq = 24, ph = 16, colW = 44, rowGap = 5, chip = 8, kick = 22, pet = 18 },
+    { n = 40, ship = 4, name = "RAID 40", cols = 8, rows = 5, sq = 22, ph = 14, colW = 30, rowGap = 5, chip = 8, kick = 22, pet = 18 },
 }
 
 --[[ THE RADAR'S SHIPS (11 Nov 2026, Arn: "i want you to reimage the radar screen, for 10 20 40 we already have the 5 version
@@ -1962,7 +1962,7 @@ end
   outlined target box on top, then rows of five, then the tools row and the totems under them, the black box under all.
   The kick and the cures hang inside each box's right end, over the bar (their own clicks). Empty places are hidden: the
   deck grows down instead. Out of a fight only, like every layout here. ]]
-RD.DECK = { cell = 84, row = 24, tank = 32, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }
+RD.DECK = { cell = 84, row = 24, tank = 40, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }   -- tank 40: the box's two cells stand 28 tall, not squished under its label (Arn, 15 Nov)
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -2307,8 +2307,8 @@ function RD.PaintViewButton()
         for j, t in ipairs(c.dots) do t:SetAlpha(j <= k and 1 or 0.18) end
         local nk = k % #RD.CON_TIERS + 1
         local nT = RD.CON_TIERS[nk]
-        c.tip = { T.name .. " (" .. T.n .. ")", "Click: " .. nT.name .. " (" .. nT.n .. ") - the next class of ship, in any "
-                  .. "group (a preview; a class too small for your group is skipped).  Out of a fight." }
+        c.tip = { T.name, "Click: " .. nT.name .. " - the next group size, in any group (a preview; a size too small "
+                  .. "for your group is skipped).  Out of a fight." }
     end
 end
 
@@ -3408,7 +3408,7 @@ local function armShield()
         b.plate:SetTexture(RD.WHITE)
         b.plate:SetVertexColor(RD.PLATE[1], RD.PLATE[2], RD.PLATE[3], 1)
     end
-    b.tip = { "STABILIZER", name .. " - click to cast it.  Dim green: on you.  Orange: the last charge.  Red: gone." }
+    b.tip = { name:upper(), "Click to cast it.  Dim green: on you.  Orange: the last charge.  Red: gone." }
     b.face:SetAlpha(1)
     if not b.breath and b.face.CreateAnimationGroup then
         local okA, g = pcall(b.face.CreateAnimationGroup, b.face)
@@ -3618,7 +3618,7 @@ function RD.ArmTools()
     RD.fuel.item = drink
     armTool(RD.fuel, drink and ("/use item:" .. drink) or nil, itemWords(drink), "DRINK", "the best drink in your bags")
     local spring = FM and FM.Ranks and #FM.Ranks(RD.SPRING) > 0
-    armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "RESERVE TANK",
+    armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "MANA SPRING",
             RD.SPRING .. " - the last resort: lights only when Mana Tide and your potion are spent (or not here)")
     -- the potion's use-spell, so our own clock knows it when you drink one in a fight
     local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
@@ -3656,8 +3656,8 @@ function RD.ArmChaff()
     b:SetAttribute("*macrotext1", macro)
     b:EnableMouse(macro and true or false)
     b.macro, b.spell = macro, spell
-    b.tip = spell and { "CHAFF", spell .. " - the catch-all: lights when an enemy on the radar casts and your interrupt "
-                        .. "(the flare on its bogey) is cooling.  No target needed." } or nil
+    b.tip = spell and { spell:upper(), "The catch-all: lights when an enemy casts and your interrupt is cooling.  "
+                        .. "No target needed." } or nil
     if RD.defRail then
         -- ALWAYS SHOWN (Arn, 10 Nov: "lets always show the full square rail even if there is nothing there"): the
         -- panel is a closed square whether the chaff or the res is in it or not. ON THE RADAR ONLY (11 Nov, the
@@ -4682,11 +4682,12 @@ function RD.FuelTip()
     local FR = NS.FR
     local who = RD.fuelUnit == "boss1" and "the boss" or (RD.fuelUnit == "target" and "your target, when it is hostile")
                 or "nothing - no boss, no hostile target"
+    -- plain words (Arn, 15 Nov: "remove references to airplane stuff like fuel chaff call it what it is now")
     return {
-        "The bright bar: your mana, filling left to right.  Red past it: the boss's health you are behind by.  Magenta mark: the boss.",
-        ("Hot pulsing band: BINGO - the boss more than %d%% ahead of your mana.  Drink, potion, Mana Tide (the column)."):format(RD.BINGO * 100),
-        "RAMJET, at the right end: the % is your mana regen now (100% out of a fight).  The five dashes: seconds left of the five second rule - lay off the throttle (hold your casts) till they are gone and the ramjet kicks in, 100%.  The cyan chevron: the ramjet running (dim: only your while-casting share).",
-        "Racing: " .. who .. ".  " .. ((FR and FR.Text) and FR.Text() or ""),
+        "The bright bar: your mana, filling left to right.  Red past it: how far the boss's health is ahead of your mana.  Magenta mark: the boss.",
+        ("Pulsing band: the boss is more than %d%% ahead of your mana - drink, potion, Mana Tide."):format(RD.BINGO * 100),
+        "At the right end: your mana regen now (100% out of a fight).  The five dashes: seconds left of the five-second rule - hold your casts till they are gone and your full regen comes back.  The cyan arrow: regen running (dim: only your while-casting share).",
+        "Compared with: " .. who .. ".  " .. ((FR and FR.Text) and FR.Text() or ""),
     }
 end
 
@@ -4884,7 +4885,7 @@ function RD.Command(rest)
             if not (b and b.macro) then return name .. " none" end
             return ("%s %s%%%s"):format(name, math.floor((b.at or 0) * 100 + 0.5), b.guess and " (guess)" or "")
         end
-        P("radar fuel: racing %s.  lights at: %s, %s, %s", RD.fuelUnit or "nothing", tool(RD.tide, "tide"),
+        P("mana bar: compared with %s.  lights at: %s, %s, %s", RD.fuelUnit or "nothing", tool(RD.tide, "tide"),
           tool(RD.potion, "potion"), tool(RD.fuel, "drink"))
         -- THE SHIELD PIP, SAID PLAINLY (Arn, 8 Nov: "no water shield icon"): what it watches, whether the client took the
         -- marker, and what it last handed over - so the next screenshot says which part is missing

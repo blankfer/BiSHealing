@@ -4232,7 +4232,7 @@ end
 -- THE FLIGHT DECK, a test feature (dev/FLIGHTDECK.md): starts OFF (FG.DeckOn), `/bish alpha deck on` to try it. It is a
 -- view of the radar (the radar look): moving the switch re-arms the radar, which lays itself out as the deck or not.
 if NS.AlphaFeature then
-    NS.AlphaFeature{ key = "deck", name = "the flight deck", startsOff = true,
+    NS.AlphaFeature{ key = "deck", name = "the deck", startsOff = true,
         desc = "the radar's replacement, being built (radar look): tank row + target box, then rows of five",
         apply = function()
             if InCombatLockdown and InCombatLockdown() then return end

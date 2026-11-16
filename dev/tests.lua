@@ -12089,7 +12089,7 @@ do
         STATE.inCombat = true
         ok(RD.ToggleView() == nil and not RD.Console(), "in a fight: refused (secure buttons)")
         STATE.inCombat = false
-        ok(RD.ToggleView() == "console" and RD.Console() and d.radar.view == "console" and RD.ConsoleTier().name == "FIGHTER",
+        ok(RD.ToggleView() == "console" and RD.Console() and d.radar.view == "console" and RD.ConsoleTier().name == "PARTY",
            "a click: the engineer's view, the fighter (a party)")
         local G = RD.conGrid
         ok(G and f:GetWidth() == G.W and f:GetHeight() == G.H and G.W < W0, "the square shrinks to the console's grid", G and G.W)
@@ -12281,7 +12281,7 @@ do
         -- THE SHIPS (Arn, 11 Nov: "upgrading ships to the next class ... let me click them even if i am not in that size
         -- party or raid, only go bigger 5-10%"): each class a hull only a little wider, rows folded, from the centre out
         local widths = { f:GetWidth() }
-        for _, want in ipairs({ "GUNSHIP", "CRUISER", "CAPITAL" }) do
+        for _, want in ipairs({ "RAID 10", "RAID 20", "RAID 40" }) do
             ok(RD.NextClass() == want and RD.ship == RD.SHIPS[RD.ConsoleTier().ship], "the class button: the " .. want .. ", in its colours")
             widths[#widths + 1] = f:GetWidth()
             local grow = widths[#widths] / widths[#widths - 1]
@@ -12425,7 +12425,7 @@ do
             RD.Arm()
         end
         ok(RD.classBtn.dots[4].__alpha == 1, "on the capital all four of the class button's dots are lit")
-        ok(RD.NextClass() == "FIGHTER" and RD.ConsoleTier().n == 5, "and round again to the fighter (a party fits it)")
+        ok(RD.NextClass() == "PARTY" and RD.ConsoleTier().n == 5, "and round again to the fighter (a party fits it)")
         ok(RD.ToggleView() == "radar" and not RD.Console(), "the view button again: the radar")
         local hx = RD.shield.points[1]
         ok(hx and hx[2] == RD.toolRail and RD.toolRail:IsShown() and RD.scope:IsShown() and not RD.conLayer:IsShown(),
@@ -12436,7 +12436,7 @@ do
         -- button - rings by rank round you, the scope only 7-8% bigger a class
         do
             local sizes = { W0 }
-            for _, want in ipairs({ "GUNSHIP", "CRUISER", "CAPITAL" }) do
+            for _, want in ipairs({ "RAID 10", "RAID 20", "RAID 40" }) do
                 ok(RD.NextClass() == want and not RD.Console(), "the class button on the radar: the " .. want)
                 local T = RD.ConsoleTier()
                 sizes[#sizes + 1] = f:GetWidth()
@@ -12457,7 +12457,7 @@ do
                 for _, t in ipairs(RD.seats) do if t:IsShown() then seats = seats + 1 end end
                 ok(seats == T.n and RD.seatFrame:GetAlpha() == 1, want .. ": a faint dot at every place, out of a fight", seats)
             end
-            ok(RD.NextClass() == "FIGHTER" and f:GetWidth() == W0 and #RD.slots == 5, "round again: the party radar as it was")
+            ok(RD.NextClass() == "PARTY" and f:GetWidth() == W0 and #RD.slots == 5, "round again: the party radar as it was")
             ok(RD.innerRings[1]:IsShown() and not RD.ringFrame:IsShown(), "the party's own rings back")
             STATE.inCombat = true
             fire(RD.events, "PLAYER_REGEN_DISABLED")
@@ -12506,7 +12506,7 @@ do
     ok(names == 0, "no names, no words on the scope (digits only: the HUD tape's numbers, the regen %)", names)
     -- THE PLACARD (Arn 9 Nov: "lets not do rpm"): the ship and FUEL, on the top rail - never on the scope
     ok(RD.gauge.ship.__parent == RD.gaugeRail and RD.gauge.fuelWord.__parent == RD.gaugeRail
-       and RD.gauge.ship.__text == "FIGHTER" and RD.gauge.fuelWord.__text == "FUEL",
+       and RD.gauge.ship.__text == "PARTY" and RD.gauge.fuelWord.__text == "MANA",
        "the top rail's placard: FIGHTER over FUEL (a party flies the fighter)", RD.gauge.ship.__text)
     -- YOUR ROLE ON IT (Arn 9 Nov: "lets add our role here Healer, DPS, Tank"): over the ship, from the group's role
     do
@@ -12565,7 +12565,7 @@ do
         ok(#RD.meLines >= 2 and RD.meRole == RD.Role("player") and me and me.__kind ~= "Line"
            and me.__vertex and math.abs(me.__vertex[1] - cap.accent[1]) < 1e-9 and me.__vertex[4] == 0 and RD.ME_ALPHA == 0,
            "you in the middle: no standing sign (Arn, 10 Nov: only your heal pip, lit when you need it)", #RD.meLines)
-        ok(same(RD.gauge.mana.__color, cap.fuel) and RD.gauge.ship.__text == "CAPITAL", "your fuel in its colour, CAPITAL on the placard")
+        ok(same(RD.gauge.mana.__color, cap.fuel) and RD.gauge.ship.__text == "RAID 40", "your fuel in its colour, CAPITAL on the placard")
         ok(same(RD.COL.red, red) and same(RD.COL.amber, amber) and same(RD.BOSS_COL, boss) and same(RD.gauge.boss.__color, boss),
            "warnings keep their colours in every ship: red, amber, the boss's red")
         -- the knobs (Arn's 9 Nov screenshot: green dots on the purple fighter): "on" in the ship's line, "off" still red
@@ -12580,7 +12580,7 @@ do
         RD.SetKnob("tide", keepOff)
         RD.tide.macro = keepMacro
         RD.ApplyShip(RD.SHIPS[1])
-        ok(same(RD.PLATE, RD.SHIPS[1].plate) and RD.gauge.ship.__text == "FIGHTER" and RD.brackets[1].thick == RD.SHIPS[1].bw,
+        ok(same(RD.PLATE, RD.SHIPS[1].plate) and RD.gauge.ship.__text == "PARTY" and RD.brackets[1].thick == RD.SHIPS[1].bw,
            "and back to the fighter: its hull, its name, its brackets")
     end
 
@@ -13166,8 +13166,8 @@ do
     local gp = gr.__points and gr.__points[1] or (gr.points and gr.points[1])
     ok(tp and tp[1] == "TOPRIGHT" and tp[3] == "TOPLEFT" and gp and gp[2] == tr and gp[3] == "TOPLEFT",
        "outside the square on its left: the tool rail beside it, the gauge's rail beyond that")
-    ok(RD.shield.tip and RD.shield.tip[1] == "STABILIZER" and RD.shield.tip[2]:find("Water Shield", 1, true),
-       "under the mouse: STABILIZER, and which spell it casts")
+    ok(RD.shield.tip and RD.shield.tip[1] == "WATER SHIELD" and RD.shield.tip[2]:find("Click to cast it", 1, true),
+       "under the mouse: the spell's own name (no flight words - Arn, 15 Nov), and what a click does")
     ok(not RD.shield.icon:IsShown(), "no spell picture")
     -- THE POP UNDER THE MOUSE (Arn 8 Nov: "make the icons pop a little so i know im hovering over the right icon"): a
     -- white ring round whatever is under the mouse - a heal pip, a bogey, a cure pip, a corner system
@@ -13277,7 +13277,7 @@ do
         STATE.inCombat = false
         RD.ArmTools()
         ok(c.macro == "/cast Grounding Totem" and c:GetAttribute("*macrotext1") == "/cast Grounding Totem"
-           and c.tip and c.tip[1] == "CHAFF", "Grounding Totem trained: the chaff casts it, no target", tostring(c.macro))
+           and c.tip and c.tip[1] == "GROUNDING TOTEM", "Grounding Totem trained: the chaff casts it, no target", tostring(c.macro))
         ok(RD.defRail:IsShown() and c.knob:IsShown(), "the right rail shows, the knob on its corner")
         STATE.inCombat = true
         C_Spell.GetSpellName = function(id) return ({ [8042] = "Earth Shock", [8050] = "Flame Shock",
@@ -13453,7 +13453,7 @@ do
     ok(f.__w == RD.FLEET[40].size or (f.GetWidth and f:GetWidth() == RD.FLEET[40].size),
        "the scope grows only a little: 370 for the capital (the old raid radar was 440)")
     end
-    ok(RD.ship and RD.ship.key == "capital" and RD.gauge.ship.__text == "CAPITAL", "a full 40: the capital ship",
+    ok(RD.ship and RD.ship.key == "capital" and RD.gauge.ship.__text == "RAID 40", "a full 40: the capital ship",
        RD.ship and RD.ship.key)
     -- PETS IN A RAID: your own group's only, nearer the middle on their owner's bearing
     do
@@ -13499,7 +13499,7 @@ do
         STATE.inCombat = true
         fire(RD.events, "PLAYER_REGEN_DISABLED")
         local deck40 = Cost.Count(function() RD.Look() end)
-        print(("   cost: flight deck, one 40-man look (%d kicks) = %d calls"):format(kicks, deck40))
+        print(("   cost: deck, one 40-man look (%d kicks) = %d calls"):format(kicks, deck40))
         -- 344 measured: the engineer's range on 40 boxes is most of it (274 with five kicks); a kick is about two calls
         ok(kicks == 40, "a kick beside everyone, all 40 (Arn: \"a small interrupt button next to everyone\")", kicks)
         ok(deck40 <= 360, "the deck's 40-man look stays in its budget", deck40)
@@ -13529,7 +13529,7 @@ do
     fire(RD.events, "GROUP_ROSTER_UPDATE")
     ok(not RD.raid and #RD.slots == 5 and not RD.spokes[20].heal:IsShown() and RD.spokes[20].heal:GetAttribute("unit") == nil,
        "a party again: five spokes, the rest off")
-    ok(RD.ship.key == "fighter" and RD.gauge.ship.__text == "FIGHTER", "and the fighter again")
+    ok(RD.ship.key == "fighter" and RD.gauge.ship.__text == "PARTY", "and the fighter again")
 
     -- THE FUEL GAUGE (Arn 8 Nov: "my mana to track the boss health bar, if its at 50% I should be at 50% mana ... the delta
     -- indicates we are keeping pace or bingo fuel"). The GPU compares; Lua never does.
@@ -13825,7 +13825,7 @@ do
             NS.FM.BookChanged()
             RD.Arm()
             ok(RD.reserve.macro == "/cast Mana Spring Totem" and RD.reserve.at == math.floor(600 / 1375 * 100 + 0.5) / 100
-               and RD.reserve.tip and RD.reserve.tip[1] == "RESERVE TANK", "Mana Spring trained: the reserve tank casts it, lights at 600/1375", RD.reserve.at)
+               and RD.reserve.tip and RD.reserve.tip[1] == "MANA SPRING", "Mana Spring trained: its button casts it, lights at 600/1375", RD.reserve.at)
             ok(RD.potion.spellId == 2023, "the potion's use-spell is known, for our own clock", RD.potion.spellId)
             RD.readyAt, RD.waterUntil = {}, 0
             ok(not RD.ReserveOpen(true), "Mana Tide and the potion both ready: the reserve stays dark")
@@ -14885,6 +14885,8 @@ do
        "its kick square hangs inside its box: your interrupt at whatever it is fighting")
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
        and boxSp[1].deckPlate.__w == M.cell and boxSp[2].deckPlate.__w == M.cell, "the target box's two: your target and its target, one cell each")
+    ok(boxSp[1] and boxSp[1].deckPlate.__h >= M.row and boxSp[2].deckPlate.__h >= M.row,
+       "and never shorter than a party row (Arn: \"dont like how the target of target is squished\")", boxSp[2] and boxSp[2].deckPlate.__h)
     ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")
     local empty = 0
     for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
