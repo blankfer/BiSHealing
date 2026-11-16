@@ -3912,21 +3912,95 @@ function RD.FoodIcon(id) return RD.ItemIcon(RD.rations, id) end
 --- `at` on your mana), faded above - white, so the icon keeps its own colours.
 RD.ICON_FADED = 0.2                                  -- a waiting icon: clearly dim (Arn, 15 Nov)
 RD.iconCurves = {}
-function RD.IconCurve(at)
+--- A RAMP, NOT A SWITCH (15 Nov 2026, Arn: "mana potion starts getting less dim the closer we get to zero mana 100% bright
+--- at 10% mana" - "mana tide full brightness at 25% mana" - "if water restores 800 mana over 24 seconds when i am out of
+--- combat it should light up to 100% when i am at 1600 mana needed"): dim above the tool's own point `at` (where it starts
+--- to help), brightening linearly as your mana falls, full at `full` and below. The client evaluates it.
+RD.FULL_AT = { potion = 0.10, tide = 0.25, reserve = 0.15 }
+--- Where a tool is full bright: its fixed point, or - the drink - missing TWICE what one drink restores.
+function RD.FullFor(b)
+    if not b then return nil end
+    if b.kind == "drink" and type(b.at) == "number" then return math.max(0.02, 2 * b.at - 1) end
+    return RD.FULL_AT[b.kind or ""]
+end
+function RD.IconCurve(at, full)
     at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.98))
-    local key = math.floor(at * 100 + 0.5)
+    full = tonumber(full)
+    local key = math.floor(at * 100 + 0.5) .. ":" .. (full and math.floor(full * 100 + 0.5) or "-")
     if RD.iconCurves[key] then return RD.iconCurves[key] end
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
     local ok, c = pcall(C_CurveUtil.CreateColorCurve)
     if not ok or not c or not c.AddPoint then return nil end
     if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
-    local x, F = key / 100, RD.ICON_FADED
-    pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
-    pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, 1))
-    pcall(c.AddPoint, c, x + 0.0001, CreateColor(1, 1, 1, F))
-    pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    local x, F = math.floor(at * 100 + 0.5) / 100, RD.ICON_FADED
+    if full and full < x then
+        pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, full, CreateColor(1, 1, 1, 1))     -- full and below: bright
+        pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, F))        -- the ramp, from where it starts to help
+        pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    else
+        pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, x + 0.0001, CreateColor(1, 1, 1, F))
+        pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    end
     RD.iconCurves[key] = c
     return c
+end
+
+--[[ THE DIM IS THE TIME LEFT (15 Nov 2026, Arn: "all these should be totally dimmed out like the food, and then 100%
+  bright when the buff is gone, actually lets cascade it, when its 50% left 50% dim, 20% left 80% undimmed" - "lets use
+  the dimness as its duration for the food buff and such"). A buff button's brightness = 1 - the buff's time left (as a
+  share of its whole), never below RD.BUFF_DIM_FLOOR: fresh = all but gone, half left = half bright, gone = full. Read
+  OUT OF A FIGHT (a buff's time is plain then) - Well Fed, and the charge shield over its cover; in a fight they keep
+  where they were (the shield still turns red the moment it is gone, the client's own). ]]
+RD.BUFF_DIM_FLOOR = 0.05
+function RD.BuffLeft(name)
+    if combat() or RD.inFight or type(name) ~= "string" then return nil end
+    local find = AuraUtil and AuraUtil.FindAuraByName
+    if not find then return nil end
+    local ok, n, _, _, _, dur, exp = pcall(find, name, "player", "HELPFUL")
+    if not ok then return nil end
+    if plain(n) == nil then return 0 end                         -- gone
+    dur, exp = plain(dur), plain(exp)
+    if type(dur) ~= "number" or dur <= 0 or type(exp) ~= "number" then return 1 end   -- no timer: as fresh
+    local now = (GetTime and GetTime()) or 0
+    return math.max(0, math.min(1, (exp - now) / dur))
+end
+function RD.CascadeAlpha(left)
+    if left == nil then return nil end
+    return math.max(RD.BUFF_DIM_FLOOR, 1 - left)
+end
+
+--- The food the button shows: the food you want now, else - Well Fed still on you - the food that would renew it (its
+--- icon fading with the buff's time). The second answer: wanted now (full bright).
+function RD.FoodShown()
+    local want = RD.FoodWanted()
+    if want then return want, true end
+    if RD.WellFed() == true then return RD.BestItem("Food", "well fed"), false end
+    return nil, false
+end
+
+--- Out of a fight, every few seconds: the food's and the shield's fade from their buffs' time left.
+function RD.PaintBuffDims()
+    if combat() or RD.inFight then return false end
+    local r = RD.rations
+    if r and r.face then
+        local a = 0
+        if r.item then
+            local left = 0
+            if not r.wanted then left = RD.BuffLeft("Well Fed") or 0 end
+            a = RD.CascadeAlpha(left) or 1
+        end
+        r.face:SetAlpha(a)
+        if r.food and r.food.SetDesaturated then pcall(r.food.SetDesaturated, r.food, false) end
+    end
+    local sh = RD.shield
+    if RD.washHole and sh and sh.shieldName then
+        local left = RD.BuffLeft(sh.shieldName)
+        if left and left > 0 then RD.washHole:SetVertexColor(1, 1, 1, RD.CascadeAlpha(left)) end
+    end
+    return true
 end
 
 --- HOW MUCH MANA A TOOL GIVES BACK, from its own words (out of a fight, plain): "Restores 1350 to 2250 mana" -> the
@@ -4760,7 +4834,9 @@ function RD.Arm()
     end
     armShield()
     RD.ArmTools()
-    armUse(RD.rations, RD.FoodWanted())
+    local foodItem, foodWanted = RD.FoodShown()
+    armUse(RD.rations, foodItem)
+    RD.rations.wanted = foodWanted
     RD.PickFuel()
     RD.PaintMe()                                     -- your role's sign in the middle (a role change lands here)
     if con then RD.ConsoleLayout() else RD.RadarLayout() end
@@ -4829,7 +4905,11 @@ function RD.PaintQuiet()
     if RD.seatFrame then RD.seatFrame:SetAlpha(fight and 0 or 1) end
     if RD.rations then
         local r = RD.rations
-        r.face:SetAlpha(RD.LitAlpha(r, (not fight and r.item) and true or false) * (r.item and 1 or 0))   -- no food: nothing
+        if fight or not r.item then
+            r.face:SetAlpha(RD.LitAlpha(r, false) * (r.item and 1 or 0))   -- no food: nothing; in a fight: dim (no eating)
+        else
+            RD.PaintBuffDims()                                                -- out of a fight: the buff's time left
+        end
     end
     RD.PaintTools(fight)
     RD.PaintTotems(fight)
@@ -4851,7 +4931,7 @@ function RD.PaintTools(fight)
             end
             -- an item tool showing its own icon (the drink, the potion): lit full / faded by its own white curve
             if drew and b.iconTex and b.food then
-                local ic = RD.IconCurve(b.at)
+                local ic = RD.IconCurve(b.at, RD.FullFor(b))
                 local okI, icol = false, nil
                 if ic then okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic) end
                 if not (okI and paint({ b.food }, icol)) then b.food:SetVertexColor(1, 1, 1, RD.ICON_FADED) end
@@ -5253,9 +5333,11 @@ local function startTicker()
         n = n + 1
         if n >= RD.FOOD_EVERY and not combat() and RD.rations then
             n = 0
-            local want = RD.FoodWanted()
+            local want, wanted = RD.FoodShown()
+            RD.rations.wanted = wanted
             if want ~= RD.rations.item then armUse(RD.rations, want) RD.PaintQuiet() end
             RD.PaintShield()                -- and the shield, in case an aura change went unheard
+            RD.PaintBuffDims()              -- the food's and the shield's fade: their buffs' time left
         end
     end)
 end
@@ -5389,7 +5471,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         if RD.ReadTotems() ~= nil and RD.Active() then RD.PaintTotems() end   -- out of a fight only (plain slots)
         -- out of a fight the air slot's own name says whether your Grounding stands, and since when
         local okG, _, gname, gstart = pcall(GetTotemInfo, RD.AIR_SLOT)
-        gname, gstart = okG and plain(gname) or nil, okG and plain(gstart) or nil
+        if okG then gname, gstart = plain(gname), plain(gstart) else gname, gstart = nil, nil end
         RD.groundUp = (RD.chaff and RD.chaff.spell and gname == RD.chaff.spell) and true or false
         if RD.groundUp and type(gstart) == "number" and gstart > 0 then RD.groundCastAt = gstart end
         RD.PaintChaff()
@@ -5459,8 +5541,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     elseif event == "UNIT_AURA" then
         if a1 == "player" then RD.PaintShield() end
         if a1 == "player" and not combat() then
-            local want = RD.FoodWanted()
+            local want, wanted = RD.FoodShown()
+            RD.rations.wanted = wanted
             if want ~= RD.rations.item then armUse(RD.rations, want) RD.PaintQuiet() end
+            RD.PaintBuffDims()
         end
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         RD.KickCooldown()

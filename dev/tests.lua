@@ -14967,6 +14967,48 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- A RAMP, NOT A SWITCH (Arn: "mana potion ... 100% bright at 10% mana" - "mana tide full brightness at 25% mana" -
+    -- "if water restores 800 mana ... it should light up to 100% when i am at 1600 mana needed")
+    do
+        ok(RD.FullFor({ kind = "potion", at = 0.7 }) == 0.10 and RD.FullFor({ kind = "tide", at = 0.6 }) == 0.25,
+           "the potion is full bright at 10% mana, Mana Tide at 25%")
+        local d = RD.FullFor({ kind = "drink", at = 0.84 })     -- one drink = 16% of your mana
+        ok(d and math.abs(d - 0.68) < 1e-9, "the drink: full when you miss twice what one drink restores", d)
+        local keep = { cc = _G.C_CurveUtil, cr = _G.CreateColor, en = _G.Enum }
+        _G.Enum = { LuaCurveType = { Linear = "linear" } }
+        _G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+        _G.C_CurveUtil = { CreateColorCurve = function()
+            local c = { points = {} }
+            function c:SetType() end
+            function c:AddPoint(x, col) self.points[#self.points + 1] = { x = x, a = col.a } end
+            return c
+        end }
+        RD.iconCurves = {}
+        local c = RD.IconCurve(0.70, 0.10)
+        local pts = c and c.points or {}
+        ok(#pts == 4 and pts[2].x == 0.10 and pts[2].a == 1 and math.abs(pts[3].x - 0.70) < 1e-9 and pts[3].a == RD.ICON_FADED,
+           "the curve: full at 10% and below, a straight ramp up from where it starts to help (70%)")
+        RD.iconCurves = {}
+        _G.C_CurveUtil, _G.CreateColor, _G.Enum = keep.cc, keep.cr, keep.en
+    end
+    -- THE DIM IS THE TIME LEFT (Arn: "when its 50% left 50% dim, 20% left 80% undimmed" - "use the dimness as its
+    -- duration for the food buff and such")
+    do
+        ok(RD.CascadeAlpha(0.5) == 0.5 and math.abs(RD.CascadeAlpha(0.2) - 0.8) < 1e-9 and RD.CascadeAlpha(1) == RD.BUFF_DIM_FLOOR
+           and RD.CascadeAlpha(0) == 1, "half left: half bright; a fifth left: 80%; fresh: all but gone; gone: full")
+        local keepAU = _G.AuraUtil
+        _G.AuraUtil = { FindAuraByName = function(name)
+            if name == "Well Fed" then return "Well Fed", 1, 0, nil, 900, CLOCK + 225 end
+            return nil
+        end }
+        local left = RD.BuffLeft("Well Fed")
+        ok(left and math.abs(left - 0.25) < 1e-9 and RD.BuffLeft("Water Shield") == 0,
+           "out of a fight: Well Fed's share of time left is read; a missing buff is gone (0)", left)
+        STATE.inCombat = true
+        ok(RD.BuffLeft("Well Fed") == nil, "in a fight: not read (a buff's time is secret there)")
+        STATE.inCombat = false
+        _G.AuraUtil = keepAU
+    end
     -- DIM OR VERY BRIGHT, ONE BLUE BOX ROUND THE MANA (Arn: "lets just go with dim and very bright when needed if we are
     -- going to outline we outline the box mana stuff blue")
     ok(RD.manaBox and RD.manaBox:IsShown() and not (RD.conSquares and RD.conSquares.tool1 and RD.conSquares.tool1:IsShown()),
