@@ -15432,6 +15432,9 @@ do
             local pal = NS.FG.CLASS_COLOR.PALADIN
             local r, g, b = EN.FoldClass("targettarget", EN.FALLBACK)
             ok(r == pal[1] and g == pal[2] and b == pal[3], "its target's class hidden: found among the group (a plain yes)")
+            local st = RD.Command("tot")
+            ok(type(st) == "string" and st:find("party1=false", 1, true) and st:find("party2=yes", 1, true),
+               "/bish alpha radar tot: what the game answered for each", st)
             _G.UnitIsUnit = function() return false end
             r = EN.FoldClass("targettarget", EN.FALLBACK)
             ok(r == EN.FALLBACK[1], "nobody of ours: the fallback colour as before")
@@ -15447,6 +15450,13 @@ do
             ok(RD.TimerSpot(t, RD.SYS_PX + 10) == true, "a narrow timer: the number sits on the icon")
             ok(RD.TimerSpot(t, RD.SYS_PX + 40) == false, "a long one: beside it")
             ok(RD.DECK_TAG.y <= -4 and RD.DECK_TAG.x >= 4, "the name clear of the box's top edge")
+            -- "the target enemy health is too dim": a heal's range never reaches an enemy, so the target box is never dimmed
+            local tsp = { unit = "target", en = { box = CreateFrame("Frame") } }
+            tsp.en.box:SetAlpha(0.3)
+            ok(EN.PaintRange(tsp) == 1 and tsp.en.box:GetAlpha() == 1, "the target box: always bright")
+            local tot = { unit = "targettarget", en = { box = CreateFrame("Frame") } }
+            EN.PaintRange(tot)
+            ok(tot.en.box.mayBeHostile == true, "its target: dimmed by range, but a plain enemy there stays bright")
         end
         local keepTier = d.radar.tier
         d.radar.tier = 4

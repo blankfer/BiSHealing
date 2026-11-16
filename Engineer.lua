@@ -297,23 +297,42 @@ function EN.FoldClass(unit, c)
     local r, g, b = c[1], c[2], c[3]
     if not (UnitIsUnit and UnitClass and FG and FG.CLASS_COLOR) then return r, g, b end
     local curve = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+    -- what the game answered, kept for `/bish alpha radar tot` (one reused table: codes only, words made when asked)
+    local seen = EN.foldSeen or {}
+    EN.foldSeen = seen
+    for k = #seen, 1, -1 do seen[k] = nil end
     for _, u in ipairs(EN.FoldUnits()) do
         local okC, _, tok = pcall(UnitClass, u)
         local cc = okC and FG.CLASS_COLOR[plain(tok) or ""]
         local ok, same
         if cc then ok, same = pcall(UnitIsUnit, unit, u) end
+        local code = not cc and "no class" or not ok and "error" or nil
         if ok and secret(same) then
+            code = "hidden, curve refused"
             if curve then
                 local o1, nr = pcall(curve, same, cc[1], r)
                 local o2, ng = pcall(curve, same, cc[2], g)
                 local o3, nb = pcall(curve, same, cc[3], b)
-                if o1 and o2 and o3 then r, g, b = nr, ng, nb end
+                if o1 and o2 and o3 then r, g, b = nr, ng, nb code = "hidden, folded" end
             end
-        elseif ok and same == true then
-            return cc[1], cc[2], cc[3]
+        elseif ok then
+            code = (same == true) and "yes" or tostring(same)
         end
+        seen[#seen + 1] = u .. "=" .. code
+        if ok and same == true then return cc[1], cc[2], cc[3] end
     end
     return r, g, b
+end
+
+--- `/bish alpha radar tot`: what the game said the last time ITS TARGET's class had to be looked for.
+function EN.FoldStatus()
+    local okC, _, tok = pcall(UnitClass, "targettarget")
+    local cls = not okC and "error" or tok == nil and "none" or secret(tok) and "hidden" or tostring(tok)
+    local curve = (C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean) and "yes" or "no"
+    local line = string.format("its target: class now %s, curve %s, last look: %s", cls, curve,
+        EN.foldSeen and (#EN.foldSeen > 0 and table.concat(EN.foldSeen, ", ") or "nobody to ask") or "not looked yet")
+    if NS.Print then NS.Print(line) end
+    return line
 end
 
 --- Their health into the bar, untouched, in their class colour. Answers true when painted.
@@ -378,6 +397,21 @@ function EN.Incoming(sp, mx)
     return true
 end
 
+--[[ THE TARGET BOX IS NEVER DIMMED (16 Nov 2026, Arn: "the target enemy health is too dim"). The range asked is your
+  HEAL's, and a heal never reaches an enemy - so your target, a mob most of the time, was greyed out as "out of range".
+  ITS TARGET (a friend, mostly - the one you heal) keeps the dimming, with the grid's own hostile check (mayBeHostile:
+  a plain enemy stays bright). ]]
+function EN.PaintRange(sp, unit)
+    local FG = NS.FG
+    local box = sp and sp.en and sp.en.box
+    if not (box and FG and FG.PaintRange) then return nil end
+    unit = unit or sp.unit
+    if unit == "target" then box:SetAlpha(1) return 1 end
+    box.mayBeHostile = (unit == "targettarget") or nil
+    local ok, a = pcall(FG.PaintRange, box, unit)
+    return ok and a or nil
+end
+
 --- Range: the grid's own dimming on each box (the box, never the secure pip). While the console shows.
 function EN.Range()
     if not console() then return 0 end
@@ -391,7 +425,7 @@ function EN.Range()
     end
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
         if sp.en and sp.unit and sp.en.box:IsShown() then
-            pcall(FG.PaintRange, sp.en.box, sp.unit)
+            EN.PaintRange(sp)
             n = n + 1
         end
     end
@@ -577,6 +611,6 @@ ev:SetScript("OnEvent", function(_, event, unit)
     if event ~= "UNIT_IN_RANGE_UPDATE" then return end
     local FG = NS.FG
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
-        if sp.unit == unit and sp.en and FG and FG.PaintRange then pcall(FG.PaintRange, sp.en.box, unit) end
+        if sp.unit == unit and sp.en and FG and FG.PaintRange then EN.PaintRange(sp, unit) end
     end
 end)
