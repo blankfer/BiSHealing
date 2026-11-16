@@ -58,9 +58,10 @@ EN.HEAD_H = 16
 -- THREE LETTERS EACH (Arn, 16 Nov: "some of those boxes are bigger than the actual things it prints LOS RNG OVH maybe we
 -- can save space too"): the word boxes sized to their three letters
 EN.HEAD_DECK = { { key = "los", x = 0, w = 34 }, { key = "range", x = 37, w = 34 }, { key = "over", x = 74, w = 36 },
-                 { key = "cc", x = 113, w = 76 },    -- the fourth box, loss of control (EN.LossPaint)
-                 { key = "rip", x = 192, w = 134 },  -- the Riptide bar: six squares the size of the deck's icons (EN.RipPaint)
-                 { key = "mana", x = 329, w = 34 } } -- party mana: a bar per mana user, shown under the line (EN.ManaPaint)
+                 { key = "cc", x = 113, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
+                 { key = "rip", x = 198, w = 134 } } -- the Riptide bar: six squares the size of the deck's icons (EN.RipPaint)
+-- (party mana lives in the fuel strip since 16 Nov - Arn: "we already have our mana bar up top, maybe we use that instead so
+-- the los row is not too busy" - EN.ManaHost)
 -- ONE ICON SIZE (Arn, 16 Nov: "whatever size we use on the interrupts and bottom shelf lets use that for the riptide box
 -- up top ... make them fit that icon tallness"): the strip is the icons' 22 px tall, and the Riptide bar is six 22 px
 -- squares (6 x 22 + its 2 px edge), its Riptide icon as big as the kick and the tools
@@ -143,10 +144,9 @@ function EN.HeadBoxes()
     local set = EN[key]
     local deck = con and RD.Deck and RD.Deck() and RD.Sw
     local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
-        if not deck then return key ~= "cc" and key ~= "rip" and key ~= "mana" end
+        if not deck then return key ~= "cc" and key ~= "rip" end
         if key == "cc" then return RD.Sw("cc") end
         if key == "rip" then return RD.Sw("rip") and RD.RipKnown and RD.RipKnown() end
-        if key == "mana" then return RD.Sw("mana") end
         return RD.Sw("alerts")
     end
     local f, x0, y = EN.Where()
@@ -181,7 +181,6 @@ function EN.HeadBoxes()
     end
     if set.cc and set.cc:IsShown() then EN.LossPaint() end
     if set.rip and set.rip:IsShown() then EN.RipPaint() end
-    EN.ManaLayout()
     if not con then
         EN.TintRadarHeads()
         -- the black box's screen may be up (a code being typed): the boxes wait under it
@@ -495,6 +494,9 @@ end
 -- from the right; the LAST segment (the left end) holds the Riptide icon - dim while there is time for another Chain Heal,
 -- lit with a red edge once there is not. Ticks only while a Riptide of yours stands.
 EN.RIP_COL = { 0.30, 0.75, 1.00, 0.90 }
+EN.RIP_GREEN = { 0.25, 0.85, 0.35, 0.90 }
+EN.RIP_AMBER = { 1.00, 0.70, 0.15, 0.90 }
+EN.RIP_RED = { 0.95, 0.20, 0.20, 0.90 }
 EN.RIP_EVERY = 0.1
 function EN.RipBuild(q)
     if q.rip then return q.rip end
@@ -575,7 +577,12 @@ function EN.RipPaint()
     local len = RD.RipLength and RD.RipLength() or 15
     B.bar:SetMinMaxValues(0, len)
     B.bar:SetValue(left)
-    local late = left < (len / ((RD.RIP_SEGS) or 6))     -- under one Chain Heal: it would be gone before it lands
+    local seg = len / ((RD.RIP_SEGS) or 6)
+    local late = left < seg                               -- under one Chain Heal: it would be gone before it lands
+    -- THE COLOUR (Arn, 16 Nov: "green half way amber 2 chain heals left red"): green while more than two Chain Heals fit,
+    -- amber with two left, red on the last one
+    local col = late and EN.RIP_RED or ((left < 2 * seg) and EN.RIP_AMBER or EN.RIP_GREEN)
+    B.bar:SetStatusBarColor(col[1], col[2], col[3], col[4])
     B.icon:SetAlpha(late and 1 or 0.45)
     ripLate(B, late)
     if not q.ripTicking then
@@ -647,6 +654,38 @@ function EN.ManaUnits()
     end
     return out
 end
+--- PARTY MANA IN THE FUEL STRIP: a block at the strip's right end, before the regen readout, while the deck and its
+--- switch say so. Answers the block (shown) or nil (hidden).
+function EN.ManaHost(rail)
+    local RD = NS.RD
+    local want = rail and RD and RD.Deck and RD.Deck() and RD.Sw and RD.Sw("mana")
+    local h = EN.manaHost
+    if not want then
+        if h then h:Hide() end
+        return nil
+    end
+    if not h then
+        h = CreateFrame("Frame", nil, rail)
+        h.edges = {}
+        local dim = RD.DIM or { 0.22, 1.00, 0.53, 0.4 }
+        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+            local t = h:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(dim[1], dim[2], dim[3], dim[4] or 1)
+            if side == "TOP" or side == "BOTTOM" then
+                t:SetPoint(side .. "LEFT", h, side .. "LEFT") t:SetPoint(side .. "RIGHT", h, side .. "RIGHT") t:SetHeight(1)
+            else
+                t:SetPoint("TOP" .. side, h, "TOP" .. side) t:SetPoint("BOTTOM" .. side, h, "BOTTOM" .. side) t:SetWidth(1)
+            end
+        end
+        EN.manaHost = h
+    end
+    local E = EN.GAUGE
+    h:ClearAllPoints()
+    h:SetPoint("RIGHT", rail, "RIGHT", -E.right, 0)
+    h:SetSize(E.mana, E.h - 4)
+    h:Show()
+    return h
+end
 function EN.ManaBuild(q)
     if q.mana then return q.mana end
     local M = { bars = {} }
@@ -703,7 +742,7 @@ function EN.TideChain()
 end
 --- Out of a fight: who the bars are for, and where they stand in the box.
 function EN.ManaLayout()
-    local q = EN.heads and EN.heads.mana
+    local q = EN.manaHost
     if not q then return false end
     local M = EN.ManaBuild(q)
     if not (InCombatLockdown and InCombatLockdown()) then EN.manaUnits = EN.ManaUnits() end
@@ -731,7 +770,7 @@ function EN.ManaLayout()
 end
 --- Each bar its mana and its curve colour; each chain link its curve alpha. Answers how many bars painted.
 function EN.ManaPaint()
-    local q = EN.heads and EN.heads.mana
+    local q = EN.manaHost
     local chain = EN.chain
     local on = q and q:IsShown()
     local curve = EN.ManaCurve()
@@ -785,7 +824,7 @@ function EN.ManaStatus()
     for _, u in ipairs(EN.manaUnits or {}) do names[#names + 1] = u end
     local line = string.format("party mana: line %d%%, bars for %s, glow %s, box %s", EN.MANA_LINE * 100,
         #names > 0 and table.concat(names, " ") or "nobody", tostring(EN.chainSeen or "not built"),
-        tostring(EN.heads and EN.heads.mana and EN.heads.mana:IsShown() or false))
+        tostring(EN.manaHost and EN.manaHost:IsShown() or false))
     if NS.Print then NS.Print(line) end
     return line
 end
@@ -991,7 +1030,7 @@ end
   readout box riding the fill, no chevron - the regen % small at the right end with the five second rule's dashes under
   it. Every number is still painted by the radar's own functions (RD.PaintFuel); this only moves pieces, out of a fight
   (the view switch). Back on the radar everything goes home (RD.SizeGauge). ]]
-EN.GAUGE = { h = 20, pad = 6, right = 44, font = 8 }
+EN.GAUGE = { h = 20, pad = 6, right = 44, font = 8, mana = 30 }   -- mana: the party mana block's width (EN.ManaHost)
 
 --- How far the strip reaches over the console's top (the clamp keeps it on the screen); 0 when it is not there.
 function EN.GaugeTop()
@@ -1009,6 +1048,8 @@ function EN.Gauge(con)
     local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("fuel") then   -- the fuel strip switched off
         if EN.rail then EN.rail:Hide() end
+        if EN.manaHost then EN.manaHost:Hide() end
+        EN.ManaPaint()                                       -- no block: the Mana Tide glow off too
         g:Hide()
         for _, x in ipairs({ g.regen, g.fsr, g.chev, g.hud, g.readout }) do if x then x:Hide() end end
         return false
@@ -1030,11 +1071,13 @@ function EN.Gauge(con)
         r:SetHeight(E.h)
         r:Show()
         local fw = f:GetWidth()
-        local w = (type(fw) == "number" and fw or 200) - E.pad - E.right
+        local manaW = EN.ManaHost(r) and (E.mana + 4) or 0          -- party mana's block before the regen readout
+        local w = (type(fw) == "number" and fw or 200) - E.pad - E.right - manaW
         g:ClearAllPoints()
         g:SetPoint("LEFT", r, "LEFT", E.pad, 0)
         RD.ShapeTape(w)
         g:Show()
+        EN.ManaLayout()
         if g.hud then g.hud:Hide() end
         if g.readout then g.readout:Hide() end
         if g.chev then g.chev:Hide() end

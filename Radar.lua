@@ -1732,7 +1732,7 @@ RD.SW = {
     { key = "cc",     group = "THE FIGHT", name = "Loss of control box",      tip = "A fourth box on top: how long you are stunned, silenced, feared or locked out of a school, counting down." },
     { key = "fuel",   group = "MANA",      name = "Fuel strip",               tip = "Your mana with the boss's health, above the window." },
     { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
-    { key = "mana",   group = "MANA",      name = "Party mana",               tip = "A box on top: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
+    { key = "mana",   group = "MANA",      name = "Party mana",               tip = "In the fuel strip: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
     { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
     { key = "rip",    group = "SHAMAN",    name = "Riptide tracker",          tip = "A Riptide mark on whoever has yours, and a bar on top: six Chain Heals long, the last one the Riptide icon - too late for another Chain Heal." },
@@ -1831,7 +1831,7 @@ function RD.DeckSized(M)
 end
 --- The strip on top: the alert boxes' height, or just room for the switches button.
 RD.DECK_HEAD_BARE = 16
-function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc") or RD.Sw("mana") or (RD.Sw("rip") and RD.RipKnown())) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc") or (RD.Sw("rip") and RD.RipKnown())) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
 
 --- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
 function RD.TotemWideW()

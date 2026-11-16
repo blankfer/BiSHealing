@@ -15583,9 +15583,15 @@ do
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
                 ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
+                local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
+                ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
+                RD.ripLast.untilAt = GetTime() + 4
+                EN.RipPaint()
+                ok(barCol() == EN.RIP_AMBER[1], "two Chain Heals left: amber", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 1.5
                 EN.RipPaint()
-                ok(rq.rip.icon:GetAlpha() == 1 and rq.rip.late.TOP:IsShown(), "under one Chain Heal left: the icon lit, red edged - too late")
+                ok(rq.rip.icon:GetAlpha() == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],
+                   "under one Chain Heal left: red, the icon lit, red edged - too late")
                 RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
                 ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
@@ -15598,8 +15604,8 @@ do
             -- PARTY MANA (Arn: "a way to only show once they are all below a certain percentage" - "50%")
             do
                 RD.Arm()
-                local mq = EN.heads and EN.heads.mana
-                ok(mq and mq:IsShown(), "the party mana box on the top row")
+                local mq = EN.manaHost
+                ok(mq and mq:IsShown() and not (EN.heads and EN.heads.mana), "party mana in the fuel strip, not on the LOS row (Arn: \"not too busy\")")
                 ok(#(EN.manaUnits or {}) >= 1 and mq.mana.bars[1]:IsShown(), "a bar for each mana user in your group", #(EN.manaUnits or {}))
                 local keepUPP = _G.UnitPowerPercent
                 _G.UnitPowerPercent = function() return { GetRGBA = function() return 0.3, 0.55, 1, secret() end } end
