@@ -235,9 +235,14 @@ function FG.DeckPlace(nTanks, nRest, party, m)
     local rest, y, i, first = {}, m.tank + P, 1, true
     while i <= nRest do
         local per = (first and party) and math.max(1, 5 - nTanks) or 5
+        -- A PARTY'S ROW STRETCHES (Arn, 15 Nov: "1st row tanks second row 5 - the tank. 1 tank the 4 party uses that whole
+        -- row they get longer. if 2 tanks the next row is 3 people longer to fill in"): its people share the whole width;
+        -- a raid's rows of five keep the one cell size.
+        local n = math.min(per, nRest - i + 1)
+        local w = (first and party) and math.floor((W - (n - 1) * P) / n) or cell
         for c = 1, per do
             if i > nRest then break end
-            rest[i] = { x = (c - 1) * (cell + P), y = y, w = cell, h = m.row }
+            rest[i] = { x = (c - 1) * (w + P), y = y, w = w, h = m.row }
             i = i + 1
         end
         y, first = y + m.row + P, false

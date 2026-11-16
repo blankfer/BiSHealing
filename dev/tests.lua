@@ -14837,8 +14837,15 @@ do
        "the target box sits at the right end, two ordinary-width cells inside it")
     ok(#p.tanks == 1 and p.tanks[1].x == 0 and p.tanks[1].w == area, "one tank: one long bar filling everything left of the box",
        tostring(p.tanks[1] and p.tanks[1].w) .. " vs " .. area)
-    ok(#p.rest == 4 and p.rest[1].y == S.tank + P and p.rest[4].y == p.rest[1].y and p.rest[1].w == cell,
-       "a party: one row of four under it (five minus the tank), ordinary cells")
+    -- Arn: "1 tank the 4 party uses that whole row they get longer. if 2 tanks the next row is 3 people longer to fill in"
+    local w4 = math.floor((W - 3 * P) / 4)
+    ok(#p.rest == 4 and p.rest[1].y == S.tank + P and p.rest[4].y == p.rest[1].y and p.rest[1].w == w4
+       and math.abs(p.rest[4].x + p.rest[4].w - W) <= 3,
+       "a party with one tank: the four others share the whole row under it, longer", p.rest[1].w)
+    local p2 = FG.DeckPlace(2, 3, true)
+    local w3 = math.floor((W - 2 * P) / 3)
+    ok(#p2.rest == 3 and p2.rest[1].w == w3 and p2.rest[3].y == p2.rest[1].y and math.abs(p2.rest[3].x + w3 - W) <= 3,
+       "two tanks: the three others fill the row", p2.rest[1].w)
     ok(p.h == S.tank + P + S.row, "and the deck is exactly that tall", p.h)
     local q = FG.DeckPlace(2, 8, false)
     ok(q.tanks[1].w == q.tanks[2].w and q.tanks[2].x == q.tanks[1].w + P and q.tanks[2].x + q.tanks[2].w <= q.box.x - P,
