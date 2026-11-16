@@ -12496,8 +12496,9 @@ do
         -- a question mark - never a word or a name. The one exception is the top rail's placard (the ship, FUEL).
         local t = fs.__text
         -- and the black box's bottom rail (BlackBox.lua): its keys and its screen are words, outside the square
+        -- and the flight deck's target box: its job is written on it (Arn: "with what the box is for")
         local q, onBox = fs.__parent, false
-        while q do if q == NS.BB.rail then onBox = true break end q = q.__parent end
+        while q do if q == NS.BB.rail or (RD.deckBox and q == RD.deckBox) then onBox = true break end q = q.__parent end
         if not placard[fs] and not onBox then
             while p do if p == f then if t and t ~= "" and not t:match("^%d+%%?$") and t ~= "?" and t ~= "(secret)" then names = names + 1 end break end p = p.__parent end
         end
@@ -13486,6 +13487,27 @@ do
     print(("   cost: radar, a 40-man repaint pass = %d calls"):format(paint))
     -- 12 Nov: the pips' tanks (Tanks.lua) add ~8 calls a person (349 -> 669); the budget tightened round that
     ok(paint <= 760, "a 40-man repaint stays in its budget", paint)
+    -- THE FLIGHT DECK in a 40 (15 Nov 2026): every place carries a kick square (the radar gives the core five only) - the
+    -- look runs every RD.TICK in a fight, so it gets its own budget
+    do
+        local dd = NS.DB()
+        local ka, ko = dd.alpha, dd.alphaOn
+        dd.alpha, dd.alphaOn = true, { deck = true }
+        RD.Arm()
+        local kicks = 0
+        for i = 1, 40 do if RD.slots[i] and RD.slots[i].rb then kicks = kicks + 1 end end
+        STATE.inCombat = true
+        fire(RD.events, "PLAYER_REGEN_DISABLED")
+        local deck40 = Cost.Count(function() RD.Look() end)
+        print(("   cost: flight deck, one 40-man look (%d kicks) = %d calls"):format(kicks, deck40))
+        -- 344 measured: the engineer's range on 40 boxes is most of it (274 with five kicks); a kick is about two calls
+        ok(kicks == 40, "a kick beside everyone, all 40 (Arn: \"a small interrupt button next to everyone\")", kicks)
+        ok(deck40 <= 360, "the deck's 40-man look stays in its budget", deck40)
+        STATE.inCombat = false
+        fire(RD.events, "PLAYER_REGEN_ENABLED")
+        dd.alpha, dd.alphaOn = ka, ko
+        RD.Arm()
+    end
     STATE.inCombat = true
     fire(RD.events, "PLAYER_REGEN_DISABLED")
     local look40 = Cost.Count(function() RD.Look() end)
@@ -14788,57 +14810,68 @@ do
     FG.kickSpell, FG.backupSpell = nil, nil
 end
 
--- THE FLIGHT DECK'S SHAPE (15 Nov 2026, step 2; Arn: "1 single tank will be long and only leave row for the target and tot,
--- target and tot small like regular party boxes" ... "all tank are always on the same row tanks always same size")
+-- THE FLIGHT DECK (15 Nov 2026; Arn: "1 single tank will be long and only leave row for the target and tot, target and tot
+-- small like regular party boxes" ... "all tank are always on the same row tanks always same size" ... "i was thinking it
+-- was going to look more like radar and engineer its own contained box"): its arithmetic, then the radar laid out as it
 do
-    local W, cell, P = FG.DECK_W, FG.DECK_CELL, 3
+    local S = FG.DECK_SIZES
+    local cell, P = S.cell, S.gap
+    local W = 5 * cell + 4 * P
     local p = FG.DeckPlace(1, 4, true)
     local area = p.box.x - P
-    ok(p.box.x + p.box.w == W and p.target.w == cell and p.tot.w == cell and p.tot.x == p.target.x + cell + P,
+    ok(p.w == W and p.box.x + p.box.w == W and p.target.w == cell and p.tot.w == cell and p.tot.x == p.target.x + cell + P,
        "the target box sits at the right end, two ordinary-width cells inside it")
     ok(#p.tanks == 1 and p.tanks[1].x == 0 and p.tanks[1].w == area, "one tank: one long bar filling everything left of the box",
        tostring(p.tanks[1] and p.tanks[1].w) .. " vs " .. area)
-    ok(#p.rest == 4 and p.rest[1].y == FG.DECK_TANK_H + P and p.rest[4].y == p.rest[1].y and p.rest[1].w == cell,
+    ok(#p.rest == 4 and p.rest[1].y == S.tank + P and p.rest[4].y == p.rest[1].y and p.rest[1].w == cell,
        "a party: one row of four under it (five minus the tank), ordinary cells")
-    ok(p.h == FG.DECK_TANK_H + P + FG.DECK_ROW_H, "and the deck is exactly that tall", p.h)
-
+    ok(p.h == S.tank + P + S.row, "and the deck is exactly that tall", p.h)
     local q = FG.DeckPlace(2, 8, false)
     ok(q.tanks[1].w == q.tanks[2].w and q.tanks[2].x == q.tanks[1].w + P and q.tanks[2].x + q.tanks[2].w <= q.box.x - P,
        "two tanks: equal halves of the same row")
     ok(q.rest[5].y == q.rest[1].y and q.rest[6].y > q.rest[1].y and q.rest[6].x == 0, "a raid: rows of five, the sixth starts the next row")
-
     local r = FG.DeckPlace(4, 36, false)
     local same = true
     for i = 2, 4 do if r.tanks[i].w ~= r.tanks[1].w or r.tanks[i].y ~= 0 then same = false end end
     ok(same and r.tanks[4].x + r.tanks[4].w <= r.box.x - P, "four tanks: all on the one row, all one width")
-    ok(r.rest[36].y == FG.DECK_TANK_H + P + 7 * (FG.DECK_ROW_H + P) and r.w == W, "36 more: eight rows of five, and never wider",
-       r.rest[36].y)
+    ok(r.rest[36].y == S.tank + P + 7 * (S.row + P) and r.w == W, "36 more: eight rows of five, and never wider", r.rest[36].y)
     local z = FG.DeckPlace(0, 5, true)
     ok(#z.tanks == 0 and z.rest[5].y == z.rest[1].y, "nobody to call a tank: five in the first row")
 
-    -- laid out for real, the alpha's deck on: the warrior is the guessed tank, the box holds target and its target
+    -- THE RADAR AS THE DECK: the engineer's boxes in the deck's places, in the radar's own hull
+    local RD = NS.RD
     local d = NS.DB()
-    local keep = { alpha = d.alpha, alphaOn = d.alphaOn, classes = STATE.classes.party1, shown = d.shown }
+    local keep = { alpha = d.alpha, alphaOn = d.alphaOn, classes = STATE.classes.party1, look = d.look }
     STATE.classes.party1 = "WARRIOR"
-    d.shown = true                                          -- an earlier block left the frames hidden
-    d.alpha = true
-    SlashCmdList.BISHEALING("alpha deck on")                -- the real door: it lets the radar step aside and lays out
-    ok(FG.DeckOn() and not (NS.RD and NS.RD.On()), "/bish alpha deck on: the deck is on and the radar steps aside")
-    FG.Layout(FG.anchor)
-    local t1 = FG.frames[1]
-    ok(t1 and t1.unit == "party1" and math.abs(t1.cellW - (FG.DECK_W - (2 * cell + P + 6) - P)) < 1,
-       "the warrior (no role named: the guess) takes the tank row's long bar", tostring(t1 and t1.unit))
-    ok(FG.deckBox and FG.deckBox:IsShown() and FG.deckBox.label and FG.deckBox.label:GetText() == "TARGET · ITS TARGET",
-       "the target box is up, its job written on it")
-    ok(FG.deckTarget and FG.deckTarget.unit == "target" and FG.deckToT and FG.deckToT.unit == "targettarget"
-       and FG.deckTarget.cellW == cell and FG.deckToT.cellW == cell, "its two cells: your target and its target, ordinary width")
-    local a = FG.anchor
-    ok(a.__w == FG.DECK_W or (a.GetWidth and a:GetWidth() == FG.DECK_W), "the deck is one fixed width")
+    d.look, d.alpha = "radar", true
+    SlashCmdList.BISHEALING("alpha deck on")              -- the real door: the radar is armed again, as the deck
+    RD.Arm()
+    ok(RD.Deck() and RD.Console() and RD.On(), "/bish alpha deck on: the radar look, laid out as the deck")
+    local M = RD.DECK
+    local mp = FG.DeckPlace(1, 2, true, M)
+    local tankSp, boxSp = nil, {}
+    for _, sp in ipairs(RD.spokes) do
+        if sp.unit == "party1" then tankSp = sp end
+        if sp.slot and sp.slot.box and sp.unit then boxSp[#boxSp + 1] = sp end   -- a bigger layout's old places are empty
+    end
+    ok(tankSp and math.abs(tankSp.heal.__w - mp.tanks[1].w) < 1 and tankSp.heal.__h == M.tank,
+       "the warrior (no role named: the guess) is the tank row's long box", tankSp and tankSp.heal.__w)
+    ok(tankSp and tankSp.bogey:GetAttribute("unit") == "party1target" and tankSp.bogey.__w <= M.kick,
+       "its kick square hangs inside its box: your interrupt at whatever it is fighting")
+    ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
+       and boxSp[1].heal.__w == M.cell and boxSp[2].heal.__w == M.cell, "the target box's two: your target and its target, one cell each")
+    ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")
+    local empty = 0
+    for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
+    ok(empty == 0, "no empty boxes: the deck grows down instead", empty)
+    ok(RD.bbRail and RD.bbRail:IsShown(), "the black box stays, under the deck (Arn: \"dont forget my black box\")")
+    ok(RD.PaintDeckBox(), "a target change repaints the box")
     SlashCmdList.BISHEALING("alpha deck off")
-    ok(not FG.deckBox:IsShown() and not FG.deckTarget:IsShown(), "deck off: the box and its cells go, the grid is back")
-    d.alpha, d.alphaOn, STATE.classes.party1, d.shown = keep.alpha, keep.alphaOn, keep.classes, keep.shown
+    RD.Arm()
+    ok(not RD.Deck() and not RD.deckBox:IsShown(), "deck off: back to the radar as it was")
+    d.alpha, d.alphaOn, STATE.classes.party1, d.look = keep.alpha, keep.alphaOn, keep.classes, keep.look
     if NS.AlphaApply then NS.AlphaApply() end
-    FG.Layout(FG.anchor)
+    if RD.On() then RD.Arm() end
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

@@ -198,8 +198,6 @@ end
 -- camera is its own alpha feature.
 function RD.On()
     local FG = NS.FG
-    -- THE FLIGHT DECK STANDS IN FOR IT (15 Nov 2026, alpha "deck" - dev/FLIGHTDECK.md): while it is on, the radar steps aside
-    if FG and FG.DeckOn and FG.DeckOn() then return false end
     return (FG and FG.Look and FG.Look() == "radar") or false
 end
 --- Once: the alpha radar on = the radar look (written down, `dash1` on the account). Answers true when it moved one.
@@ -1542,8 +1540,11 @@ function RD.PaintSeats(slots)
     sf:SetAlpha((RD.inFight or combat()) and 0 or 1)
 end
 
---- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier).
-function RD.Console() return db().view == "console" end
+--- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier). THE FLIGHT DECK is a console
+--- too (15 Nov 2026, Arn: "this is going to replace radar and engineer is going to be this new deck but barebones"): the
+--- engineer's boxes - health bars, kick squares, cure chips, the fuel strip, the tools and totems - laid out as the deck.
+function RD.Deck() return (NS.FG and NS.FG.DeckOn and NS.FG.DeckOn()) == true end
+function RD.Console() return db().view == "console" or RD.Deck() end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
 --- place, so the highest slot says how many must fit). Answers the class and its number.
@@ -1955,6 +1956,155 @@ function RD.ConsoleLayoutWide(T, order)
     return { W = W, H = H, tier = T, cells = cells, placed = placed, rows = { kick = yk, pet = yp, tools = yt } }
 end
 
+--[[ THE FLIGHT DECK (15 Nov 2026, dev/FLIGHTDECK.md, Arn's layout B; "its own contained box" like the radar and the
+  engineer's view). The engineer's own boxes - each a secure pip with its health bar (Engineer.lua), its kick square (the
+  bogey: their target casting) and its cure chips - placed by the deck's arithmetic (FG.DeckPlace): the tank row and the
+  outlined target box on top, then rows of five, then the tools row and the totems under them, the black box under all.
+  The kick and the cures hang inside each box's right end, over the bar (their own clicks). Empty places are hidden: the
+  deck grows down instead. Out of a fight only, like every layout here. ]]
+RD.DECK = { cell = 62, row = 24, tank = 32, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }
+RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
+
+--- The deck's order: the tanks first (the radar's own answer, RD.LogicBand; nobody named = one guessed, RD.GuessTank),
+--- then everyone else in place order (a raid's place is its group and spot), the empty places last. Answers the order
+--- and how many of it are tanks.
+function RD.DeckOrder(units, n)
+    local tanks, rest, empty, present = {}, {}, {}, {}
+    for i = 1, n do if units[i] then present[i] = true end end
+    for i = 1, n do
+        local u = units[i]
+        if not u then
+            empty[#empty + 1] = i
+        else
+            local okMe, me = false, nil
+            if u == "player" then okMe, me = true, true elseif UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
+            if not (okMe and plain(me) == true) and RD.LogicBand(u) == "tank" then tanks[#tanks + 1] = i
+            else rest[#rest + 1] = i end
+        end
+    end
+    if #tanks == 0 then
+        local g = RD.GuessTank(present, units)
+        if g then
+            tanks[1] = g
+            for k, i in ipairs(rest) do if i == g then table.remove(rest, k) break end end
+        end
+    end
+    local order = {}
+    for _, i in ipairs(tanks) do order[#order + 1] = i end
+    for _, i in ipairs(rest) do order[#order + 1] = i end
+    for _, i in ipairs(empty) do order[#order + 1] = i end
+    return order, #tanks
+end
+
+--- The target box's two boxes repainted (a target change: the client re-points "target" / "targettarget" by itself; the
+--- colours are ours to redo). Nothing when the deck is off.
+function RD.PaintDeckBox()
+    if not RD.Deck() then return false end
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.unit and sp.slot and sp.slot.box then RD.PaintHeal(sp) end
+    end
+    return true
+end
+
+--- The deck's places: no pet; then the target box's two (no kick of their own). THE KICK ON EVERYONE (Arn: "a small
+--- interrupt button next to everyone like their cure and dispell buttons only show up when needed"). Measured in a 40: one
+--- look is 344 calls with all 40 kicks, 274 with five - the engineer's range on 40 boxes is most of it (its view pays that
+--- today); a kick is about two calls.
+function RD.DeckSlots(T)
+    local M, out = RD.DECK, {}
+    for i = 1, T.n + 2 do
+        local crew = i <= T.n
+        out[i] = { b = 0, rh = 0, rc = 0, rb = crew and 0 or nil, ph = M.row - 8, pc = M.chip, pb = M.kick, own = false,
+                   nopet = true, console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
+                   box = (not crew) or nil }
+    end
+    return out
+end
+
+--- The units the deck's places hold: the crew's own (a copy - RD.units stays the group), then "target" and "targettarget".
+function RD.DeckUnits(units, n)
+    local out = {}
+    for i = 1, n do out[i] = units[i] end
+    out[n + 1], out[n + 2] = "target", "targettarget"
+    return out
+end
+
+function RD.DeckLayout(T, order)
+    local f, C, M = RD.frame, RD.CON, RD.DECK
+    local nT = math.min(RD.deckTanks or 0, T.n)
+    local crew = {}
+    for k = nT + 1, T.n do
+        local i = order[k]
+        if i and RD.units and RD.units[i] then crew[#crew + 1] = i end
+    end
+    local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
+    local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
+    local x0, y0 = (W - place.w) / 2, C.pad + C.head
+    local placed = {}
+    local function put(i, r, kick)
+        local sp = RD.spokes[i]
+        if not (sp and r) then return end
+        sp.heal:SetSize(r.w, r.h)
+        local cy = y0 + r.y + r.h / 2
+        at(sp.heal, x0 + r.x + r.w / 2, cy)
+        sp.heal:Show()
+        settle(sp)
+        placed[i] = r
+        local lvl = sp.heal:GetFrameLevel()
+        local right = x0 + r.x + r.w - 2                  -- the icons hang from the box's right end, inward
+        if kick and sp.bogey then
+            local ks = math.min(M.kick, r.h - 4)
+            sp.bogey:SetSize(ks, ks)
+            at(sp.bogey, right - ks / 2, cy)
+            sp.bogey:SetFrameLevel(lvl + 3)
+            right = right - ks - 2
+        end
+        for _, c in ipairs(sp.cures or {}) do
+            local cs = math.min(M.chip, r.h - 6)
+            c.box:SetSize(cs, cs)
+            at(c.box, right - cs / 2, cy)
+            c.box:SetFrameLevel(lvl + 3)
+            if c.holder then c.holder:SetFrameLevel(lvl + 4) end
+            if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
+            right = right - cs - 2
+        end
+    end
+    for k = 1, nT do put(order[k], place.tanks[k], true) end
+    for r, i in ipairs(crew) do put(i, place.rest[r], true) end
+    -- the empty places: out of sight (the deck grows down instead of keeping holes)
+    for k = 1, T.n do
+        local i = order[k]
+        local sp = i and RD.spokes[i]
+        if sp and not placed[i] then sp.heal:Hide() if sp.bogey then sp.bogey:Hide() end end
+    end
+    -- the target box: its outline and its job written on it, then your target and its target inside
+    local box = RD.deckBox
+    if not box then
+        box = CreateFrame("Frame", nil, RD.conLayer)
+        box.edges = edge(box, RD.DECK_BOX_COL, 1)
+        box.label = box:CreateFontString(nil, "OVERLAY")
+        box.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 7, "")
+        box.label:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -1)
+        local c = RD.DECK_BOX_COL
+        box.label:SetTextColor(c[1], c[2], c[3], 1)
+        box.label:SetText("TARGET · ITS TARGET")
+        RD.deckBox = box
+    end
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", f, "TOPLEFT", x0 + place.box.x, -(y0 + place.box.y))
+    box:SetSize(place.box.w, place.box.h)
+    box:Show()
+    put(T.n + 1, place.target, false)
+    put(T.n + 2, place.tot, false)
+    -- the deck of buttons under the crew: the tools row, then the totems
+    local yt = y0 + place.h + C.gap + RD.SYS_PX / 2
+    toolsRow(W, yt)
+    local H = yt + RD.SYS_PX / 2 + C.pad
+    H = H + totemRow(W, yt)
+    f:SetSize(W, H)
+    return { W = W, H = H, tier = T, placed = placed, place = place, deck = true, rows = { tools = yt } }
+end
+
 --- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
 function RD.ConsoleLayout()
     local f = RD.frame
@@ -1967,8 +2117,13 @@ function RD.ConsoleLayout()
     end
     RD.conLayer:Show()
     for _, q in pairs(RD.conSquares or {}) do q:Hide() end
+    if RD.deckBox then RD.deckBox:Hide() end
     local T = RD.ConsoleTier()
     local order = RD.conOrder or {}
+    if RD.Deck() then
+        RD.conGrid = RD.DeckLayout(T, order)
+        return RD.conGrid
+    end
     if T.n > 5 then
         RD.conGrid = RD.ConsoleLayoutWide(T, order)
         return RD.conGrid
@@ -2020,6 +2175,7 @@ function RD.RadarLayout()
         if h then b:ClearAllPoints() b:SetPoint(h[1], h[2], h[3], h[4], h[5]) end
     end
     if RD.conLayer then RD.conLayer:Hide() end
+    if RD.deckBox then RD.deckBox:Hide() end          -- the deck's target box goes with the console's layer
     return true
 end
 
@@ -2033,7 +2189,7 @@ function RD.ApplyView()
     vis(RD.toolRail, not con)
     vis(RD.gaugeRail, not con)
     vis(RD.defRail, not con)
-    vis(RD.bbRail, not con)
+    vis(RD.bbRail, not con or RD.Deck())          -- the flight deck keeps the black box (Arn: "dont forget my black box")
     vis(RD.gauge, not con)
     -- the tape's pieces that hang on the radar frame itself: the regen readout, its chevron, the ramjet
     local g = RD.gauge
@@ -2799,7 +2955,7 @@ end
 --- Where a slot's pet sits, and how big: a party's beside its owner (turned clockwise), yours below you, a raid's own
 --- group nearer the middle on its owner's bearing. nil = no pet here (a raid's other groups).
 function RD.PetSpot(s)
-    if not s then return nil end
+    if not s or s.nopet then return nil end                -- the deck's places carry no pet (yet)
     local P = RD.PET
     if s.self then
         return math.sin(P.selfB) * P.selfR, math.cos(P.selfB) * P.selfR, RD.raid and P.raidPx or P.px
@@ -2899,7 +3055,9 @@ local function armPet(sp, unit, s)
         p:SetAttribute("unit", nil)
         p:SetAttribute("type1", nil)
         p:Hide()
-        sp.petUnit, sp.petTex = nil, nil
+        -- the size goes with the paw (15 Nov 2026): kept, a pet coming back at the same size found no paw and was never drawn
+        for _, t in ipairs(sp.petTex or {}) do t:Hide() end
+        sp.petUnit, sp.petTex, sp.petPx = nil, nil, nil
         return nil
     end
     p:SetSize(px, px)
@@ -4025,6 +4183,14 @@ function RD.Arm()
         for k, i in ipairs(order) do rankOf[i] = k end
         RD.conOrder = order
         slots = RD.ConsoleSlots(T, top, rankOf)
+        -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
+        -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
+        if RD.Deck() then
+            order, RD.deckTanks = RD.DeckOrder(units, T.n)
+            RD.conOrder = order
+            slots = RD.DeckSlots(T)
+            units = RD.DeckUnits(units, T.n)
+        end
         RD.slots = slots
         RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
     end
@@ -4752,9 +4918,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         RD.KickCooldown()
         RD.Sweeps()
     elseif event == "UNIT_TARGET" then
-        if a1 == "target" then RD.PaintCross() end      -- your target picked someone else: the amber mark moves
+        if a1 == "target" then RD.PaintCross() RD.PaintDeckBox() end   -- your target picked someone else: the amber mark moves
     elseif event == "PLAYER_TARGET_CHANGED" then
         RD.PaintCross()
+        RD.PaintDeckBox()                                -- the deck's target box: who is in it now
         RD.Look()
         RD.PickFuel() RD.PaintBoss()
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
