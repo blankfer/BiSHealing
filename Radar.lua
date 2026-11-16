@@ -2047,6 +2047,7 @@ end
 -- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
+RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
 --- A box's plate: the whole box - its two sides and the middle - drawn dark with a thin edge, under the pip and the icons.
@@ -2235,7 +2236,7 @@ function RD.DeckLayout(T, order)
     end
     local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
-    local x0, y0 = (W - place.w) / 2, C.pad + C.head
+    local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD   -- under the deck's taller alert strip
     local placed = {}
     -- THE ICONS UNDER THE BAR (15 Nov 2026). The kick and the cures are secure buttons that keep their click while unseen
     -- (a secure button's mouse may not change in a fight) - laid over the bar they ate the heal (Arn: "the middle part of
@@ -2337,6 +2338,7 @@ RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 
   dim: an empty slot still shows what a click drops. A totem swapped in mid-fight is learned when the fight ends (the
   names are secret in one). ]]
 RD.TIMER_DIM = 0.45
+RD.TIMER_FULL = 600                                 -- seconds under which the timer shows minutes:seconds (a totem lasts 300)
 function RD.TotemTimer(k)
     RD.timers = RD.timers or {}
     local t = RD.timers[k]
@@ -2374,6 +2376,10 @@ function RD.TotemTimer(k)
         if cd.SetDrawEdge then cd:SetDrawEdge(false) end
         if cd.SetDrawBling then cd:SetDrawBling(false) end
         if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+        -- THE FULL TIME, 4:59 (Arn, 15 Nov: "can we do a full timer 0:00"): the client writes "4m" above its abbreviation
+        -- threshold; raised past a totem's 5 minutes, it writes minutes and seconds the whole way (still the client's
+        -- number, so it holds in a fight). Not every client has the setting: then it stays "4m".
+        if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TIMER_FULL) end
         t.cd = cd
     end
     t.slot = spec.slot

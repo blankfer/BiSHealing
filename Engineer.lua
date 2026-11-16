@@ -50,9 +50,21 @@ EN.TEX = "Interface\\Buttons\\WHITE8X8"
 EN.HEAD = { { key = "los", x = 0, w = 34 }, { key = "range", x = 38, w = 58 }, { key = "over", x = 100, w = 62 } }
 EN.HEAD_H = 16
 
+-- THE DECK'S BOXES, BIGGER (Arn, 15 Nov: "the los is a bit big if we have to go a little taller we can do that to
+-- accommodate make sure they are centered"): the word keeps its size; its box grows round it, the strip taller.
+EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 74 }, { key = "over", x = 128, w = 78 } }
+EN.HEAD_DECK_H = 22
+--- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
+function EN.Heads()
+    local RD = NS.RD
+    if RD and RD.Deck and RD.Deck() then return EN.HEAD_DECK, EN.HEAD_DECK_H end
+    return EN.HEAD, EN.HEAD_H
+end
+
 local function headSlot(kind)
-    for _, h in ipairs(EN.HEAD) do if h.key == kind then return h end end
-    return EN.HEAD[1]
+    local list = EN.Heads()
+    for _, h in ipairs(list) do if h.key == kind then return h end end
+    return list[1]
 end
 
 --- Where the alerts live now: the console's top strip, or on the radar the BLACK BOX's bottom row (Arn, 12 Nov: "find a
@@ -65,7 +77,8 @@ function EN.Where()
     if RD.Console and RD.Console() then
         local C = RD.CON or {}
         local pad = C.pad or 8
-        return RD.frame or UIParent, pad, -((pad + (C.head or 14)) / 2)
+        local head = (RD.Deck and RD.Deck() and RD.DECK_HEAD) or C.head or 14   -- the deck's strip is taller
+        return RD.frame or UIParent, pad, -((pad + head) / 2)
     end
     -- the rail itself, shown or not yet: the radar's layout runs just before the view switch shows it
     local bb = RD.bbRail
@@ -100,7 +113,8 @@ function EN.HeadBoxes()
     local set = EN[key]
     local f, x0, y = EN.Where()
     local dim = RD.DIM or { 0.22, 1.00, 0.53, 0.4 }
-    for _, h in ipairs(EN.HEAD) do
+    local list, H = EN.Heads()
+    for _, h in ipairs(list) do
         local q = set[h.key]
         if not q then
             q = CreateFrame("Frame", nil, parent)
@@ -117,7 +131,7 @@ function EN.HeadBoxes()
             end
             set[h.key] = q
         end
-        q:SetSize(h.w, EN.HEAD_H)
+        q:SetSize(h.w, H)
         q:ClearAllPoints()
         q:SetPoint("CENTER", f, "TOPLEFT", x0 + h.x + h.w / 2, y)
         q:Show()

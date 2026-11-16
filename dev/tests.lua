@@ -14976,6 +14976,14 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- THE ALERT STRIP, ROOMIER (Arn: "the los is a bit big if we have to go a little taller ... make sure they are centered")
+    do
+        local list, H = NS.EN.Heads()
+        local q = NS.EN.heads and NS.EN.heads.los
+        local pt, rel, rp = NS.EN.HeadSpot("los")
+        ok(list == NS.EN.HEAD_DECK and H == NS.EN.HEAD_DECK_H and q and q.__h == H and q.__w >= 46 and pt == "CENTER",
+           "the deck's LOS / RANGE / OVER/H boxes are taller and wider, the word centred on its box", q and q.__h)
+    end
     -- NAMES IN THE TARGET BOX TOO (Arn: "names here too"): a plain name as a callsign, a hidden (secret) one handed whole
     do
         local keepGUN = _G.GetUnitName
