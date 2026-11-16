@@ -15433,6 +15433,28 @@ do
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
             ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
             ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
+            -- the tools come back after the switch (Arn's shot: an empty blue box)
+            RD.SetSw("tools", false)
+            RD.SetSw("tools", true)
+            ok(RD.tide and RD.tide:IsShown(), "tools off then on: the tools shown again")
+            -- the sliders (Arn: "maybe we also put the sliders there for width and height")
+            local wsl, hsl = RD.swPanel.sliders.width, RD.swPanel.sliders.height
+            ok(wsl and hsl, "the panel has a WIDTH and a BOX HEIGHT slider")
+            local h0 = RD.frame.__h
+            hsl:GetScript("OnValueChanged")(hsl, 150, true)
+            hsl:GetScript("OnMouseUp")(hsl, "LeftButton")
+            ok(RD.BoxHeight() == 150 and RD.frame.__h > h0 + 20, "box height 150%: the window grows", h0 .. " -> " .. RD.frame.__h)
+            hsl:GetScript("OnMouseUp")(hsl, "RightButton")
+            ok(RD.BoxHeight() == 100 and d.radar.boxH == nil, "right-click: back to 100%")
+            wsl:GetScript("OnValueChanged")(wsl, 200, true)
+            wsl:GetScript("OnMouseUp")(wsl, "LeftButton")
+            ok(RD.DeckWidth() == 200, "the width slider: the same width as Shift + drag", RD.DeckWidth())
+            wsl:GetScript("OnMouseUp")(wsl, "RightButton")
+            ok(RD.DeckWidth() == nil, "right-click: its own width")
+            -- the black box at Ellesmere's width: REC OFF under the words, never over them
+            if RD.bbRail and RD.bbRail.status then
+                ok(NS.BB.FitWords(RD.bbRail, 150) == true and NS.BB.FitWords(RD.bbRail, 300) == false, "a narrow black box: the status under BLACK BOX")
+            end
             STATE.inCombat = true
             ok(RD.SetSw("names", true) == "after" and RD.pending, "in a fight: saved, laid out after it")
             STATE.inCombat = false

@@ -338,6 +338,24 @@ local function buildKey(parent, label, x, y)
 end
 
 --- The bottom rail, under the tool rail and the square (Radar.lua's RD.BuildRails hands over its rail maker).
+--- A NARROW BLACK BOX (16 Nov 2026, Arn's shot at Ellesmere's width: BLACK BOX and REC OFF drawn over each other): under
+--- BB.NARROW the status goes under the words instead of beside the keypad.
+BB.NARROW = 210
+function BB.FitWords(r, w)
+    if not (r and r.status and r.label and r.pad) then return false end
+    w = tonumber(w) or (r.GetWidth and r:GetWidth())
+    local narrow = type(w) == "number" and w > 0 and w < BB.NARROW
+    r.status:ClearAllPoints()
+    if narrow then
+        r.status:SetPoint("TOPLEFT", r.label, "BOTTOMLEFT", 0, -2)
+        if r.status.SetJustifyH then r.status:SetJustifyH("LEFT") end
+    else
+        r.status:SetPoint("TOPRIGHT", r.pad, "TOPLEFT", -8, -3)
+        if r.status.SetJustifyH then r.status:SetJustifyH("RIGHT") end
+    end
+    return narrow
+end
+
 function BB.Build(f, toolRail, makeRail)
     if BB.rail then return BB.rail end
     local RD = NS.RD
@@ -387,6 +405,7 @@ function BB.Build(f, toolRail, makeRail)
     r.label:SetText("BLACK BOX")
     r.status = text(r, 9, "RIGHT")
     r.status:SetPoint("TOPRIGHT", pad, "TOPLEFT", -8, -3)
+    r:SetScript("OnSizeChanged", function(self, w) BB.FitWords(self, w) end)
     local scr = CreateFrame("Frame", nil, r)
     scr:SetHeight(18)
     scr:SetPoint("BOTTOMLEFT", lamp, "BOTTOMRIGHT", 2, -4)

@@ -1777,15 +1777,31 @@ function RD.SwStamp()
     return true
 end
 --- A box's sizes with the icon row taken out while kicks and cures are both off (the lean look: the bar is the box).
+--- BOX HEIGHT (16 Nov 2026, Arn: "maybe we also put the sliders there for width and height"): the bar's part of every box
+--- taller or shorter, RD.BOX_H_MIN .. RD.BOX_H_MAX %, saved per character (db().boxH; nil = 100). The icon row keeps its size.
+RD.BOX_H_MIN, RD.BOX_H_MAX, RD.BOX_H_STEP = 50, 200, 5
+function RD.BoxHeight()
+    local v = tonumber(db().boxH)
+    if not v then return 100 end
+    return math.max(RD.BOX_H_MIN, math.min(RD.BOX_H_MAX, math.floor(v + 0.5)))
+end
+function RD.SetBoxHeight(v)
+    v = tonumber(v)
+    db().boxH = (v and v ~= 100) and math.max(RD.BOX_H_MIN, math.min(RD.BOX_H_MAX, math.floor(v + 0.5))) or nil
+end
 function RD.DeckSized(M)
-    if RD.SwIcons() then return M end
-    RD.deckLean = RD.deckLean or {}
-    local L = RD.deckLean[M]
+    local icons, hk = RD.SwIcons(), RD.BoxHeight()
+    if icons and hk == 100 then return M end
+    RD.deckSized = RD.deckSized or {}
+    local key = tostring(M) .. (icons and "i" or "n") .. hk
+    local L = RD.deckSized[key]
     if not L then
         L = {}
         for k, v in pairs(M) do L[k] = v end
-        L.row, L.tank, L.icons = M.row - M.icons, M.tank - M.icons, 0
-        RD.deckLean[M] = L
+        local ic = icons and M.icons or 0
+        local function bar(h) return math.max(12, math.floor((h - M.icons) * hk / 100 + 0.5)) + ic end
+        L.row, L.tank, L.icons = bar(M.row), bar(M.tank), ic
+        RD.deckSized[key] = L
     end
     return L
 end
@@ -2175,26 +2191,44 @@ end
 --- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
 --- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
 --- the gap under it.
+RD.TOOL_KEYS = { "shield", "tide", "potion", "reserve", "fuel", "rations", "chaff", "res" }
+RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
 function RD.DeckTools(W, top)
-    local tools = CON_TOOLS()
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
     local per = math.max(1, math.floor((W - 2 * C.pad + gap) / (S + gap)))
-    local n = #tools
-    local lines = math.ceil(n / per)
-    local xs, ys = {}, {}
-    for l = 1, lines do
-        local first = (l - 1) * per + 1
-        local cnt = math.min(per, n - first + 1)
-        local x0 = (W - (cnt * S + (cnt - 1) * gap)) / 2 + S / 2
-        local cy = top + (l - 1) * (S + C.gap) + S / 2
-        for k = 0, cnt - 1 do
-            local b = tools[first + k]
-            if b then
-                xs[b], ys[b] = x0 + k * (S + gap), cy
-                at(b, xs[b], cy)
-            end
+    -- the tools in use (shown, or hidden by the switch), in their order; a narrow window (Arn's shot, 16 Nov: "the mana
+    -- thing did not center"): the mana four on a line of their own, centred in their box, the rest wrapped under
+    local all, mana, rest = {}, {}, {}
+    for _, k in ipairs(RD.TOOL_KEYS) do
+        local b = RD[k]
+        if b and (b:IsShown() or b.swHidden) then
+            all[#all + 1] = b
+            if RD.MANA_KEYS[k] then mana[#mana + 1] = b else rest[#rest + 1] = b end
         end
     end
+    local lines = {}
+    local function wrap(list)
+        local i = 1
+        while i <= #list do
+            local l = {}
+            for k = i, math.min(#list, i + per - 1) do l[#l + 1] = list[k] end
+            lines[#lines + 1] = l
+            i = i + per
+        end
+    end
+    if per >= #all then lines[1] = all else wrap(mana) wrap(rest) end
+    local xs, ys = {}, {}
+    for l, line in ipairs(lines) do
+        local cnt = #line
+        local x0 = (W - (cnt * S + (cnt - 1) * gap)) / 2 + S / 2
+        local cy = top + (l - 1) * (S + C.gap) + S / 2
+        for k, b in ipairs(line) do
+            xs[b], ys[b] = x0 + (k - 1) * (S + gap), cy
+            at(b, xs[b], cy)
+            if b.swHidden then b.swHidden = nil b:Show() end   -- the tools switch back on: the ones it hid
+        end
+    end
+    local nLines = math.max(1, #lines)
     local mb = RD.manaBox
     if not mb then
         mb = CreateFrame("Frame", nil, RD.conLayer)
@@ -2210,11 +2244,13 @@ function RD.DeckTools(W, top)
     else
         mb:Hide()
     end
-    return lines * (S + C.gap)
+    return nLines * (S + C.gap)
 end
 --- The tools row switched off: every tool button out of sight (RD.ArmTools shows them again at the next layout).
 function RD.HideTools()
-    for _, b in ipairs(CON_TOOLS()) do if b then b:Hide() end end
+    for _, b in ipairs(CON_TOOLS()) do
+        if b and b:IsShown() then b.swHidden = true b:Hide() end   -- remembered: only these come back (Arn: the empty blue box)
+    end
     if RD.manaBox then RD.manaBox:Hide() end
 end
 
@@ -2643,8 +2679,14 @@ function RD.DeckLayout(T, order)
         local x = right - 2
         local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
-            c.box:SetShown(SW("cures"))
-            if c.container and c.container.SetShown then c.container:SetShown(SW("cures")) end
+            if not SW("cures") then
+                if c.box:IsShown() then c.swHidden = true c.box:Hide() end
+                if c.container and c.container.Hide then c.container:Hide() end
+            elseif c.swHidden then
+                c.swHidden = nil
+                c.box:Show()
+                if c.container and c.container.Show then c.container:Show() end
+            end
             c.box:SetSize(cs, cs)
             if is then
                 at(c.box, colX, cyCol)
@@ -3280,9 +3322,74 @@ function RD.BuildSwitches()
         b:SetScript("OnClick", function() RD.SwPreset(name) end)
         p.presets[name] = b
     end
+    -- THE SLIDERS: the width (the same as Shift + drag on the corner) and the boxes' height. Laid out again at most every
+    -- RD.WIDTH_EVERY seconds while dragging, and once more when let go. Right-click one: back to its own.
+    p.sliders = {}
+    local function slider(key, label, y, lo, hi, step, get, set, unit)
+        local s = CreateFrame("Slider", nil, p)
+        s:SetOrientation("HORIZONTAL")
+        s:SetSize(RD.SW_W - 16 - 56 - 44, 12)
+        s:SetPoint("TOPLEFT", p, "TOPLEFT", 64, y - 4)
+        s:SetMinMaxValues(lo, hi)
+        s:SetValueStep(step)
+        if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+        s:EnableMouse(true)
+        s.track = s:CreateTexture(nil, "BACKGROUND")
+        s.track:SetPoint("LEFT") s.track:SetPoint("RIGHT") s.track:SetHeight(3)
+        s.track:SetColorTexture(c[1] * 0.4, c[2] * 0.4, c[3] * 0.4, 1)
+        local th = s:CreateTexture(nil, "OVERLAY")
+        th:SetColorTexture(1, 0.31, 0.66, 1)
+        th:SetSize(6, 12)
+        s:SetThumbTexture(th)
+        s.label = s:CreateFontString(nil, "OVERLAY")
+        s.label:SetFont(font, 9, "")
+        s.label:SetTextColor(0.85, 0.85, 0.9, 1)
+        s.label:SetPoint("RIGHT", s, "LEFT", -6, 0)
+        s.label:SetText(label)
+        s.value = s:CreateFontString(nil, "OVERLAY")
+        s.value:SetFont(font, 9, "")
+        s.value:SetTextColor(c[1], c[2], c[3], 1)
+        s.value:SetPoint("LEFT", s, "RIGHT", 6, 0)
+        s.get, s.set, s.unit, s.last = get, set, unit, 0
+        local function apply(self, now)
+            if combat() or RD.inFight then return end
+            if not now and (GetTime() - self.last) < RD.WIDTH_EVERY then self.dirty = true return end
+            self.last, self.dirty = GetTime(), nil
+            if RD.Active() then RD.Arm() end
+        end
+        s:SetScript("OnValueChanged", function(self, v, user)
+            if self.painting then return end
+            v = math.floor((tonumber(v) or 0) / step + 0.5) * step
+            self.value:SetText(v .. self.unit)
+            if user == false then return end
+            self.set(v)
+            apply(self, false)
+        end)
+        s:SetScript("OnMouseUp", function(self, button)
+            if button == "RightButton" then self.set(nil) RD.PaintSwitches() end
+            apply(self, true)
+            RD.PaintSwitches()
+        end)
+        s:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(label)
+            GameTooltip:AddLine("Drag to change it.  Right-click: back to its own.  Out of a fight.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        s:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        p.sliders[key] = s
+        return s
+    end
+    slider("width", "WIDTH", -48, RD.FloorInner(), 800, 2,
+        function() return RD.DeckWidth() or tonumber(RD.deckInnerW) or 382 end,
+        function(v) RD.SetDeckWidth(v) end, " px")
+    slider("height", "BOX HEIGHT", -66, RD.BOX_H_MIN, RD.BOX_H_MAX, RD.BOX_H_STEP,
+        function() return RD.BoxHeight() end,
+        function(v) RD.SetBoxHeight(v) end, "%")
     -- a row per switch, under its group's word
     p.rows = {}
-    local y, group = -48, nil
+    local y, group = -88, nil
     for _, s in ipairs(RD.SW) do
         if s.group ~= group then
             group = s.group
@@ -3356,6 +3463,13 @@ function RD.PaintSwitches()
         for _, e in ipairs(b.edges) do e:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0.35) end
     end
     p.note:SetText((combat() or RD.inFight) and "after this fight" or "")
+    for _, s in pairs(p.sliders or {}) do
+        local v = s.get()
+        s.painting = true
+        s:SetValue(v)
+        s.painting = nil
+        s.value:SetText(math.floor(v + 0.5) .. s.unit)
+    end
     return true
 end
 --- The switches button: open the panel beside the window, or close it.
