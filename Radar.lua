@@ -6875,6 +6875,7 @@ function RD.Command(rest)
         local line = string.format("riptide: known %s, length %ss, last on %s, %s left", tostring(RD.RipKnown()), tostring(RD.RipLength()),
             tostring(l and l.unit or "nobody yet"), l and string.format("%.1f", math.max(0, l.untilAt - GetTime())) or "-")
         P(line)
+        if NS.FM and NS.FM.SeqInfo then P(NS.FM.SeqInfo()) end   -- what the Riptide + heal bind's list is built from
         return line
     end
     if word == "over" and NS.OV and NS.OV.Status then return NS.OV.Status() end
