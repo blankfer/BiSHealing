@@ -2599,6 +2599,7 @@ function RD.TotemTimer(k)
     t.icon:SetPoint("BOTTOMLEFT", t, "BOTTOMLEFT", 2, 2)
     if t.icon.SetTexCoord then t.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     t:SetScript("OnEnter", function(self)
+        if not self.totem and not combat() then RD.LearnTimers() end   -- not learned yet: try now (out of a fight)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:AddLine(self.totem and self.totem:upper() or "TOTEM TIMER")
@@ -5878,7 +5879,7 @@ for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENAB
                      "BAG_UPDATE_DELAYED", "UI_ERROR_MESSAGE", "PLAYER_TARGET_CHANGED", "UNIT_TARGET",
                      "PLAYER_ROLES_ASSIGNED", "SPELL_UPDATE_COOLDOWN", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "UNIT_MAXPOWER",
                      "PLAYER_LEVEL_UP", "UNIT_PET", "INCOMING_RESURRECT_CHANGED", "UNIT_CONNECTION",
-                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD" }) do
+                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD", "ADDON_RESTRICTION_STATE_CHANGED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
@@ -5889,6 +5890,13 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     -- handed out, the lockdown back right after - armed NOW, never left for a later tick (Grid.lua, FG.Start)
     if event == "PLAYER_ENTERING_WORLD" then
         if RD.Active() and not combat() then RD.Arm() end
+        return
+    end
+    -- THE NAMES COME BACK A LITTLE AFTER THE FIGHT (16 Nov 2026, Arn: "when i click the water or earth totem its not
+    -- dropping them again"): at PLAYER_REGEN_ENABLED the totems' names can still be hidden (solved.md 14 Oct, "data stays
+    -- partly secret after combat ends") - the lift is this event; the boxes learn then
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        if not combat() then RD.LearnTimers() end
         return
     end
     if event == "PLAYER_TOTEM_UPDATE" then                      -- the deck's four timers: the game's own countdowns

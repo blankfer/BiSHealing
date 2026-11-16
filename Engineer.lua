@@ -355,6 +355,13 @@ function EN.FoldStatus()
     local okC, _, tok = pcall(UnitClass, "targettarget")
     local cls = not okC and "error" or tok == nil and "none" or secret(tok) and "hidden" or tostring(tok)
     local curve = (C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean) and "yes" or "no"
+    local function kind(ok, v) if not ok then return "error" end if v == nil then return "nil" end
+        if secret(v) then return "hidden" end return tostring(v) end
+    local okX, ex = pcall(UnitExists, "targettarget")
+    local okA, foe = pcall(UnitCanAttack, "player", "targettarget")
+    local okN, nm = pcall(GetUnitName, "targettarget", false)
+    local nmK = not okN and "error" or nm == nil and "nil" or secret(nm) and "hidden" or "plain"
+    cls = cls .. ", exists " .. kind(okX, ex) .. ", enemy " .. kind(okA, foe) .. ", name " .. nmK
     local line = string.format("its target: class now %s, curve %s, last look: %s", cls, curve,
         EN.foldSeen and (#EN.foldSeen > 0 and table.concat(EN.foldSeen, ", ") or "nobody to ask") or "not looked yet")
     if NS.Print then NS.Print(line) end
