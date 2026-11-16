@@ -259,7 +259,9 @@ function FG.DeckOn()
     local RD = NS.RD
     if not (RD and RD.On and RD.On()) then return false end
     if RD.DiscView and RD.DiscView() then return false end      -- the retired disc: the suite's own door, until it is gone
-    return not (RD.EngineerView and RD.EngineerView())
+    -- the engineer's view is the deck too since 15 Nov (Arn: "just do what we did but make it more condensed ... slightly
+    -- more narrow and more tall"): RD.Compact() picks its sizes
+    return true
 end
 
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid

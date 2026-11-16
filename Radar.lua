@@ -1590,7 +1590,11 @@ function RD.EngineerView() return db().view == "console" end
 --- The retired radar disc, reachable only by the suite (`RD.FORCE_DISC`, never set in the game), so its code stays tested
 --- until it is deleted.
 RD.FORCE_DISC = false
-function RD.DiscView() return RD.FORCE_DISC == true and not RD.EngineerView() end
+function RD.DiscView() return RD.FORCE_DISC == true end
+--- The engineer's view: the deck, condensed (RD.DECK_SMALL) - narrower, taller boxes, short totem timers.
+function RD.Compact() return RD.EngineerView() and RD.Deck() end
+--- The deck's sizes for the view on screen.
+function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
 --- place, so the highest slot says how many must fit). Answers the class and its number.
@@ -2052,6 +2056,9 @@ end
 -- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
 -- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
+-- THE ENGINEER'S VIEW (Arn, 15 Nov: his cousin "already thought it took too much space" - "we dont go wider we can go
+-- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
+RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22 }
 RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
 RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
@@ -2216,33 +2223,79 @@ end
 --- interrupt button next to everyone like their cure and dispell buttons only show up when needed"). Measured in a 40: one
 --- look is 344 calls with all 40 kicks, 274 with five - the engineer's range on 40 boxes is most of it (its view pays that
 --- today); a kick is about two calls.
-function RD.DeckSlots(T)
-    local M, out = RD.DECK, {}
-    for i = 1, T.n + 2 do
+function RD.DeckSlots(T, nPets)
+    local M, out = RD.DeckM(), {}
+    for i = 1, T.n + 2 + (nPets or 0) do
         local crew = i <= T.n
         out[i] = { b = 0, rh = 0, rc = 0, rb = crew and 0 or nil, ph = M.row - 8, pc = M.chip, pb = M.kick, own = false,
                    nopet = true, console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
-                   box = (not crew) or nil }
+                   box = (not crew and i <= T.n + 2) or nil, petBox = (i > T.n + 2) or nil }
+        if i > T.n + 2 then out[i].rb = nil end              -- a pet box: no kick of its own
     end
     return out
 end
 
+--[[ PETS ARE PEOPLE TOO (Arn, 15 Nov: "hunter pets should be counted as party members but never go in the top tank spot,
+  and indicated by that paw icon"). Out of a fight, the pets that are out: yours and your party's (in a raid, your own
+  group's), each its own box after the people - never in the tank row (the tank row only ever takes the crew) - with a paw
+  on its name line. A pet called or sent away re-lays the deck (UNIT_PET; in a fight it waits for the fight's end). ]]
+function RD.DeckPets(units, n)
+    local out = {}
+    for i = 1, n do
+        local u = units[i]
+        local mine = (not RD.raid) or math.ceil(i / 5) == (RD.ownGroup or 1)
+        local pet = u and mine and RD.PetOf(u)
+        if pet then
+            local ok, there = pcall(UnitExists, pet)
+            if ok and plain(there) == true then out[#out + 1] = pet end
+        end
+    end
+    return out
+end
+
+-- the paw: the game's own paw print (Track Beasts' icon, asked by its spell id; its file path if the client will not say)
+RD.PAW_SPELL = 1494
+function RD.DeckPaw(sp, on)
+    local plate = sp and sp.deckPlate
+    if not plate then return false end
+    local p = sp.deckPaw
+    if not on then if p then p:Hide() end return false end
+    if not p then
+        p = plate:CreateTexture(nil, "OVERLAY", nil, 6)
+        local tex
+        if C_Spell and C_Spell.GetSpellTexture then
+            local ok, t = pcall(C_Spell.GetSpellTexture, RD.PAW_SPELL)
+            if ok then tex = t end
+        end
+        p:SetTexture(tex or "Interface\\Icons\\Ability_Tracking")
+        if p.SetTexCoord then p:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        p:SetSize(RD.DECK_NAME_BAND + 2, RD.DECK_NAME_BAND + 2)
+        p:SetPoint("TOPRIGHT", plate, "TOPRIGHT", -2, -1)
+        sp.deckPaw = p
+    end
+    p:Show()
+    return true
+end
+
 --- The units the deck's places hold: the crew's own (a copy - RD.units stays the group), then "target" and "targettarget".
-function RD.DeckUnits(units, n)
+function RD.DeckUnits(units, n, pets)
     local out = {}
     for i = 1, n do out[i] = units[i] end
     out[n + 1], out[n + 2] = "target", "targettarget"
+    for k, p in ipairs(pets or {}) do out[n + 2 + k] = p end
     return out
 end
 
 function RD.DeckLayout(T, order)
-    local f, C, M = RD.frame, RD.CON, RD.DECK
+    local f, C, M = RD.frame, RD.CON, RD.DeckM()
     local nT = math.min(RD.deckTanks or 0, T.n)
     local crew = {}
     for k = nT + 1, T.n do
         local i = order[k]
         if i and RD.units and RD.units[i] then crew[#crew + 1] = i end
     end
+    local firstPet = #crew + 1
+    for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
     local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
     local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD   -- under the deck's taller alert strip
@@ -2289,7 +2342,12 @@ function RD.DeckLayout(T, order)
         RD.DeckTag(sp, r.w)                               -- the name across the whole box
     end
     for k = 1, nT do put(order[k], place.tanks[k], true) end
-    for r, i in ipairs(crew) do put(i, place.rest[r], true) end
+    for r, i in ipairs(crew) do
+        put(i, place.rest[r], r < firstPet)
+        RD.DeckPaw(RD.spokes[i], r >= firstPet)
+    end
+    for k = 1, nT do RD.DeckPaw(RD.spokes[order[k]], false) end
+    for i = T.n + 1, T.n + 2 do if RD.spokes[i] then RD.DeckPaw(RD.spokes[i], false) end end
     -- the empty places: out of sight (the deck grows down instead of keeping holes)
     for k = 1, T.n do
         local i = order[k]
@@ -2354,6 +2412,7 @@ RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 
   names are secret in one). ]]
 RD.TIMER_DIM = 0.45
 RD.TIMER_FULL = 600                                 -- seconds under which the timer shows minutes:seconds (a totem lasts 300)
+RD.TIMER_SHORT = 60                                 -- the engineer's view: "5m", then plain seconds (Arn: "just 5m or 00")
 function RD.TotemTimer(k)
     RD.timers = RD.timers or {}
     local t = RD.timers[k]
@@ -2483,6 +2542,11 @@ function RD.DeckTotemRow(W, y)
         t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", starts[k], -(y6 - RD.SYS_PX / 2))
         t.icon:SetWidth(RD.SYS_PX - 4)
         t.base:SetWidth(RD.SYS_PX - 4)
+        -- the engineer's view: "5m", then seconds (Arn: "no 0:00 timer just 5m or 00"); the deck: 4:59 the whole way
+        local cd = t.cd
+        if cd and cd.SetCountdownAbbrevThreshold then
+            pcall(cd.SetCountdownAbbrevThreshold, cd, RD.Compact() and RD.TIMER_SHORT or RD.TIMER_FULL)
+        end
         t:Show()
     end
     RD.LearnTimers()                                   -- each box's remembered totem, and its click
@@ -4835,8 +4899,10 @@ function RD.Arm()
         if RD.Deck() then
             order, RD.deckTanks = RD.DeckOrder(units, T.n)
             RD.conOrder = order
-            slots = RD.DeckSlots(T)
-            units = RD.DeckUnits(units, T.n)
+            local pets = RD.DeckPets(units, T.n)
+            RD.deckPets = #pets
+            slots = RD.DeckSlots(T, #pets)
+            units = RD.DeckUnits(units, T.n, pets)
         end
         RD.slots = slots
         RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
@@ -4880,6 +4946,11 @@ function RD.Arm()
         armPet(sp, nil, nil)
         for _, fr in ipairs(sp.dims) do fr:Hide() end
         sp.los:SetAlpha(0)
+        -- the deck's own parts of a place no longer used (a pet sent away): its box, name, paw and cast bar
+        if sp.deckPlate then sp.deckPlate:Hide() end
+        if sp.deckTag then sp.deckTag:Hide() end
+        if sp.deckPaw then sp.deckPaw:Hide() end
+        if sp.castStrip then sp.castStrip:SetAlpha(0) end
     end
     armShield()
     RD.ArmTools()
@@ -5682,6 +5753,8 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         -- an owner called or sent away a pet: the client's watch shows or hides the pip; we repaint its colour
         if NS.Secret and NS.Secret(a1) then return end
         for _, sp in ipairs(RD.spokes) do if sp.unit == a1 then RD.PaintPet(sp) end end
+        -- the deck: a pet is a box of its own - called or sent away, the deck is laid out again (after the fight, in one)
+        if RD.Deck() then if combat() then RD.pending = true else RD.Arm() end end
     elseif event == "UNIT_POWER_UPDATE" or event == "UNIT_MAXPOWER" then
         if a1 == "player" then
             -- a bigger or smaller pool between pulls (gear, a buff): the tools re-learn where they light

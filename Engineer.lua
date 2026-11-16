@@ -39,6 +39,7 @@ EN.GHOST = { 0.22, 0.80, 1.00, 0.28 }    -- your hover heal: the same cyan, fain
 EN.OVER = { 1.00, 0.12, 0.85, 0.95 }      -- the grid's classic overheal magenta (FG.OVERHEAL), the colour Arn showed
 EN.OVER_HOVER = { 1.00, 0.12, 0.85, 0.45 }
 EN.FALLBACK = { 0.20, 0.70, 0.30 }       -- a class the client will not say
+EN.PET = { 0.55, 0.78, 0.35 }            -- a pet's box (the deck, 15 Nov): moss green, with the paw on its name line
 EN.TEX = "Interface\\Buttons\\WHITE8X8"
 
 -- ONE PLACE FOR EVERY ALERT (Arn, 12 Nov: "for the engineering since we are cramped for space, we can move all the alerts
@@ -299,6 +300,7 @@ function EN.Paint(sp)
         if ok then cls = plain(token) end
     end
     local c = (FG and FG.CLASS_COLOR and FG.CLASS_COLOR[cls or ""]) or EN.FALLBACK
+    if type(unit) == "string" and unit:find("pet", 1, true) then c = EN.PET end     -- a pet: never its owner's class
     if UnitIsDeadOrGhost then
         local okD, dead = pcall(UnitIsDeadOrGhost, unit)
         if okD and plain(dead) == true then c = (FG and FG.DEAD_COLOR) or { 0.35, 0.10, 0.10 } end

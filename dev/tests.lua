@@ -14973,6 +14973,25 @@ do
     RD.FORCE_DISC, d.radar.view = false, nil              -- the radar look's own view now: the deck
     RD.Arm()
     ok(RD.Deck() and RD.Console() and RD.On(), "the radar look IS the deck now - no alpha switch")
+    -- PETS ARE PEOPLE TOO (Arn: "hunter pets should be counted as party members but never go in the top tank spot, and
+    -- indicated by that paw icon")
+    do
+        local keepPet = STATE.units.partypet1
+        STATE.units.partypet1 = true
+        RD.Arm()
+        local petSp
+        for _, sp in ipairs(RD.spokes) do if sp.unit == "partypet1" then petSp = sp end end
+        ok(RD.deckPets == 1 and petSp and petSp.deckPlate and petSp.deckPlate:IsShown() and petSp.deckPaw and petSp.deckPaw:IsShown(),
+           "a hunter's pet out: a box of its own, the paw on its name line", RD.deckPets)
+        local tankUnit = RD.spokes[RD.conOrder[1]] and RD.spokes[RD.conOrder[1]].unit
+        ok(tankUnit ~= "partypet1" and petSp.heal:GetAttribute("unit") == "partypet1", "never in the tank row; its box heals the pet")
+        ok(not (RD.slots[petSp.i or 0] or {}).rb, "no kick of its own")
+        STATE.units.partypet1 = nil
+        RD.Arm()
+        ok(RD.deckPets == 0 and not petSp.deckPlate:IsShown() and not petSp.deckPaw:IsShown(), "sent away: its box goes")
+        STATE.units.partypet1 = keepPet
+        RD.Arm()
+    end
     local M = RD.DECK
     local mp = FG.DeckPlace(1, 2, true, M)
     -- NARROW AND TALL (Arn: "also taller 9:16 ... i hate moving mouse lef and right"): five to a row, thin tall boxes
@@ -15308,7 +15327,14 @@ do
     end
     d.radar.view = "console"
     RD.Arm()
-    ok(RD.EngineerView() and not RD.Deck() and not RD.deckBox:IsShown(), "the view button's other side: the engineer's view")
+    ok(RD.EngineerView() and RD.Compact() and RD.Deck() and RD.deckBox:IsShown(),
+       "the view button's other side: the engineer's view - the same deck, condensed (Arn: \"just do what we did but make it more condensed\")")
+    do
+        local small = FG.DeckPlace(1, 4, true, RD.DECK_SMALL)
+        local big = FG.DeckPlace(1, 4, true, RD.DECK)
+        ok(small.w < big.w and RD.DECK_SMALL.row / RD.DECK_SMALL.cell > RD.DECK.row / RD.DECK.cell,
+           "narrower, and its boxes taller for their width (Arn: \"slightly more narrow and more tall\")", small.w .. " vs " .. big.w)
+    end
     d.radar.view, RD.FORCE_DISC = nil, true
     RD.Arm()
     ok(not RD.Deck() and not RD.deckBox:IsShown(), "the suite's door: the retired disc")
