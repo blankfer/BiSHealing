@@ -4991,12 +4991,14 @@ function RD.TideTag(sp, secs, word)
     local t = sp.tideTag
     if not t then
         t = CreateFrame("Frame", nil, sp.deckPlate)
-        t:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
+        -- UNDER THE NAME (Arn's shot, 16 Nov: on a narrow box "CHAINHEAL GROUNDING 34" ran together - "we can just move
+        -- it under the name"): the line below the callsign, from the same left edge
+        t:SetPoint("TOPLEFT", sp.deckPlate, "TOPLEFT", RD.DECK_TAG.x, RD.DECK_TAG.y - RD.DECK_TAG.size - 3)
         t:SetSize(80, 11)
         t.text = t:CreateFontString(nil, "OVERLAY")
         t.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-        t.text:SetPoint("RIGHT", t, "RIGHT", 0, 0)
-        t.text:SetJustifyH("RIGHT")
+        t.text:SetPoint("LEFT", t, "LEFT", 0, 0)
+        t.text:SetJustifyH("LEFT")
         local c = RD.TIDE_COL
         t.text:SetTextColor(c[1], c[2], c[3], c[4])
         t:SetScript("OnUpdate", function(self, e)
