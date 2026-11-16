@@ -15471,6 +15471,30 @@ do
             if RD.bbRail and RD.bbRail.status then
                 ok(NS.BB.FitWords(RD.bbRail, 150) == true and NS.BB.FitWords(RD.bbRail, 300) == false, "a narrow black box: the status under BLACK BOX")
             end
+            -- LOSS OF CONTROL (Arn: "how long im stunned or how long im silenced or how long im locked out of magic schools")
+            do
+                local keepLC = _G.C_LossOfControl
+                local cc = EN.heads and EN.heads.cc
+                ok(cc and cc:IsShown(), "a fourth box on top: loss of control")
+                _G.C_LossOfControl = { GetActiveLossOfControlData = function() return nil end }
+                ok(EN.LossPaint() == false and not (cc.loss and cc.loss.bar:IsShown()), "nothing on you: the box stays empty")
+                local word = secretString()
+                _G.C_LossOfControl = {
+                    GetActiveLossOfControlData = function() return { displayText = word, iconTexture = 136071, locType = secret(),
+                                                                      lockoutSchool = secret(), startTime = secret(), duration = secret() } end,
+                    GetActiveLossOfControlDuration = function() return {} end,
+                }
+                ok(EN.LossPaint() == true and cc.loss.bar:IsShown(), "stunned in a fight: lit, every hidden answer handed over untouched")
+                _G.C_LossOfControl = { GetActiveLossOfControlData = function() return { displayText = "Interrupted",
+                    locType = "SCHOOL_INTERRUPT", lockoutSchool = 8, startTime = 10, duration = 4 } end }
+                EN.LossPaint()
+                ok(cc.loss.word.__text == "NATURE LOCKED", "a plain school lockout: the school named", tostring(cc.loss.word.__text))
+                ok(RD.Command("cc"):find("loss of control:", 1, true), "/bish alpha radar cc: the readout")
+                RD.SetSw("cc", false)
+                ok(not cc:IsShown(), "switched off: no fourth box")
+                RD.SetSw("cc", true)
+                _G.C_LossOfControl = keepLC
+            end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
             RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)

@@ -53,7 +53,8 @@ EN.HEAD_H = 16
 
 -- THE DECK'S BOXES, BIGGER (Arn, 15 Nov: "the los is a bit big if we have to go a little taller we can do that to
 -- accommodate make sure they are centered"): the word keeps its size; its box grows round it, the strip taller.
-EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 74 }, { key = "over", x = 128, w = 78 } }
+EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 74 }, { key = "over", x = 128, w = 78 },
+                 { key = "cc", x = 210, w = 96 } }   -- 16 Nov: the fourth box, loss of control (EN.LossPaint)
 EN.HEAD_DECK_H = 22
 --- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
 function EN.Heads()
@@ -131,9 +132,11 @@ function EN.HeadBoxes()
     local key = con and "heads" or "radarHeads"
     EN[key] = EN[key] or {}
     local set = EN[key]
-    if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("alerts") then    -- switched off: the boxes away
-        for _, q in pairs(set) do q:Hide() end
-        return set
+    local deck = con and RD.Deck and RD.Deck() and RD.Sw
+    local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
+        if not deck then return key ~= "cc" end
+        if key == "cc" then return RD.Sw("cc") end
+        return RD.Sw("alerts")
     end
     local f, x0, y = EN.Where()
     local dim = RD.DIM or { 0.22, 1.00, 0.53, 0.4 }
@@ -158,8 +161,14 @@ function EN.HeadBoxes()
         q:SetSize(h.w, H)
         q:ClearAllPoints()
         q:SetPoint("CENTER", f, "TOPLEFT", x0 + h.x + h.w / 2, y)
-        q:Show()
+        q:SetShown(wanted(h.key))
     end
+    for key, q in pairs(set) do                       -- a box this surface does not list (the cc box off the deck)
+        local listed = false
+        for _, h in ipairs(list) do if h.key == key then listed = true end end
+        if not listed then q:Hide() end
+    end
+    if set.cc and set.cc:IsShown() then EN.LossPaint() end
     if not con then
         EN.TintRadarHeads()
         -- the black box's screen may be up (a code being typed): the boxes wait under it
@@ -346,6 +355,108 @@ function EN.FoldClass(unit, c)
         if ok and not secret(same) and same == true then return cc[1], cc[2], cc[3] end
     end
     return r, g, b
+end
+
+--[[ LOSS OF CONTROL (16 Nov 2026, Arn: "need another los type bar for loss of control either how long im stunned or how long
+  im silenced or how long im locked out of magic schools ... im leaning another bar"). The deck's fourth box: while YOU
+  are stunned, silenced, feared or locked out of a school, the game's own icon, its own words ("Stunned", "Silenced",
+  "Interrupted") and its own countdown - a bar draining across the box and the seconds left - all handed over untouched
+  (in a fight they may be secret: nothing is compared or read). A school lockout names the school when the game says it
+  plainly. Woken only by LOSS_OF_CONTROL_ADDED / _UPDATE; nothing ticks. ]]
+EN.LOSS_COL = { 1.00, 0.45, 0.10, 0.85 }       -- the bar: hot orange, apart from LOS red and the cast bar's red
+EN.SCHOOLS = { [1] = "PHYSICAL", [2] = "HOLY", [4] = "FIRE", [8] = "NATURE", [16] = "FROST", [32] = "SHADOW", [64] = "ARCANE" }
+function EN.LossBuild(q)
+    if q.loss then return q.loss end
+    local L = {}
+    L.bar = CreateFrame("StatusBar", nil, q)
+    L.bar:SetPoint("TOPLEFT", q, "TOPLEFT", 1, -1)
+    L.bar:SetPoint("BOTTOMRIGHT", q, "BOTTOMRIGHT", -1, 1)
+    L.bar:SetStatusBarTexture(EN.TEX)
+    local c = EN.LOSS_COL
+    L.bar:SetStatusBarColor(c[1], c[2], c[3], c[4])
+    L.bar:SetMinMaxValues(0, 1)
+    L.bar:SetValue(0)
+    L.icon = L.bar:CreateTexture(nil, "OVERLAY")
+    L.icon:SetPoint("LEFT", q, "LEFT", 2, 0)
+    L.icon:SetSize(16, 16)
+    if L.icon.SetTexCoord then L.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    L.word = L.bar:CreateFontString(nil, "OVERLAY")
+    L.word:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+    L.word:SetPoint("LEFT", L.icon, "RIGHT", 3, 0)
+    L.word:SetPoint("RIGHT", q, "RIGHT", -20, 0)
+    L.word:SetJustifyH("LEFT")
+    local okCd, cd = pcall(CreateFrame, "Cooldown", nil, L.bar, "CooldownFrameTemplate")
+    if okCd and cd then
+        cd:SetPoint("TOPRIGHT", q, "TOPRIGHT", -1, -1)
+        cd:SetPoint("BOTTOMRIGHT", q, "BOTTOMRIGHT", -1, 1)
+        cd:SetWidth(20)
+        if cd.SetDrawSwipe then cd:SetDrawSwipe(false) end
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+        L.cd = cd
+    end
+    L.bar:Hide()
+    q.loss = L
+    return L
+end
+local function lossOff(L)
+    L.bar:Hide()
+    if L.cd and L.cd.Clear then pcall(L.cd.Clear, L.cd) end
+end
+--- Paint the box from the game's first active loss of control (yours). Answers true while one shows.
+function EN.LossPaint()
+    local q = EN.heads and EN.heads.cc
+    if not (q and q:IsShown()) then return false end
+    local L = EN.LossBuild(q)
+    local LC = C_LossOfControl
+    local ok, data = false, nil
+    if LC and LC.GetActiveLossOfControlData then ok, data = pcall(LC.GetActiveLossOfControlData, 1) end
+    EN.lossSeen = ok and (type(data) == "table" and "data" or "none") or "refused"
+    if not ok or type(data) ~= "table" then lossOff(L) return false end
+    L.bar:Show()
+    pcall(L.icon.SetTexture, L.icon, data.iconTexture)
+    local word = data.displayText
+    local kind, school = data.locType, data.lockoutSchool
+    if not secret(kind) and kind == "SCHOOL_INTERRUPT" and not secret(school) and EN.SCHOOLS[school or 0] then
+        word = EN.SCHOOLS[school] .. " LOCKED"
+    end
+    pcall(L.word.SetText, L.word, word)
+    local obj
+    if LC.GetActiveLossOfControlDuration then
+        local okD, o = pcall(LC.GetActiveLossOfControlDuration, 1)
+        if okD then obj = o end
+    end
+    local timed = false
+    if obj ~= nil then
+        if L.bar.SetTimerDuration and Enum and Enum.StatusBarTimerDirection then
+            local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
+            timed = pcall(L.bar.SetTimerDuration, L.bar, obj, interp, Enum.StatusBarTimerDirection.RemainingTime)
+        end
+        if L.cd and L.cd.SetCooldownFromDurationObject then pcall(L.cd.SetCooldownFromDurationObject, L.cd, obj) end
+    end
+    if not timed then
+        -- the plain numbers, when the game hands them plainly: the seconds still count on the cooldown
+        local st, du = data.startTime, data.duration
+        if not secret(st) and not secret(du) and type(st) == "number" and type(du) == "number" and du > 0 then
+            if L.cd and L.cd.SetCooldown then L.cd:SetCooldown(st, du) end
+        end
+        L.bar:SetMinMaxValues(0, 1)
+        L.bar:SetValue(1)                                -- no timer bar from the game: the box lit full, the words say it
+    end
+    return true
+end
+--- `/bish alpha radar cc`: what the game handed the last time (a fight shows whether its answers are hidden).
+function EN.LossStatus()
+    local LC = C_LossOfControl
+    local okN, n = false, nil
+    if LC and LC.GetActiveLossOfControlDataCount then okN, n = pcall(LC.GetActiveLossOfControlDataCount) end
+    local nK = not okN and "refused" or n == nil and "nil" or secret(n) and "hidden" or tostring(n)
+    local line = string.format("loss of control: api %s, count %s, last look %s, box %s",
+        LC and "yes" or "no", nK, tostring(EN.lossSeen or "never"),
+        tostring(EN.heads and EN.heads.cc and EN.heads.cc:IsShown() or false))
+    if NS.Print then NS.Print(line) end
+    return line
 end
 
 --- `/bish alpha radar box`: the target box's own numbers - how bright each layer is, its bar's colour, what the enemy
@@ -662,7 +773,13 @@ wrap()
 local ev = CreateFrame("Frame")
 EN.events = ev
 pcall(ev.RegisterEvent, ev, "UNIT_IN_RANGE_UPDATE")
+pcall(ev.RegisterEvent, ev, "LOSS_OF_CONTROL_ADDED")      -- yours: the loss of control box (EN.LossPaint)
+pcall(ev.RegisterEvent, ev, "LOSS_OF_CONTROL_UPDATE")
 ev:SetScript("OnEvent", function(_, event, unit)
+    if event == "LOSS_OF_CONTROL_ADDED" or event == "LOSS_OF_CONTROL_UPDATE" then
+        if console() then EN.LossPaint() end
+        return
+    end
     if not console() or secret(unit) then return end
     if event == "UNIT_HEAL_PREDICTION" then
         for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do

@@ -1726,6 +1726,7 @@ RD.SW = {
     { key = "cures",  group = "THE FIGHT", name = "Cure chips",               tip = "A chip when they carry something you can remove." },
     { key = "cast",   group = "THE FIGHT", name = "Mini cast bars",           tip = "A red line under whoever a caster targets; grey when you cannot kick it." },
     { key = "alerts", group = "THE FIGHT", name = "LOS / RANGE / OVER boxes", tip = "Three boxes on top for a failed heal or a big overheal. Off: the word shows on the box itself." },
+    { key = "cc",     group = "THE FIGHT", name = "Loss of control box",      tip = "A fourth box on top: how long you are stunned, silenced, feared or locked out of a school, counting down." },
     { key = "fuel",   group = "MANA",      name = "Fuel strip",               tip = "Your mana with the boss's health, above the window." },
     { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
     { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
@@ -1733,7 +1734,7 @@ RD.SW = {
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
-    full = { names = true, edges = true, pets = true, target = true, kicks = true, cures = true, cast = true, alerts = true,
+    full = { names = true, edges = true, pets = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
@@ -1825,7 +1826,7 @@ function RD.DeckSized(M)
 end
 --- The strip on top: the alert boxes' height, or just room for the switches button.
 RD.DECK_HEAD_BARE = 16
-function RD.DeckHead() return RD.Sw("alerts") and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc")) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
 
 --- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
 function RD.TotemWideW()
@@ -6371,6 +6372,7 @@ function RD.Command(rest)
     if word == "strip" then return RD.StripStatus("strip") end
     if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
+    if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
     if word == "sw" then
         local k, v = arg:lower():match("^(%S*)%s*(%S*)$")
         if k == "" then return RD.ToggleSwitches() end
