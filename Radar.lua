@@ -2358,7 +2358,14 @@ function RD.FitWide()
     if RD.Console and RD.Console() and NS.EN and NS.EN.Gauge then NS.EN.Gauge(true)
     elseif RD.gauge and type(w) == "number" and w > 0 then RD.SizeGauge(w) end
     local b = RD.bbRail
-    if b and RD.toolRail then
+    if b and RD.Deck and RD.Deck() then
+        -- THE FLIGHT DECK: the black box hangs straight under the deck, as wide as it (Arn's screenshot, 15 Nov: it sat on
+        -- the radar's old left rail, off to the side, under BiS Tools' box)
+        local gap = RD.RAIL_GAP
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, -gap)
+        b:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, -gap)
+    elseif b and RD.toolRail then
         local gap = RD.RAIL_GAP
         b:ClearAllPoints()
         b:SetPoint("TOPLEFT", RD.toolRail, "BOTTOMLEFT", 0, -gap)
@@ -2370,10 +2377,12 @@ function RD.FitHull()
     local h, f = RD.hull, RD.frame
     if not (h and f) then return end
     if RD.Console and RD.Console() then             -- the console: the hull is its own small square
+        -- the flight deck's hull holds its black box too (one contained box), and other addons dock below it
+        local bottom = (RD.Deck and RD.Deck() and RD.BBRail()) or f
         h:ClearAllPoints()
         h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-        h:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
-        RD.FitEdgeFrame(f, f)
+        h:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 0, 0)
+        RD.FitEdgeFrame(f, bottom)
         RD.FitEdges(h)
         return
     end

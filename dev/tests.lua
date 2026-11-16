@@ -14865,6 +14865,14 @@ do
     for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
     ok(empty == 0, "no empty boxes: the deck grows down instead", empty)
     ok(RD.bbRail and RD.bbRail:IsShown(), "the black box stays, under the deck (Arn: \"dont forget my black box\")")
+    local bp = RD.bbRail.points and RD.bbRail.points[1]
+    ok(bp and bp[1] == "TOPLEFT" and bp[2] == RD.frame and bp[3] == "BOTTOMLEFT",
+       "straight under the deck, as wide as it - not on the radar's old left rail (Arn's screenshot)", bp and bp[3])
+    local hp, ep
+    for _, q in ipairs(RD.hull.points or {}) do if q[1] == "BOTTOMRIGHT" then hp = q end end
+    for _, q in ipairs(RD.edgeFrame.points or {}) do if q[1] == "BOTTOMRIGHT" then ep = q end end
+    ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
+       "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
     SlashCmdList.BISHEALING("alpha deck off")
     RD.Arm()
