@@ -14895,6 +14895,12 @@ do
     ok(under, "the kick sits in the row under the bar (Arn: \"put the kick dispells under\")")
     ok(tankSp and tankSp.bogey:GetAttribute("unit") == "party1target" and tankSp.bogey.__w <= M.kick,
        "its kick square hangs inside its box: your interrupt at whatever it is fighting")
+    local k = tankSp and tankSp.bogey
+    local lines = k and k.lines or {}
+    ok(k and k.deckIcon and k.deckIcon:IsShown() and k.deckIcon.__texture == NS.FG.KickIcon() and k.deckRim and #k.deckRim == 4
+       and (not lines[1] or not lines[1]:IsShown()),
+       "the kick is your interrupt's own icon in a red rim, not the drawn triangle (Arn: \"use the actual spell icon\")",
+       k and k.deckIcon and k.deckIcon.__texture)
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
        and boxSp[1].deckPlate.__w == M.cell and boxSp[2].deckPlate.__w == M.cell, "the target box's two: your target and its target, one cell each")
     ok(boxSp[1] and boxSp[1].deckPlate.__h >= M.row and boxSp[2].deckPlate.__h >= M.row,
@@ -14985,6 +14991,8 @@ do
     SlashCmdList.BISHEALING("alpha deck off")
     RD.Arm()
     ok(not RD.Deck() and not RD.deckBox:IsShown(), "deck off: back to the radar as it was")
+    ok(not tankSp.bogey.deckIcon:IsShown() and (not tankSp.bogey.lines or not tankSp.bogey.lines[1] or tankSp.bogey.lines[1]:IsShown()),
+       "and the radar's kick is its drawn triangle again")
     d.alpha, d.alphaOn, STATE.classes.party1, d.look = keep.alpha, keep.alphaOn, keep.classes, keep.look
     _G.GetUnitName = keepGUN
     if NS.AlphaApply then NS.AlphaApply() end

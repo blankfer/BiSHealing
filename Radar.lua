@@ -2058,11 +2058,39 @@ function RD.DeckTag(sp, w)
     return t
 end
 
---- Out of the deck: every box's plate and callsign away (the radar and the engineer's view draw neither).
+--- THE KICK, AS ITS SPELL (15 Nov 2026, Arn: "the red interrupt button use the actual spell icon with red outline or red
+--- slight pulse"): in the deck the kick button's face carries your interrupt's own icon (FG.KickIcon - Earth Shock for a
+--- shaman) inside a thin red rim, in place of the drawn red triangle. The face shows only while their target casts, and
+--- the button's red pulse is the radar's own (k.beat), so nothing new runs.
+function RD.DeckKick(sp)
+    local k = sp and sp.bogey
+    if not (k and k.face) then return false end
+    if not k.deckIcon then
+        k.deckIcon = k.face:CreateTexture(nil, "OVERLAY", nil, 5)
+        k.deckIcon:SetPoint("TOPLEFT", k, "TOPLEFT", 1, -1)
+        k.deckIcon:SetPoint("BOTTOMRIGHT", k, "BOTTOMRIGHT", -1, 1)
+        if k.deckIcon.SetTexCoord then k.deckIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        k.deckRim = edge(k.face, RD.COL.bogey, 1.5)
+    end
+    k.deckIcon:SetTexture((NS.FG and NS.FG.KickIcon and NS.FG.KickIcon()) or nil)
+    k.deckIcon:Show()
+    for _, t in ipairs(k.deckRim) do t:Show() end
+    for _, l in ipairs(k.lines or {}) do l:Hide() end    -- the drawn triangle steps aside
+    return true
+end
+
+--- Out of the deck: every box's plate and callsign away (the radar and the engineer's view draw neither); the kick back
+--- to its drawn triangle.
 function RD.DeckClear()
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.deckPlate then sp.deckPlate:Hide() end
         if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
+        local k = sp.bogey
+        if k and k.deckIcon then
+            k.deckIcon:Hide()
+            for _, t in ipairs(k.deckRim or {}) do t:Hide() end
+            for _, l in ipairs(k.lines or {}) do l:Show() end
+        end
     end
 end
 
@@ -2172,6 +2200,7 @@ function RD.DeckLayout(T, order)
             sp.bogey:SetSize(ks, ks)
             at(sp.bogey, left + 2 + ks / 2, icy)
             sp.bogey:SetFrameLevel(lvl + 3)
+            RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
         local x = right - 2
         for _, c in ipairs(sp.cures or {}) do
