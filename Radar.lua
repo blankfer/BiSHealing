@@ -286,6 +286,28 @@ function RD.Curve(amber)
     return c
 end
 
+--- THE BOX'S EDGE BY HEALTH (15 Nov 2026, Arn: "need the outline of the boxes to turn colors amber when they are low red
+--- very low"): the deck's plate edge - red at and under RD.RED, amber up to `amber` (where your heal stops being wasted,
+--- the pip's own amber), the dim edge above. A step curve the CLIENT evaluates on their health (UnitHealthPercent with a
+--- curve): nothing here reads a number, so it holds in a fight.
+RD.outlineCurves = {}
+function RD.OutlineCurve(amber)
+    amber = math.max(RD.RED + 0.02, math.min(amber or RD.AMBER, RD.GREEN - 0.01))
+    local key = math.floor(amber * 100 + 0.5)
+    if RD.outlineCurves[key] then return RD.outlineCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local R, A, D = RD.COL.red, RD.COL.amber, RD.DIM
+    local function at(x, col) pcall(c.AddPoint, c, x, CreateColor(col[1], col[2], col[3], col[4] or 1)) end
+    at(0.00, R) at(RD.RED, R)
+    at(RD.RED + 0.0001, A) at(amber, A)
+    at(amber + 0.0001, D) at(1.00, D)
+    RD.outlineCurves[key] = c
+    return c
+end
+
 --- The amber layer: solid amber between RD.RED and `amber`, nothing elsewhere (the client pulses that layer gently).
 RD.amberCurves = {}
 function RD.AmberCurve(amber)
@@ -354,6 +376,24 @@ local function paint(texs, col)
         if pcall(function() t:SetVertexColor(col:GetRGBA()) end) then any = true end
     end
     return any                     -- true only if the colour LANDED somewhere (Arn's white blade: it never had)
+end
+
+--- Paint one box's edge from its person's health (the deck only). Dead or gone: the dim edge.
+function RD.PaintOutline(sp)
+    local p = sp and sp.deckPlate
+    if not (p and p.edges and p:IsShown()) then return false end
+    local D = RD.DIM
+    local function dim() for _, e in ipairs(p.edges) do e:SetVertexColor(D[1], D[2], D[3], D[4]) end return false end
+    if not (sp.unit and RD.Deck()) then return dim() end
+    local okE, there = pcall(UnitExists, sp.unit)
+    if okE and plain(there) == false then return dim() end
+    local okD, dead = pcall(UnitIsDeadOrGhost, sp.unit)
+    if okD and plain(dead) == true then return dim() end
+    local curve = RD.OutlineCurve(sp.amber)
+    local ok, col = false, nil
+    if curve and UnitHealthPercent then ok, col = pcall(UnitHealthPercent, sp.unit, true, curve) end
+    if not (ok and paint(p.edges, col)) then return dim() end
+    return true
 end
 
 -- ------------------------------------------------------------------ drawing helpers
@@ -1977,7 +2017,7 @@ function RD.DeckPlate(sp)
         p.bg = p:CreateTexture(nil, "BACKGROUND")
         p.bg:SetAllPoints(p)
         p.bg:SetColorTexture(0, 0, 0, 0.35)
-        p.edges = edge(p, RD.DIM, 1)
+        p.edges = edge(p, RD.DIM, 1.5)
         sp.deckPlate = p
     end
     return p
@@ -4360,6 +4400,7 @@ end
 
 --- One spoke's heal pip, coloured by the client from their health.
 function RD.PaintHeal(sp)
+    RD.PaintOutline(sp)                              -- the deck's box edge: amber low, red very low (the client picks)
     if not (sp and sp.unit and sp.paintTex) then
         if sp and sp.heal then RD.HealFaces(sp.heal, 0) end
         return false

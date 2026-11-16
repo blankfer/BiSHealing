@@ -14927,6 +14927,44 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- THE BOX'S EDGE BY HEALTH (Arn: "need the outline of the boxes to turn colors amber when they are low red very low"):
+    -- a step curve the client evaluates on their health - nothing read
+    do
+        local keep2 = { cc = _G.C_CurveUtil, cr = _G.CreateColor, en = _G.Enum, uhp = _G.UnitHealthPercent }
+        local hp = {}
+        _G.Enum = { LuaCurveType = { Step = "step", Linear = "linear" } }
+        _G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+        _G.C_CurveUtil = { CreateColorCurve = function()
+            local c = { points = {} }
+            function c:SetType(t) self.type = t end
+            function c:AddPoint(x, col) self.points[#self.points + 1] = { x = x, col = col } end
+            return c
+        end }
+        _G.UnitHealthPercent = function(u, predicted, curve)
+            local x = hp[u] or 1
+            local pts = curve.points
+            table.sort(pts, function(m, n) return m.x < n.x end)
+            local col = pts[#pts].col
+            for _, q in ipairs(pts) do if x <= q.x then col = q.col break end end
+            return { GetRGBA = function() return col.r, col.g, col.b, col.a end }
+        end
+        RD.outlineCurves = {}
+        local edgeCol = function() local e = tankSp.deckPlate.edges[1] return e.__vertex end
+        hp.party1 = 0.20
+        RD.PaintHeal(tankSp)
+        local c1 = edgeCol()
+        ok(c1 and c1[1] == RD.COL.red[1] and c1[2] == RD.COL.red[2], "very low (20%): the box's edge is red", c1 and c1[2])
+        hp.party1 = 0.50
+        RD.PaintHeal(tankSp)
+        local c2 = edgeCol()
+        ok(c2 and c2[1] == RD.COL.amber[1] and c2[2] == RD.COL.amber[2], "low (50%): amber", c2 and c2[2])
+        hp.party1 = 1
+        RD.PaintHeal(tankSp)
+        local c3 = edgeCol()
+        ok(c3 and c3[1] == RD.DIM[1] and c3[2] == RD.DIM[2], "full: the plain dim edge", c3 and c3[2])
+        _G.C_CurveUtil, _G.CreateColor, _G.Enum, _G.UnitHealthPercent = keep2.cc, keep2.cr, keep2.en, keep2.uhp
+        RD.outlineCurves = {}
+    end
     SlashCmdList.BISHEALING("alpha deck off")
     RD.Arm()
     ok(not RD.Deck() and not RD.deckBox:IsShown(), "deck off: back to the radar as it was")
