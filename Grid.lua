@@ -2310,18 +2310,26 @@ FG.PVP_W = math.floor(FRAME_W / 2)       -- half a member cell: about square (Ar
 -- or channeling"). Forever hides WHAT another unit casts, never THAT it casts: UnitCastingDuration /
 -- UnitChannelDuration hand a duration object for a cast in progress and nil for none - an answer that may itself be
 -- secret, which still means "something is there". Your class's interrupt, dim at rest, full while their target casts.
+-- 15 Nov 2026, from the flight deck's spell research (bisdev docs/spells/interrupts.md, ids CONFIRMED from two saved spell
+-- caches): a druid's real interrupt is Feral Charge (bear form; Bash after it); a priest's targetless Psychic Scream is
+-- off this list (it hits everything round the priest - the radar's chaff and the backup keep it); a warlock's Spell Lock
+-- is the Felhunter's, found through FM.PET_SPELLS; a protection warrior's Pummel needs Berserker Stance (FG.KICK_STANCE).
 FG.KICK = {
     SHAMAN = { "Earth Shock" }, ROGUE = { "Kick" }, WARRIOR = { "Pummel", "Shield Bash" }, MAGE = { "Counterspell" },
-    PALADIN = { "Hammer of Justice" }, PRIEST = { "Silence", "Psychic Scream" }, DRUID = { "Bash" },
+    PALADIN = { "Hammer of Justice" }, PRIEST = { "Silence" }, DRUID = { "Feral Charge", "Bash" },
     WARLOCK = { "Spell Lock", "Death Coil" }, HUNTER = { "Scatter Shot" },
 }
+-- PUMMEL OR SHIELD BASH, BY STANCE: Pummel is Berserker Stance only (stance 3), Shield Bash Battle or Defensive with a
+-- shield. With both trained, the kick is one macro the client resolves at the click: "[stance:3] Pummel; Shield Bash".
+FG.KICK_STANCE = { WARRIOR = { stance = 3, first = "Pummel", other = "Shield Bash" } }
 -- THE BACKUP (Arn, 8 Nov: "if my earth shock is on cool down i can always click my grounding totem ... a rogue can hit
 -- kick and gouge for the same effect, mage being able to polymorph as a last resort"): a SECOND icon beside the first,
 -- the first of these you have trained that is not already your interrupt. Both carry the client's own cooldown sweep,
 -- so which one is ready is the client's to show - nothing here reads a cooldown or picks between them.
 FG.BACKUP = {
-    SHAMAN = { "Grounding Totem" }, ROGUE = { "Gouge" }, MAGE = { "Polymorph" }, WARRIOR = { "Shield Bash" },
-    PRIEST = { "Psychic Scream" }, WARLOCK = { "Death Coil" },
+    SHAMAN = { "Grounding Totem" }, ROGUE = { "Gouge", "Kidney Shot", "Blind" }, MAGE = { "Polymorph" },
+    WARRIOR = { "Shield Bash", "Concussion Blow", "Intimidating Shout" }, PRIEST = { "Psychic Scream" },
+    WARLOCK = { "Death Coil" }, PALADIN = { "Repentance" }, HUNTER = { "Intimidation" }, DRUID = { "Bash" },
 }
 FG.KICK_FALLBACK = "Interface\\Icons\\Ability_Kick"     -- nothing trained yet: the plain kick, the signal still works
 -- HIDDEN TILL NEEDED (Arn, 8 Nov: "keep the interrupt icon hidden till needed"): 0 at rest, was a dim 0.2
@@ -2375,6 +2383,15 @@ function FG.KickCast()
     return (NS.FM and NS.FM.Cast) and NS.FM.Cast(name, low) or name
 end
 
+--- The stance-picked kick as macro text aimed at `tok`, or nil (not a warrior, or not both trained).
+function FG.KickStanceMacro(tok)
+    local okC, _, class = pcall(UnitClass, "player")
+    local st = FG.KICK_STANCE[okC and NS.Plain(class) or ""]
+    if not st or type(tok) ~= "string" or not (NS.FM and NS.FM.BookIds) then return nil end
+    if #NS.FM.BookIds(st.first) == 0 or #NS.FM.BookIds(st.other) == 0 then return nil end
+    return ("/cast [@%s,stance:%d] %s; [@%s] %s"):format(tok, st.stance, st.first, tok, st.other)
+end
+
 --- Point a target cell's icon at its token: cast your interrupt there on a click, or - nothing trained - let the
 --- click through to the cell's own binds. OUT OF COMBAT ONLY (secure attributes); the layout is where it is called.
 function FG.ArmKick(c, tok, cast)
@@ -2384,9 +2401,11 @@ function FG.ArmKick(c, tok, cast)
     -- switch - on a unit you can attack, button 1 becomes "kick" - so a click on a friend casts nothing at all
     b:SetAttribute("type", nil)
     b:SetAttribute("spell", nil)
+    local stance = cast and FG.KickStanceMacro(tok) or nil       -- a warrior with both: the client picks by stance
     b:SetAttribute("*harmbutton1", cast and "kick" or nil)
-    b:SetAttribute("*type-kick", cast and "spell" or nil)
-    b:SetAttribute("*spell-kick", cast)
+    b:SetAttribute("*type-kick", cast and (stance and "macro" or "spell") or nil)
+    b:SetAttribute("*spell-kick", (not stance) and cast or nil)
+    b:SetAttribute("*macrotext-kick", stance)
     b:SetAttribute("unit", cast and tok or nil)
     if b.EnableMouse then b:EnableMouse(cast and true or false) end
     b.cast = cast

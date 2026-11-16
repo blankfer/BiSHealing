@@ -130,7 +130,7 @@ RD.cdLen = {}                                      -- kind -> a cooldown's lengt
 -- casting, (b) the flare is spent - our own clock of your interrupt (a shaman's shocks share one cooldown, so any shock
 -- spends it), or no interrupt at all - and (c) the chaff itself is ready. Plain booleans from our clock and from
 -- FG.Casting (`type()` only); nothing secret is read. Only targetless spells belong here.
-RD.CHAFF = { SHAMAN = "Grounding Totem", PRIEST = "Psychic Scream" }
+RD.CHAFF = { SHAMAN = "Grounding Totem", PRIEST = "Psychic Scream", WARLOCK = "Howl of Terror" }
 RD.KICK_SHARED = { ["Earth Shock"] = { "Flame Shock", "Frost Shock" } }   -- casts that spend the same cooldown
 RD.CHAFF_COL = { 1.00, 0.70, 0.25 }                -- amber: answer this now (a missile on its way)
 -- THE PILOT'S KNOBS (Arn, 9 Nov: "these are our knobs can be turned on and off, some fights we need a specific totem all

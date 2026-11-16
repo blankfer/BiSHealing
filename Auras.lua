@@ -167,7 +167,10 @@ FA.CURES = {
                 { names = { "Abolish Poison", "Cure Poison" }, types = { Poison = true } } },
     PALADIN = { { names = { "Cleanse" }, types = { Magic = true, Poison = true, Disease = true } },
                 { names = { "Purify" }, types = { Poison = true, Disease = true }, unless = "Cleanse" } },
-    MAGE    = { { names = { "Remove Curse", "Remove Lesser Curse" }, types = { Curse = true } } },
+    -- 15 Nov 2026 (the flight deck's research, bisdev docs/spells/cleanses.md): a mage has Remove Lesser Curse only; a
+    -- warlock's Felhunter removes Magic from a friend (Devour Magic, a pet spell - FM.PET_SPELLS finds it)
+    MAGE    = { { names = { "Remove Lesser Curse" }, types = { Curse = true } } },
+    WARLOCK = { { names = { "Devour Magic" }, types = { Magic = true } } },
 }
 FA.CURE_MAX = 2
 local CURE_DIM    = { 0.59, 0.56, 0.68, 0.45 }   -- "this corner cures", always
@@ -414,12 +417,23 @@ end
 -- higher ranks are not something anyone here has measured, while the ones YOU know are in your
 -- spellbook. Only spells you cast ("HELPFUL|PLAYER"): another healer's Renew is not your timer.
 FA.HOTS = {
+    -- 15 Nov 2026 (Arn: "lets not forget how they can track their hots on the frames"; the research in bisdev
+    -- docs/spells/keepups.md): Power Word: Shield, Prayer of Mending, Wild Growth and Light's Vigil join. Two of them put
+    -- a DIFFERENT id on the target than the one cast - Prayer of Mending (cast 401859 / 1240826 / 1240827, aura 401877 /
+    -- 1240848 / 1240849) and Light's Vigil (cast 1310911 / 1311590 / 1311595, aura 1310909 / 1311593 / 1311597) - and the
+    -- book only knows cast ids, so those families carry `auraIds`, used once the book has the spell by name.
     PRIEST = {
         { key = "Renew", ids = { 139, 6074, 6075, 6076, 6077, 6078, 10927, 10928, 10929, 25315 } },
+        { key = "Shield", name = "Power Word: Shield" },
+        { key = "Mending", name = "Prayer of Mending", auraIds = { 401877, 1240848, 1240849 } },
     },
     DRUID = {
         { key = "Rejuvenation", ids = { 774, 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 } },
         { key = "Regrowth", ids = { 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 } },
+        { key = "WildGrowth", name = "Wild Growth" },
+    },
+    PALADIN = {
+        { key = "Vigil", name = "Light's Vigil", auraIds = { 1310909, 1311593, 1311597 } },
     },
     -- RIPTIDE, WHICH A SHAMAN HAS HERE AND HAD NOT ON TBC (3 Oct 2026). Found in the Fojji shaman
     -- pack Arn installed: this mode's shaman is a kit, not an era - vanilla, plus Water Shield and
@@ -472,7 +486,12 @@ function FA.HotIds(family)
     -- a join. FM.BookIds answers from a book read once and re-read when the client says it changed.
     -- Mouse.lua loads after this file, so it is looked up here, at the moment of asking.
     if NS.FM and NS.FM.BookIds then
-        for _, id in ipairs(NS.FM.BookIds(name)) do ids[id] = true end
+        local book = NS.FM.BookIds(name)
+        for _, id in ipairs(book) do ids[id] = true end
+        -- the aura lands under another id: those, but only once the spell is learned (else no family, no empty slot)
+        if family.auraIds and #book > 0 then
+            for _, id in ipairs(family.auraIds) do ids[id] = true end
+        end
     end
     return ids
 end

@@ -64,7 +64,8 @@ FM.MODS = { { key = "", label = "no modifier" }, { key = "shift-", label = "shif
 FM.CLASS_DEFAULTS = {
     SHAMAN  = { left = "Healing Wave",    right = "Lesser Healing Wave", ["shift-left"] = "Chain Heal" },
     PRIEST  = { left = "Greater Heal",    right = "Flash Heal",          ["shift-left"] = "Renew" },
-    PALADIN = { left = "Holy Light",      right = "Flash of Light",      ["shift-left"] = "Cleanse" },
+    -- a list = the first one trained (15 Nov 2026: a paladin under 42 has Purify, not Cleanse - the research for the flight deck)
+    PALADIN = { left = "Holy Light",      right = "Flash of Light",      ["shift-left"] = { "Cleanse", "Purify" } },
     DRUID   = { left = "Healing Touch",   right = "Regrowth",            ["shift-left"] = "Rejuvenation" },
 }
 
@@ -86,8 +87,12 @@ function FM.Defaults()
     end
     local list = FM.CLASS_DEFAULTS[class or ""] or {}
     local out, booked = {}, false
-    for slot, spell in pairs(list) do
-        local ranks = FM.Ranks(spell)
+    for slot, want in pairs(list) do
+        local spell, ranks = want, {}
+        for _, name in ipairs(type(want) == "table" and want or { want }) do
+            spell, ranks = name, FM.Ranks(name)
+            if #ranks > 0 then break end
+        end
         if #ranks > 0 then
             -- WITH THE RANK ON IT, the highest trained. A bare name casts your biggest rank
             -- anyway, so this changes nothing about what the button does - but it puts a number
@@ -968,12 +973,28 @@ end
 
 --- Every spell id this character has under a name, one per rank, from the same single read.
 --- SelfBuff's FS.SpellIds and the HoT markers' FA.HotIds each walked the book for this themselves.
+---
+--- YOUR PET'S SPELLS TOO (15 Nov 2026, the spell research for the flight deck): a warlock's Spell Lock and Devour Magic
+--- are the Felhunter's, never in the player's book - so the kick and the cure box never found them. A pet spell has no
+--- name to look up by, so FM.PET_SPELLS holds its Forever ids (CONFIRMED from two saved spell caches) and the client is
+--- asked, rank by rank, whether your pet knows it (`IsSpellKnown(id, true)`). Cast by its name, a pet spell goes out at
+--- its highest rank - the one Spell Lock should use (8 s lockout, not 6).
+FM.PET_SPELLS = {
+    ["Spell Lock"] = { 19244, 19647 },
+    ["Devour Magic"] = { 19505, 19731, 19734, 19736 },
+}
 function FM.BookIds(name)
     local out = {}
     if not name or name == "" then return out end
     local names = book.get()
     local e = names and names[name]
     if e then for i, id in ipairs(e.ids) do out[i] = id end end
+    if #out == 0 and FM.PET_SPELLS[name] and IsSpellKnown then
+        for _, id in ipairs(FM.PET_SPELLS[name]) do
+            local ok, has = pcall(IsSpellKnown, id, true)
+            if ok and NS.Plain(has) == true then out[#out + 1] = id end
+        end
+    end
     return out
 end
 
