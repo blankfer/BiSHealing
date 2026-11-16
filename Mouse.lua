@@ -687,16 +687,17 @@ end
   15 s pause starts it over at Riptide. ]]
 FM.RIPTIDE_CD = 12
 FM.SEQ_RESET = 15
---[[ COUNTED FROM THE GLOBAL COOLDOWN, NOT THE CAST TIME (16 Nov 2026). Arn, in Scarlet Monastery: Riptide "sometimes does
-  not cast, then randomly works again" - "i move to cancel a cast lets be honest". A cancelled Chain Heal still moves the
-  list on, so six of them could run out in 6 x 1.5 s and land on Riptide while it cooled: the list sticks there until it
-  is ready. What no cancel can beat is the GLOBAL COOLDOWN every cast start triggers: one step per GCD at most. So the
-  heals are enough steps of one GCD to outlast Riptide's cooldown: ceil(cooldown / GCD) - 8 at 12 s and 1.5 s, and the
-  list can never come back early. Arn: "make a way for it to read the spell book ... trolls have a racial for 10% faster
-  cast ... haste items": the GCD is 1.5 s shortened by your spell haste (UnitSpellHaste, gear and racials), never under
-  1 s, and Riptide's cooldown is the spell's own (GetSpellBaseCooldown); both read when the macro is written, out of a
-  fight, and written again when they change (FM.SeqWatch). Shortening the GCD with haste errs SAFE: if Forever does not
-  shorten it, the list is just a step longer. ]]
+--[[ COUNTED FROM YOUR CAST TIME, READ OFF THE BOOK (16 Nov 2026). Arn: "make a way for it to read the spell book and see
+  what the cast time is cause people like trolls have a racial for 10% faster cast ... haste items". Only a cast that
+  FINISHES moves the list on - Arn measured it: "i stopped casting 12 times and it never riptide, i casted 8 to completion
+  and then it riptide" (a GCD-counted 8 was an evening's wrong guess: it only made Riptide come back late). So: Riptide,
+  its global cooldown, then enough FINISHED heals to outlast the rest of its cooldown, plus one (Arn: "add one more"):
+  ceil((cooldown - GCD) / cast time) + 1 - a 2.5 s Chain Heal 6, a 2 s one 7. The cast time is the book's
+  (C_Spell.GetSpellInfo), divided by your spell haste (UnitSpellHaste - gear, racials; if the book already counts it,
+  the list is one heal longer: the safe side), never under the GCD; Riptide's cooldown is the spell's own
+  (GetSpellBaseCooldown). Read when the macro is written, out of a fight, and written again when they change
+  (FM.SeqWatch). What still sticks the list: a Riptide cast OUTSIDE it (another bind) - its Riptide step then comes round
+  while Riptide cools. ]]
 FM.GCD_BASE = 1.5
 FM.GCD_FLOOR = 1.0
 FM.SEQ_MAX = 14
@@ -724,11 +725,30 @@ function FM.RiptideCooldown()
     end
     return FM.RIPTIDE_CD
 end
---- How many heals follow Riptide: enough global cooldowns to outlast its cooldown, so even cancelled casts never bring the
---- list back while it cools. `heal` is kept for callers; every heal starts the same global cooldown.
+FM.SEQ_EXTRA = 1           -- one heal more than the cooldown needs (Arn, 16 Nov: "add one more chain heal")
+FM.CAST_GUESS = 2.5        -- the book did not answer
+--- The heal's cast time off the book, in seconds (rank stripped), else FM.CAST_GUESS.
+function FM.SeqCastTime(heal)
+    local name = type(heal) == "string" and (heal:match("^(.-)%(") or heal) or nil
+    if name and C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, name)
+        local ct = ok and type(info) == "table" and info.castTime or nil
+        if ct ~= nil and not (NS.Secret and NS.Secret(ct)) and type(ct) == "number" and ct > 0 then return ct / 1000 end
+    end
+    return FM.CAST_GUESS
+end
+--- How many heals follow Riptide: enough FINISHED casts (only those move the list) to outlast its cooldown, plus one.
 function FM.SeqCount(heal)
-    local n = math.ceil(FM.RiptideCooldown() / FM.SeqGcd() - 0.001)
+    local cd, gcd = FM.RiptideCooldown(), FM.SeqGcd()
+    local step = math.max(gcd, FM.SeqCastTime(heal or "Chain Heal") / (1 + FM.Haste() / 100))
+    local n = math.ceil((cd - gcd) / step - 0.001) + FM.SEQ_EXTRA
     return math.max(3, math.min(FM.SEQ_MAX, n))
+end
+--- One line for the readout: what the list is built from.
+function FM.SeqInfo(heal)
+    heal = heal or "Chain Heal"
+    return string.format("riptide list: %d heals after Riptide (cast %.2fs from the book, haste %.0f%%, GCD %.2fs, Riptide cooldown %gs, reset %ds)",
+        FM.SeqCount(heal), FM.SeqCastTime(heal), FM.Haste(), FM.SeqGcd(), FM.RiptideCooldown(), FM.SeqReset())
 end
 --- The list's reset: longer than Riptide's cooldown, so a pause never lands it on a cooling Riptide.
 function FM.SeqReset()
@@ -1610,7 +1630,7 @@ end)
 --- THE SEQUENCE WATCH: haste from new gear or a racial, or a new Riptide rank, changes how many heals follow Riptide; the
 --- macros are written again (FM.Apply queues it in a fight) only when that number or the reset really moved.
 function FM.SeqSig()
-    return FM.SeqCount() .. "/" .. FM.SeqReset()
+    return FM.SeqCount("Chain Heal") .. "/" .. FM.SeqReset()
 end
 do
     local okW, w = pcall(CreateFrame, "Frame")

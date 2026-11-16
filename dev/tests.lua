@@ -6601,44 +6601,47 @@ do
                 -- yet'"), so Riptide in front is ONE cast sequence: Riptide, then five Chain Heals (Arn: "5 chain heals and then
                 -- it refreshes riptide"), a 15 s pause starts it over
                 local CH = "Chain Heal(Rank 2)"
-                -- 16 Nov night: EIGHT, counted from the global cooldown (Arn cancels casts by moving: "i move to cancel a
-                -- cast lets be honest" - six cancelled Chain Heals reached Riptide while it cooled and the list stuck), and
-                -- the guard rides in the sequence's own conditions so eight ranked heals fit in 255
-                local seq8 = "/castsequence [@mouseover,help,nodead] reset=15 Riptide"
-                for _ = 1, 8 do seq8 = seq8 .. ", " .. CH end
-                ok(rc.__attrs["*type2"] == "macro" and rt == seq8,
-                   "a click: one cast sequence guarded by its own conditions - Riptide, EIGHT Chain Heals, Riptide again", rt)
+                -- 16 Nov night: the count is FINISHED casts off the book's cast time (Arn: "i stopped casting 12 times and it
+                -- never riptide, i casted 8 to completion and then it riptide" - a cancel never moves the list), and the
+                -- guard rides in the sequence's own conditions so more ranked heals fit in 255
+                local seq6 = "/castsequence [@mouseover,help,nodead] reset=15 Riptide"
+                for _ = 1, 6 do seq6 = seq6 .. ", " .. CH end
+                ok(rc.__attrs["*type2"] == "macro" and rt == seq6,
+                   "a click: one cast sequence guarded by its own conditions - Riptide, six 2.5 s Chain Heals, Riptide again", rt)
                 ok(not rt:find("/cast [@mouseover,help,nodead] Riptide", 1, true), "never the plain Riptide line that stalls the macro")
                 ok(#rt <= FM.MACRO_MAX, "the macro fits", #rt)
-                -- the count is the GCD's, not the cast time's: 8 steps x 1.5 s = 12 s, so the list comes back at 13.5 s at the
-                -- soonest even if every Chain Heal is cancelled - Riptide (12 s) is always ready
-                ok((FM.SeqCount(CH) + 1) * FM.SeqGcd() > FM.RiptideCooldown(), "all cancels: the list returns after Riptide is ready")
                 local keepInfo = C_Spell.GetSpellInfo
+                C_Spell.GetSpellInfo = function() return { castTime = 2000 } end
+                ok(FM.SeqCount(CH) == 7, "a 2 s Chain Heal (Arn's cast bar): seven", FM.SeqCount(CH))
+                ok(1.5 + (FM.SeqCount(CH) - 1) * 2.0 >= 12, "finished casts only: Riptide is ready when the list comes back")
                 C_Spell.GetSpellInfo = function() return { castTime = 1500 } end
-                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 8, "a 1.5 s heal: eight too (a cast starts the same GCD)")
+                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 8, "a 1.5 s heal: eight")
                 C_Spell.GetSpellInfo = function() return { castTime = 3000 } end
-                ok(FM.SeqCount("Healing Wave(Rank 1)") == 8, "a 3 s heal: eight (a cancelled cast is one GCD long)")
-                C_Spell.GetSpellInfo = keepInfo
-                -- HASTE (Arn: "trolls have a racial for 10% faster cast ... haste items"): a shorter GCD, more steps
+                ok(FM.SeqCount("Healing Wave(Rank 1)") == 5, "a 3 s heal: five")
+                C_Spell.GetSpellInfo = function() return { castTime = secret() } end
+                ok(FM.SeqCastTime(CH) == FM.CAST_GUESS and FM.SeqCount(CH) == 6, "a hidden cast time: the 2.5 s guess")
+                -- HASTE (Arn: "trolls have a racial for 10% faster cast ... haste items"): shorter casts, more heals
+                C_Spell.GetSpellInfo = function() return { castTime = 2000 } end
                 local keepHaste = _G.UnitSpellHaste
                 _G.UnitSpellHaste = function() return 10 end
-                ok(FM.SeqCount(CH) == 9 and (FM.SeqCount(CH) + 1) * FM.SeqGcd() > 12, "10% haste: nine", FM.SeqCount(CH))
-                _G.UnitSpellHaste = function() return 50 end
-                ok(FM.SeqGcd() == 1.0 and FM.SeqCount(CH) == 12, "50% haste: the 1 s floor, twelve", FM.SeqCount(CH))
+                ok(FM.SeqCount(CH) == 7, "10% haste on a 2 s heal: still seven (1.82 s casts)", FM.SeqCount(CH))
+                _G.UnitSpellHaste = function() return 30 end
+                ok(FM.SeqCount(CH) == 9, "30% haste: nine (1.54 s casts, a shorter GCD too)", FM.SeqCount(CH))
                 _G.UnitSpellHaste = function() return secret() end
-                ok(FM.SeqCount(CH) == 8, "hidden haste: none counted")
+                ok(FM.Haste() == 0, "hidden haste: none counted")
                 _G.UnitSpellHaste = keepHaste
+                ok(FM.SeqInfo(CH):find("7 heals after Riptide", 1, true), "the readout says what the list is built from", FM.SeqInfo(CH))
                 -- Riptide's own cooldown off the book
                 local keepBase = _G.GetSpellBaseCooldown
-                C_Spell.GetSpellInfo = function(n) if n == "Riptide" then return { spellID = 61295, castTime = 0 } end return keepInfo(n) end
+                C_Spell.GetSpellInfo = function(n) if n == "Riptide" then return { spellID = 61295, castTime = 0 } end return { castTime = 2500 } end
                 _G.GetSpellBaseCooldown = function(id) return id == 61295 and 6000 or 0 end
-                ok(FM.RiptideCooldown() == 6 and FM.SeqCount(CH) == 4 and FM.SeqReset() == 15, "a 6 s Riptide: four heals, the reset kept")
+                ok(FM.RiptideCooldown() == 6 and FM.SeqCount(CH) == 3 and FM.SeqReset() == 15, "a 6 s Riptide: the floor of three, the reset kept", FM.SeqCount(CH))
                 _G.GetSpellBaseCooldown = function() return 20000 end
-                ok(FM.SeqCount(CH) == 14 and FM.SeqReset() == 21, "a 20 s Riptide: capped at 14, the reset longer than it", FM.SeqReset())
+                ok(FM.SeqCount(CH) == 9 and FM.SeqReset() == 21, "a 20 s Riptide: nine, the reset longer than it", FM.SeqCount(CH), FM.SeqReset())
                 _G.GetSpellBaseCooldown, C_Spell.GetSpellInfo = keepBase, keepInfo
-                -- a trinket in front keeps the guard line (no trinket spent on nobody), the sequence shortens to fit
+                local seq8 = seq6
                 local g = FM.GuardedHeal("", "Riptide+" .. CH, "", CH)
-                ok(g == seq8, "GuardedHeal: nothing in front - the sequence guards itself")
+                ok(g == seq6, "GuardedHeal: nothing in front - the sequence guards itself")
                 local short = FM.HealLines("Riptide+" .. CH, "", CH, 120)
                 ok(#short <= 120 and select(2, short:gsub("Chain Heal", "")) == 3, "too long for the macro: fewer heals, never past it", short)
                 local body = NS.FK.Encode({ right = landed }, {})
@@ -6651,7 +6654,7 @@ do
                 local wd = _G["BiSHealWheelwheeldown"]
                 local wdt = wd and wd.__attrs and wd.__attrs["macrotext"] or ""
                 ok(wdt:find("/castsequence [@mouseover,help,nodead] reset=15 Riptide, Chain Heal(Rank 2)", 1, true)
-                   and select(2, wdt:gsub("Chain Heal", "")) == 8, "on the wheel too: the guarded Riptide cast sequence, eight heals", wdt)
+                   and select(2, wdt:gsub("Chain Heal", "")) == 6, "on the wheel too: the guarded Riptide cast sequence, six heals", wdt)
                 ok(FM.FirstLines("Nature's Swiftness+Healing Wave", "") == "/cast Nature's Swiftness\n",
                    "Nature's Swiftness stays a plain line (it needs no target)")
                 FM.Clear("", "wheeldown")
