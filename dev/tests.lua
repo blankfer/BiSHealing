@@ -15499,7 +15499,8 @@ do
                 do  -- "if those two are on the same button it should use chainheal as the math for the overheal not the riptide"
                     local keepHO = NS.OV.HealOf
                     NS.OV.HealOf = function(c) return (c == "Chain Heal(Rank 1)") and 344 or nil end
-                    ok(NS.OV.Judge("Riptide+Chain Heal(Rank 1)") == 344 and NS.OV.Judge("Nature's Swiftness+Chain Heal(Rank 1)") == 344,
+                    local ripOK = not NS.FM.BOOSTERS["Riptide"] or NS.OV.Judge("Riptide+Chain Heal(Rank 1)") == 344   -- Riptide rides in front on #205's branch
+                    ok(ripOK and NS.OV.Judge("Nature's Swiftness+Chain Heal(Rank 1)") == 344,
                        "a booster in front: the overheal judges the heal after it (Chain Heal), not Riptide")
                     NS.OV.HealOf = keepHO
                 end
