@@ -220,10 +220,15 @@ FG.DECK_SIZES = { cell = FRAME_W, row = FRAME_H + NAME_BAND, tank = FRAME_H + NA
 --- `W` (15 Nov 2026, Arn: "the boxes themselves don't get any bigger, just more fit"): the width the player dragged the
 --- window to (Shift + the corner grip); nil = five boxes across. As many boxes to a row as fit; a raid snaps to 5 or 10 so
 --- each raid group lines up; a party's short row stretches to fill.
-function FG.DeckPlace(nTanks, nRest, party, m, W)
+--- `noTarget` (16 Nov 2026, the switches): the target pair is switched off - the top row is the tanks alone. Narrower than
+--- FG.TOP_SPLIT the top row splits: the tanks on their own row, the target pair on the next (Ellesmere's width, Arn: "we gotta
+--- be able to go down to that size").
+FG.TOP_SPLIT = 200
+function FG.DeckPlace(nTanks, nRest, party, m, W, noTarget)
     m = m or FG.DECK_SIZES
     local cell, P = m.cell, m.gap
     W = W or (5 * cell + 4 * P)
+    if noTarget or W < FG.TOP_SPLIT then return FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget) end
     -- THE TOP ROW IN EQUAL SHARES (Arn, 15 Nov: "as wide as the boxes need to fit, so for us thats 3 boxes so thats how wide
     -- each box gets"): the tanks, your target and its target split the row evenly - one tank = thirds, two = quarters. No
     -- tank still keeps a tank's share empty, so the target pair never grows past two thirds. The pair has no outline of its
@@ -253,6 +258,41 @@ function FG.DeckPlace(nTanks, nRest, party, m, W)
     end
     local height = (nRest > 0) and (y - P) or m.tank
     return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = height }
+end
+
+--- The top row as its own row of tanks (no tank: one empty tank's place), the target pair - unless switched off - on the
+--- row under it at `m.pair` (or the people's row height), then everyone as DeckPlace lays them.
+function FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget)
+    local cell, P = m.cell, m.gap
+    local n = math.max(nTanks, 1)
+    local bw = math.floor((W - (n - 1) * P) / n)
+    local tanks = {}
+    for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = (i == n) and (W - (i - 1) * (bw + P)) or bw, h = m.tank } end
+    local y = m.tank + P
+    local target, tot, box
+    if not noTarget then
+        local ph = m.pair or m.row
+        local hw = math.floor((W - P) / 2)
+        target = { x = 0, y = y, w = hw, h = ph }
+        tot = { x = hw + P, y = y, w = W - hw - P, h = ph }
+        box = { x = 0, y = y, w = W, h = ph }
+        y = y + ph + P
+    else
+        box = { x = 0, y = 0, w = 0, h = 0 }
+    end
+    local rest, i = {}, 1
+    local per = FG.PerRow(W, cell, P, not party)
+    while i <= nRest do
+        local cnt = math.min(per, nRest - i + 1)
+        local cols = party and cnt or per
+        local w = math.floor((W - (cols - 1) * P) / cols)
+        for c = 1, cnt do
+            rest[i] = { x = (c - 1) * (w + P), y = y, w = (c == cols) and (W - (c - 1) * (w + P)) or w, h = m.row }
+            i = i + 1
+        end
+        y = y + m.row + P
+    end
+    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = y - P }
 end
 
 --- How many boxes of width `bw` fit across `W`; a raid snaps to 5 or 10 (a raid group, or two, to a row).

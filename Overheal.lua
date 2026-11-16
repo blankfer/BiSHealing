@@ -275,7 +275,7 @@ function OV.Anchor(sp, win)
     win:ClearAllPoints()
     -- the header's OVER/H box, one spot for every player (Arn, 12 Nov: "move all the alerts for all players to the same
     -- space in the header"): the console's top strip, or the radar's alert row along its top rail (EN.HeadSpot)
-    if NS.EN and NS.EN.HeadSpot then win:SetPoint(NS.EN.HeadSpot("over"))
+    if NS.EN and NS.EN.HeadSpot then win:SetPoint(NS.EN.HeadSpot("over", sp))
     else win:SetPoint("TOP", sp.heal, "BOTTOM", 0, -1) end
     local lvl = sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
     if type(lvl) == "number" and win.SetFrameLevel then win:SetFrameLevel(lvl + 8) end

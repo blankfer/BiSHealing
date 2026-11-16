@@ -15373,7 +15373,7 @@ do
         local e3 = FG.EngPlace(1, 4, 0, true, S, 330)
         ok(e3.rest[1].y == e3.rest[3].y and e3.rest[4].y > e3.rest[1].y, "the engineer dragged wider: three to a row instead of two")
         local floor = RD.FloorInner()
-        ok(floor + 2 * RD.CON.pad >= 230, "the floor is the totem row: two timers each side of CALL / BRING / RECALL", floor)
+        ok(floor + 2 * RD.CON.pad <= 134, "the floor is Ellesmere's width now (Arn: \"we gotta be able to go down to that size\")", floor)
         ok(RD.WidthFor(300, 500, 100, 1) == floor, "dragged past the floor: held at the floor")
         ok(RD.WidthFor(300, 500, 560, 2) == 330, "the cursor's move in the frame's own pixels (a scaled frame)")
         RD.SetDeckWidth(560)
@@ -15385,6 +15385,65 @@ do
         RD.SetDeckWidth(nil)
         RD.Arm()
         ok(RD.DeckWidth() == nil, "Shift + right-click: its own width again")
+        -- THE SWITCHES (16 Nov: "that unifies them, no more deck and engineer, just deck now")
+        do
+            local EN = NS.EN
+            local keepView, keepSw, keepStamp = d.radar.view, d.radar.sw, d.radar.swStamp
+            local keepShown = RD.shownFor
+            RD.shownFor = true                         -- the window standing in for the grid, as in the game
+            d.radar.view, d.radar.sw = nil, nil
+            for _, s in ipairs(RD.SW) do ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            ok(RD.SwPresetNow() == "full", "and that is FULL")
+            ok(RD.SetSw("names", false) == "now" and d.radar.sw.names == false and not RD.Sw("names"), "a switch off, saved, laid out now")
+            local sp1 = RD.spokes[RD.conOrder[1]]
+            ok(sp1.deckTag and not sp1.deckTag:IsShown(), "names off: no name on the boxes")
+            ok(RD.SetSw("nonsense", false) == nil, "an unknown switch: nothing")
+            ok(RD.SwPreset("bare") == "now" and RD.SwPresetNow() == "bare", "BARE: everything off")
+            for _, s in ipairs(RD.SW) do ok(d.radar.sw[s.key] == false, "bare: " .. s.key .. " off") end
+            ok(RD.slots[1].rb == nil, "kicks off: no kick button armed anywhere")
+            ok(not RD.tide or not RD.tide:IsShown(), "tools off: the tools out of sight")
+            ok(not (EN.rail and EN.rail:IsShown()), "fuel off: no fuel strip")
+            ok(not (RD.bbRail and RD.bbRail:IsShown()), "black box off: no black box")
+            local anyHead = false
+            for _, q in pairs(EN.heads or {}) do if q:IsShown() then anyHead = true end end
+            ok(not anyHead, "alerts off: no LOS / RANGE / OVER boxes")
+            local hp = { EN.HeadSpot("los", sp1) }
+            ok(hp[2] == sp1.heal, "alerts off: the word shows on the box itself")
+            local tsp = RD.spokes[#RD.conOrder + 1]
+            ok(tsp and not tsp.heal:IsShown(), "target off: no target box")
+            local bareH = RD.frame.__h
+            ok(RD.SwPreset("full") == "now" and RD.SwPresetNow() == "full", "FULL: everything back")
+            ok(RD.slots[1].rb ~= nil and sp1.deckTag:IsShown(), "and the kicks and names with it")
+            ok(RD.frame.__h > bareH + 40, "bare is plainly smaller than full", bareH .. " < " .. RD.frame.__h)
+            -- narrow: Ellesmere's width
+            RD.SetDeckWidth(RD.FloorInner())
+            RD.Arm()
+            ok(math.abs(RD.frame.__w - (RD.FloorInner() + 2 * RD.CON.pad)) < 1, "down to Ellesmere's width", RD.frame.__w)
+            local np = FG.DeckPlace(1, 4, true, RD.DECK, RD.FloorInner())
+            ok(np.target.y > np.tanks[1].y and np.rest[1].y ~= np.rest[2].y, "narrow: the target pair under the tank, one box to a row")
+            local t1, t3 = RD.timers and RD.timers[1], RD.timers and RD.timers[3]
+            if t1 and t1:IsShown() then
+                ok(t1.__w > 40 and t3:IsShown(), "narrow: the totem timers stacked two to a line, wide enough to read", t1.__w)
+            end
+            RD.SetDeckWidth(nil)
+            local nt = FG.DeckPlace(1, 4, true, RD.DECK, 382, true)
+            ok(nt.target == nil and nt.tanks[1].w > 300, "target off: the tank takes the whole top row")
+            -- the panel
+            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == #RD.SW, "the switches button opens the list, a row each")
+            RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
+            ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
+            ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
+            STATE.inCombat = true
+            ok(RD.SetSw("names", true) == "after" and RD.pending, "in a fight: saved, laid out after it")
+            STATE.inCombat = false
+            -- the engineer's view, once, into LEAN
+            d.radar.sw, d.radar.swStamp, d.radar.view = nil, nil, "console"
+            ok(RD.SwStamp() and RD.SwPresetNow() == "lean" and d.radar.view == nil, "an engineer user: LEAN, the view retired")
+            ok(RD.SwStamp() == false, "once only")
+            d.radar.view, d.radar.sw, d.radar.swStamp = keepView, keepSw, keepStamp
+            RD.shownFor = keepShown
+            RD.Arm()
+        end
         -- THE STOPS AND THE READOUT (Arn: "fake stops every 25% and if you keep dragging itll pass it" / "see what % im at")
         ok(RD.SnapScale(0.98) == 1 and RD.SnapScale(1.27) == 1.25 and RD.SnapScale(1.12) == 1.12,
            "near a quarter the scale sits on it; between them it moves freely")

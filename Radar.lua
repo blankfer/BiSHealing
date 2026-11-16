@@ -390,6 +390,7 @@ function RD.PaintOutline(sp)
         return false
     end
     if not (sp.unit and RD.Deck()) then return dim() end
+    if not RD.Sw("edges") then return dim() end              -- the warning edges switch
     -- NO WARNING EDGE ON AN ENEMY (16 Nov 2026, Arn: "the enemy bar gets a health out line which makes me think i need to
     -- heal it"): your target box never warns (a mob, most of the time); its target warns unless it is an enemy - a plain
     -- answer decides, a secret one goes to the client (each edge's alpha from the boolean: enemy = no warning colour)
@@ -1692,12 +1693,116 @@ function RD.Compact() return RD.EngineerView() and RD.Deck() end
 --- The deck's sizes for the view on screen.
 function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
 
---- The narrowest the boxes' area may be: the totem row's floor, less the window's two pads.
-function RD.FloorInner()
-    local C = RD.CON
-    local W = 2 * (C.pad + 4 + 2 * RD.TIMER_MIN + C.toolGap) + 3 * RD.SYS_PX + 2 * C.toolGap
-    return W - 2 * C.pad
+--[[ THE SWITCHES (16 Nov 2026, Arn: "maybe we just do toggles with everything off its the quasi engineer look and deck would
+  be with everything on names flavor etc" - "that unifies them, no more deck and engineer, just deck now"; sketch
+  https://claude.ai/artifact/NyfWTe1b5MEJRmF1qFcGE7, Arn: "works amazing"). One window; each part of it a switch, saved per
+  character (db().sw[key] = true / false; nil = on, so nobody's deck changes until they switch something). The health
+  boxes always stay. A switch that adds or takes away click buttons is laid out by RD.Arm, out of a fight only - in one it
+  waits for the fight's end (RD.pending), like every other secure change. ]]
+RD.SW = {
+    { key = "names",  group = "LOOK",      name = "Names",                    tip = "The name on each box." },
+    { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
+    { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
+    { key = "target", group = "THE FIGHT", name = "Target + its target",      tip = "Your target and who it is hitting, in the top row." },
+    { key = "kicks",  group = "THE FIGHT", name = "Kick buttons",             tip = "Your interrupt on a box when their target casts." },
+    { key = "cures",  group = "THE FIGHT", name = "Cure chips",               tip = "A chip when they carry something you can remove." },
+    { key = "cast",   group = "THE FIGHT", name = "Mini cast bars",           tip = "A red line under whoever a caster targets; grey when you cannot kick it." },
+    { key = "alerts", group = "THE FIGHT", name = "LOS / RANGE / OVER boxes", tip = "Three boxes on top for a failed heal or a big overheal. Off: the word shows on the box itself." },
+    { key = "fuel",   group = "MANA",      name = "Fuel strip",               tip = "Your mana with the boss's health, above the window." },
+    { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
+    { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
+    { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
+    { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
+}
+RD.SW_PRESETS = {
+    full = { names = true, edges = true, pets = true, target = true, kicks = true, cures = true, cast = true, alerts = true,
+             fuel = true, tools = true, totems = true, timers = true, bb = true },
+    bare = {},
+    lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
+}
+RD.SW_ORDER = { "bare", "lean", "full" }
+RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
+function RD.Sw(key)
+    local t = db().sw
+    if type(t) ~= "table" or t[key] == nil then return true end
+    return t[key] == true
 end
+--- The icon row under each box's bar: while kicks or cures are on.
+function RD.SwIcons() return RD.Sw("kicks") or RD.Sw("cures") end
+--- Which preset the switches match now; nil = your own mix.
+function RD.SwPresetNow()
+    for _, name in ipairs(RD.SW_ORDER) do
+        local p, same = RD.SW_PRESETS[name], true
+        for _, s in ipairs(RD.SW) do if (p[s.key] == true) ~= RD.Sw(s.key) then same = false end end
+        if same then return name end
+    end
+    return nil
+end
+--- Lay the window out again for the switches: now, or after the fight. Answers "now" or "after".
+function RD.SwApply()
+    if RD.PaintSwitches then RD.PaintSwitches() end
+    if combat() or RD.inFight then RD.pending = true return "after" end
+    if RD.Active() then RD.Arm() end
+    if RD.PaintSwitches then RD.PaintSwitches() end
+    return "now"
+end
+function RD.SetSw(key, on)
+    local known
+    for _, s in ipairs(RD.SW) do if s.key == key then known = true end end
+    if not known then return nil end
+    local d = db()
+    d.sw = type(d.sw) == "table" and d.sw or {}
+    d.sw[key] = on and true or false
+    return RD.SwApply()
+end
+function RD.SwPreset(name)
+    local p = RD.SW_PRESETS[name]
+    if not p then return nil end
+    local t = {}
+    for _, s in ipairs(RD.SW) do t[s.key] = p[s.key] == true end
+    db().sw = t
+    return RD.SwApply()
+end
+--- Once per character: whoever used the engineer's view starts LEAN; the view itself is retired (one window now).
+function RD.SwStamp()
+    local d = db()
+    if d.swStamp then return false end
+    d.swStamp = 1
+    if d.view == "console" and d.sw == nil then
+        local t = {}
+        for _, s in ipairs(RD.SW) do t[s.key] = RD.SW_PRESETS.lean[s.key] == true end
+        d.sw = t
+    end
+    d.view = nil
+    return true
+end
+--- A box's sizes with the icon row taken out while kicks and cures are both off (the lean look: the bar is the box).
+function RD.DeckSized(M)
+    if RD.SwIcons() then return M end
+    RD.deckLean = RD.deckLean or {}
+    local L = RD.deckLean[M]
+    if not L then
+        L = {}
+        for k, v in pairs(M) do L[k] = v end
+        L.row, L.tank, L.icons = M.row - M.icons, M.tank - M.icons, 0
+        RD.deckLean[M] = L
+    end
+    return L
+end
+--- The strip on top: the alert boxes' height, or just room for the switches button.
+RD.DECK_HEAD_BARE = 16
+function RD.DeckHead() return RD.Sw("alerts") and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+
+--- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
+function RD.TotemWideW()
+    local C = RD.CON
+    return 2 * (C.pad + 4 + 2 * RD.TIMER_MIN + C.toolGap) + 3 * RD.SYS_PX + 2 * C.toolGap
+end
+--- The narrowest the boxes' area may be (16 Nov 2026, Arn: "the side by side view i gave you with ellesmere was about the
+--- size he likes ... we gotta be able to go down to that size even if it means we stack the totem timers"): Ellesmere's
+--- party frames, about 130 px; under RD.TotemWideW the totems stack, the tools wrap, the top row splits.
+RD.NARROW_INNER = 118
+function RD.FloorInner() return RD.NARROW_INNER end
 --- The width the player dragged this view to (Shift + the corner grip), never under the floor; nil = the view's own.
 function RD.DeckWidth()
     local t = db().deckW
@@ -2067,6 +2172,52 @@ local function toolsRow(W, y, deck)
     end
 end
 
+--- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
+--- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
+--- the gap under it.
+function RD.DeckTools(W, top)
+    local tools = CON_TOOLS()
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local per = math.max(1, math.floor((W - 2 * C.pad + gap) / (S + gap)))
+    local n = #tools
+    local lines = math.ceil(n / per)
+    local xs, ys = {}, {}
+    for l = 1, lines do
+        local first = (l - 1) * per + 1
+        local cnt = math.min(per, n - first + 1)
+        local x0 = (W - (cnt * S + (cnt - 1) * gap)) / 2 + S / 2
+        local cy = top + (l - 1) * (S + C.gap) + S / 2
+        for k = 0, cnt - 1 do
+            local b = tools[first + k]
+            if b then
+                xs[b], ys[b] = x0 + k * (S + gap), cy
+                at(b, xs[b], cy)
+            end
+        end
+    end
+    local mb = RD.manaBox
+    if not mb then
+        mb = CreateFrame("Frame", nil, RD.conLayer)
+        mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
+        RD.manaBox = mb
+    end
+    if xs[RD.tide] and xs[RD.fuel] and ys[RD.tide] == ys[RD.fuel] then
+        local l, r = xs[RD.tide] - S / 2 - 2, xs[RD.fuel] + S / 2 + 2
+        mb:SetSize(r - l, S + 4)
+        mb:ClearAllPoints()
+        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -ys[RD.tide])
+        mb:Show()
+    else
+        mb:Hide()
+    end
+    return lines * (S + C.gap)
+end
+--- The tools row switched off: every tool button out of sight (RD.ArmTools shows them again at the next layout).
+function RD.HideTools()
+    for _, b in ipairs(CON_TOOLS()) do if b then b:Hide() end end
+    if RD.manaBox then RD.manaBox:Hide() end
+end
+
 --- A deck button's light: very bright when needed, dim otherwise (Arn: "dim and very bright when needed") - while it wears
 --- a real icon in the deck; anywhere else, as before: shown or not.
 --- DIMMER AND GREY WHILE IT WAITS (15 Nov 2026, Arn: "grounding totem dimmed too like the food until needed then bright"):
@@ -2248,7 +2399,7 @@ function RD.DeckTag(sp, w)
     t:SetFrameLevel(sp.heal:GetFrameLevel() + 5)            -- over the bar and the icons (they sit below its line)
     if w then t.text:SetWidth(math.max(8, w - 6)) end
     t.text:SetText(RD.BoxName(sp.unit))
-    t:Show()
+    t:SetShown(RD.Sw("names"))                              -- the names switch
     return t
 end
 
@@ -2369,6 +2520,7 @@ function RD.DeckSlots(T, nPets)
                    nopet = true, console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
                    box = (not crew and i <= T.n + 2) or nil, petBox = (i > T.n + 2) or nil }
         if i > T.n + 2 then out[i].rb = nil end              -- a pet box: no kick of its own
+        if not RD.Sw("kicks") then out[i].rb = nil end       -- kicks switched off: no kick button anywhere
     end
     return out
 end
@@ -2425,7 +2577,8 @@ function RD.DeckUnits(units, n, pets)
 end
 
 function RD.DeckLayout(T, order)
-    local f, C, M = RD.frame, RD.CON, RD.DeckM()
+    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DeckM())
+    local SW = RD.Sw
     local nT = math.min(RD.deckTanks or 0, T.n)
     local crew = {}
     for k = nT + 1, T.n do
@@ -2439,13 +2592,14 @@ function RD.DeckLayout(T, order)
     if RD.Compact() then
         place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
     else
-        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw)
+        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"))
     end
-    local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
+    local W = C.pad * 2 + place.w                    -- the tools wrap and the totems stack to fit (RD.DeckTools / DeckTotemRow)
+    RD.deckInnerW = place.w
     -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
     -- 15 Nov, a screenshot: "TARGET - ITS TARGET" was drawn over the alert boxes)
     local band = (RD.DECK_HEADER and place.target and place.target.y == 0) and RD.DECK_LABEL_H or 0
-    local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD + band
+    local x0, y0 = (W - place.w) / 2, C.pad + RD.DeckHead() + band
     local placed = {}
     -- THE ICONS UNDER THE BAR (15 Nov 2026). The kick and the cures are secure buttons that keep their click while unseen
     -- (a secure button's mouse may not change in a fight) - laid over the bar they ate the heal (Arn: "the middle part of
@@ -2477,6 +2631,8 @@ function RD.DeckLayout(T, order)
         local lvl = sp.heal:GetFrameLevel()
         local colX = right - 1 - (is or 0) / 2                    -- a short box's icon column
         local footY = y0 + r.y + r.h - 1 - (is or 0) / 2
+        kick = kick and SW("kicks")
+        if sp.bogey and not SW("kicks") then sp.bogey:Hide() end     -- switched off: disarmed in RD.DeckSlots, out of sight
         if kick and sp.bogey then
             sp.bogey:SetSize(ks, ks)
             if is then at(sp.bogey, colX, footY) else at(sp.bogey, left + 2 + ks / 2, icy) end
@@ -2487,6 +2643,8 @@ function RD.DeckLayout(T, order)
         local x = right - 2
         local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
+            c.box:SetShown(SW("cures"))
+            if c.container and c.container.SetShown then c.container:SetShown(SW("cures")) end
             c.box:SetSize(cs, cs)
             if is then
                 at(c.box, colX, cyCol)
@@ -2545,13 +2703,25 @@ function RD.DeckLayout(T, order)
     box:SetPoint("TOPLEFT", f, "TOPLEFT", x0 + place.box.x, -(y0 + place.box.y))
     box:SetSize(place.box.w, place.box.h)
     box:Show()
-    put(T.n + 1, place.target, false)
-    put(T.n + 2, place.tot, false)
-    -- the deck of buttons under the crew: the tools row, then the totems with their four timers
-    local yt = y0 + place.h + C.gap + RD.SYS_PX / 2
-    toolsRow(W, yt, true)
-    local H = yt + RD.SYS_PX / 2 + C.pad
-    H = H + RD.DeckTotemRow(W, yt)
+    if place.target then
+        put(T.n + 1, place.target, false)
+        put(T.n + 2, place.tot, false)
+    else                                              -- the target pair switched off: out of sight, nothing to click
+        for i = T.n + 1, T.n + 2 do
+            local sp = RD.spokes[i]
+            if sp then
+                sp.heal:Hide()
+                if sp.deckPlate then sp.deckPlate:Hide() end
+                if sp.deckTag then sp.deckTag:Hide() end
+                if sp.castStrip then sp.castStrip:SetAlpha(0) end
+            end
+        end
+    end
+    -- the deck of buttons under the crew: the tools (wrapped to fit), then the totems and their timers (stacked to fit)
+    local y = y0 + place.h + C.gap
+    if SW("tools") then y = y + RD.DeckTools(W, y) else RD.HideTools() end
+    y = y + RD.DeckTotemRow(W, y)
+    local H = y - C.gap + C.pad
     f:SetSize(W, H)
     return { W = W, H = H, tier = T, placed = placed, place = place, deck = true, rows = { tools = yt } }
 end
@@ -2718,12 +2888,19 @@ end
 
 --- The deck's totem row: the totem buttons you know at its left, then the four timers to its right edge. Answers the height
 --- it took (0 = no totems: nothing shown).
-function RD.DeckTotemRow(W, y)
+function RD.DeckTotemRow(W, top)
     local list = {}
     for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
     for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
     for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
     if #list == 0 then return 0 end
+    local wantB, wantT = RD.Sw("totems"), RD.Sw("timers")
+    if not wantB then for _, b in ipairs(list) do b:Hide() end end
+    if not (wantB or wantT) then return 0 end
+    -- STACKED (16 Nov 2026, Arn: "even if it means we stack the totem timers / call move recall / air water / earth fire"):
+    -- narrower than the one-line row, or with one of the two switched off - the buttons on a line, then two timers a line
+    if not (wantB and wantT) or W < RD.TotemWideW() then return RD.DeckTotemStack(W, top, list, wantB, wantT) end
+    local y = top - RD.SYS_PX - RD.CON.gap + RD.SYS_PX / 2   -- the one-line row's own reckoning: `y` = the row above's middle
     -- SPLIT DOWN THE MIDDLE (Arn, 15 Nov: "totem bar can we split totem down the middle and put the call recall and bring
     -- in the center"): air and water on the left, CALL / BRING / RECALL in the middle, earth and fire on the right - each
     -- pair of timers stretched over its half. No square round the buttons (the deck's icons are dim or bright alone).
@@ -2756,6 +2933,42 @@ function RD.DeckTotemRow(W, y)
     RD.LearnTimers()                                   -- each box's remembered totem, and its click
     RD.PaintTimers()
     return RD.SYS_PX + C.gap
+end
+
+--- The totems stacked: CALL / BRING / RECALL centred on a line (if on), then air + water, then earth + fire (if on), each
+--- pair across the whole width. Answers the height taken, with the gap under it.
+function RD.DeckTotemStack(W, top, list, wantB, wantT)
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local y = top
+    if wantB then
+        local bw = #list * S + (#list - 1) * gap
+        local bl = (W - bw) / 2
+        for k, b in ipairs(list) do at(b, bl + S / 2 + (k - 1) * (S + gap), y + S / 2) end
+        y = y + S + C.gap
+    end
+    if wantT then
+        local inner = W - 2 * C.pad
+        local tw = math.floor((inner - gap) / 2)
+        for k = 1, #RD.TOTEM_TIMERS do
+            local t = RD.TotemTimer(k)
+            local line, col = math.ceil(k / 2), (k - 1) % 2       -- air, water | earth, fire
+            local w = (col == 0) and tw or (inner - tw - gap)
+            t:SetSize(w, S)
+            t:ClearAllPoints()
+            t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", C.pad + col * (tw + gap), -(y + (line - 1) * (S + C.gap)))
+            t.icon:SetWidth(S - 4)
+            t.base:SetWidth(S - 4)
+            RD.TimerSpot(t, w)
+            if t.cd and t.cd.SetCountdownAbbrevThreshold then
+                pcall(t.cd.SetCountdownAbbrevThreshold, t.cd, (w < 60) and RD.TIMER_SHORT or RD.TIMER_FULL)
+            end
+            t:Show()
+        end
+        y = y + 2 * (S + C.gap)
+        RD.LearnTimers()
+        RD.PaintTimers()
+    end
+    return y - top
 end
 
 --- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
@@ -2844,7 +3057,7 @@ function RD.ApplyView()
     vis(RD.toolRail, not con)
     vis(RD.gaugeRail, not con)
     vis(RD.defRail, not con)
-    vis(RD.bbRail, not con or RD.Deck())          -- the flight deck keeps the black box (Arn: "dont forget my black box")
+    vis(RD.bbRail, not con or (RD.Deck() and RD.Sw("bb")))   -- the deck keeps the black box (Arn: "dont forget my black box"), unless switched off
     vis(RD.gauge, not con)
     -- the tape's pieces that hang on the radar frame itself: the regen readout, its chevron, the ramjet
     local g = RD.gauge
@@ -2883,6 +3096,9 @@ function RD.PaintViewButton()
     for _, l in ipairs(b.ring) do l:SetAlpha(con and 1 or 0) end
     b.tip = con and { "ENGINEER VIEW", "Click: back to the deck.  Out of a fight." }
             or { "DECK", "Click: the engineer's view - the same buttons on a plain grid.  Out of a fight." }
+    if RD.Deck() and not con then                     -- one window since 16 Nov: the button opens its switches
+        b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
+    end
     local c = RD.classBtn
     if c then
         local T, k = RD.ConsoleTier()
@@ -2981,6 +3197,7 @@ function RD.BuildViewButton(f)
     b.hl:SetTexture(RD.WHITE)
     b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
     b:SetScript("OnClick", function(self)
+        if RD.Deck() and not RD.EngineerView() then RD.ToggleSwitches() return end
         RD.ToggleView()
         -- the tooltip says where the NEXT click goes: written again at once (Arn's screenshot, 15 Nov: still "DECK - click:
         -- the engineer's view" while the engineer's view showed)
@@ -2999,6 +3216,158 @@ function RD.BuildViewButton(f)
     RD.viewBtn = b
     RD.PlaceViewButton()
     return b
+end
+
+--[[ THE SWITCHES PANEL (16 Nov 2026). Beside the window, from its switches button: BARE / LEAN / FULL on top, then a row
+  per switch in its group. Every row glows on hover (wash + left bar, the family rule) and is scaled up for a small window.
+  A click switches it; in a fight it is saved and laid out when the fight ends (the row says so). Esc closes it. ]]
+RD.SW_ROW_H = 18
+RD.SW_W = 210
+local function swWash(row, on)
+    if row.wash then row.wash:SetShown(on) end
+    if row.bar then row.bar:SetShown(on) end
+end
+function RD.BuildSwitches()
+    if RD.swPanel then return RD.swPanel end
+    local c = RD.PHOS
+    local p = CreateFrame("Frame", "BiSHealingSwitches", UIParent)
+    p:SetFrameStrata("DIALOG")
+    p:SetScale(1.2)
+    p:SetClampedToScreen(true)
+    p:EnableMouse(true)
+    p.bg = p:CreateTexture(nil, "BACKGROUND")
+    p.bg:SetAllPoints(p)
+    local P = RD.PLATE or { 0.05, 0.04, 0.09 }
+    p.bg:SetColorTexture(P[1], P[2], P[3], 0.97)
+    p.edges = edge(p, { c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 1 }, 1)
+    local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    p.title = p:CreateFontString(nil, "OVERLAY")
+    p.title:SetFont(font, 11, "")
+    p.title:SetTextColor(c[1], c[2], c[3], 1)
+    p.title:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -7)
+    p.title:SetText("SWITCHES")
+    p.note = p:CreateFontString(nil, "OVERLAY")
+    p.note:SetFont(font, 9, "")
+    p.note:SetTextColor(1, 0.75, 0.3, 1)
+    p.note:SetPoint("LEFT", p.title, "RIGHT", 8, 0)
+    local close = CreateFrame("Button", nil, p)
+    close:SetSize(14, 14)
+    close:SetPoint("TOPRIGHT", p, "TOPRIGHT", -4, -4)
+    close.x = close:CreateFontString(nil, "OVERLAY")
+    close.x:SetFont(font, 11, "")
+    close.x:SetPoint("CENTER")
+    close.x:SetText("x")
+    close.hl = close:CreateTexture(nil, "HIGHLIGHT")
+    close.hl:SetAllPoints(close)
+    close.hl:SetColorTexture(c[1], c[2], c[3], 0.22)
+    close:SetScript("OnClick", function() p:Hide() end)
+    -- the three presets
+    p.presets = {}
+    local pw = math.floor((RD.SW_W - 16 - 8) / 3)
+    for k, name in ipairs(RD.SW_ORDER) do
+        local b = CreateFrame("Button", nil, p)
+        b:SetSize(pw, 18)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + (k - 1) * (pw + 4), -24)
+        b.edges = edge(b, { c[1] * 0.5, c[2] * 0.5, c[3] * 0.5, 1 }, 1)
+        b.text = b:CreateFontString(nil, "OVERLAY")
+        b.text:SetFont(font, 10, "")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(RD.SW_WORD[name])
+        b.hl = b:CreateTexture(nil, "HIGHLIGHT")
+        b.hl:SetAllPoints(b)
+        b.hl:SetColorTexture(c[1], c[2], c[3], 0.25)
+        b.preset = name
+        b:SetScript("OnClick", function() RD.SwPreset(name) end)
+        p.presets[name] = b
+    end
+    -- a row per switch, under its group's word
+    p.rows = {}
+    local y, group = -48, nil
+    for _, s in ipairs(RD.SW) do
+        if s.group ~= group then
+            group = s.group
+            local h = p:CreateFontString(nil, "OVERLAY")
+            h:SetFont(font, 8, "")
+            h:SetTextColor(1, 0.7, 0.28, 1)
+            h:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 3)
+            h:SetText(group)
+            y = y - 14
+        end
+        local row = CreateFrame("Button", nil, p)
+        row:SetPoint("TOPLEFT", p, "TOPLEFT", 4, y)
+        row:SetSize(RD.SW_W - 8, RD.SW_ROW_H)
+        row.wash = row:CreateTexture(nil, "BACKGROUND")
+        row.wash:SetAllPoints(row)
+        row.wash:SetColorTexture(c[1], c[2], c[3], 0.14)
+        row.wash:Hide()
+        row.bar = row:CreateTexture(nil, "ARTWORK")
+        row.bar:SetPoint("TOPLEFT", row, "TOPLEFT")
+        row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT")
+        row.bar:SetWidth(2)
+        row.bar:SetColorTexture(1, 0.31, 0.66, 1)
+        row.bar:Hide()
+        row.box = CreateFrame("Frame", nil, row)
+        row.box:SetSize(11, 11)
+        row.box:SetPoint("LEFT", row, "LEFT", 6, 0)
+        row.box.edges = edge(row.box, { c[1] * 0.7, c[2] * 0.7, c[3] * 0.7, 1 }, 1)
+        row.box.fill = row.box:CreateTexture(nil, "ARTWORK")
+        row.box.fill:SetPoint("TOPLEFT", row.box, "TOPLEFT", 2, -2)
+        row.box.fill:SetPoint("BOTTOMRIGHT", row.box, "BOTTOMRIGHT", -2, 2)
+        row.box.fill:SetColorTexture(c[1], c[2], c[3], 1)
+        row.text = row:CreateFontString(nil, "OVERLAY")
+        row.text:SetFont(font, 10, "")
+        row.text:SetPoint("LEFT", row.box, "RIGHT", 7, 0)
+        row.text:SetText(s.name)
+        row.key = s.key
+        row:SetScript("OnClick", function() RD.SetSw(s.key, not RD.Sw(s.key)) end)
+        row:SetScript("OnEnter", function(self)
+            swWash(self, true)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(s.name:upper())
+                GameTooltip:AddLine(s.tip, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
+        p.rows[#p.rows + 1] = row
+        y = y - RD.SW_ROW_H
+    end
+    p:SetSize(RD.SW_W, -y + 8)
+    p:Hide()
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingSwitches") end   -- Esc closes it
+    RD.swPanel = p
+    return p
+end
+--- The panel's ticks, the matching preset lit, and the fight note.
+function RD.PaintSwitches()
+    local p = RD.swPanel
+    if not p then return false end
+    local c = RD.PHOS
+    for _, row in ipairs(p.rows) do
+        local on = RD.Sw(row.key)
+        row.box.fill:SetShown(on)
+        row.text:SetTextColor(on and 1 or 0.55, on and 1 or 0.55, on and 1 or 0.6, 1)
+    end
+    local now = RD.SwPresetNow()
+    for name, b in pairs(p.presets) do
+        local lit = name == now
+        b.text:SetTextColor(lit and c[1] or 0.8, lit and c[2] or 0.8, lit and c[3] or 0.85, 1)
+        for _, e in ipairs(b.edges) do e:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0.35) end
+    end
+    p.note:SetText((combat() or RD.inFight) and "after this fight" or "")
+    return true
+end
+--- The switches button: open the panel beside the window, or close it.
+function RD.ToggleSwitches()
+    local p = RD.BuildSwitches()
+    if p:IsShown() then p:Hide() return false end
+    p:ClearAllPoints()
+    local f = RD.frame
+    if f then p:SetPoint("TOPLEFT", f, "TOPRIGHT", 6, 0) else p:SetPoint("CENTER") end
+    RD.PaintSwitches()
+    p:Show()
+    return true
 end
 
 --- Where the hull reaches: the top-left of the gauge rail, the bottom-right of the bottom rail (or of the tool rail
@@ -5110,7 +5479,7 @@ function RD.Arm()
         if RD.Deck() then
             order, RD.deckTanks = RD.DeckOrder(units, T.n)
             RD.conOrder = order
-            local pets = RD.DeckPets(units, T.n)
+            local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
             RD.deckPets = #pets
             slots = RD.DeckSlots(T, #pets)
             units = RD.DeckUnits(units, T.n, pets)
@@ -5143,7 +5512,7 @@ function RD.Arm()
             sp.bogey:EnableMouse(false)
             sp.kick, sp.paintTex = nil, nil
         end
-        armCures(sp, unit)
+        armCures(sp, (not (RD.Deck() and not RD.Sw("cures"))) and unit or nil)   -- cures switched off: none armed
         armPet(sp, unit, s)
         if s.rb then sp.bogey:Show() else sp.bogey:Hide() end
     end
@@ -5358,6 +5727,10 @@ function RD.MakeCastStrip(sp)
 end
 
 function RD.CastStrip(sp, lit)
+    if not RD.Sw("cast") then
+        if sp and sp.castStrip then sp.castStrip:SetAlpha(0) end
+        return false
+    end
     local b = sp and sp.castStrip
     if not b then return false end
     if not lit or not RD.Deck() then b:SetAlpha(0) return false end
@@ -5779,6 +6152,7 @@ end
 --- Bring the radar in or out to match the switch. Out of a fight only; asked in one, it waits.
 function RD.Apply()
     RD.DashStamp()                                   -- the old alpha switch, once, into the look
+    RD.SwStamp()                                     -- the engineer's view, once, into the switches
     local want = RD.On()
     if combat() then
         if want ~= RD.Active() then RD.pending = true end
@@ -5809,6 +6183,13 @@ function RD.Command(rest)
     if word == "strip" then return RD.StripStatus("strip") end
     if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
+    if word == "sw" then
+        local k, v = arg:lower():match("^(%S*)%s*(%S*)$")
+        if k == "" then return RD.ToggleSwitches() end
+        local done = RD.SW_PRESETS[k] and RD.SwPreset(k) or RD.SetSw(k, v ~= "off")
+        P("switches: %s %s", k, tostring(done or "unknown - names, edges, pets, target, kicks, cures, cast, alerts, fuel, tools, totems, timers, bb"))
+        return done
+    end
     if word == "heal" then
         if arg == "" or arg:lower() == "default" then
             db().heal = nil

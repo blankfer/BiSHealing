@@ -58,7 +58,20 @@ EN.HEAD_DECK_H = 22
 --- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
 function EN.Heads()
     local RD = NS.RD
-    if RD and RD.Deck and RD.Deck() then return EN.HEAD_DECK, EN.HEAD_DECK_H end
+    if RD and RD.Deck and RD.Deck() then
+        -- a narrow window (16 Nov 2026, down to Ellesmere's width): the three boxes shrink to fit beside the switches button
+        local room = (tonumber(RD.deckInnerW) or 999) - 18
+        local full = EN.HEAD_DECK[#EN.HEAD_DECK].x + EN.HEAD_DECK[#EN.HEAD_DECK].w
+        if room >= full then return EN.HEAD_DECK, EN.HEAD_DECK_H end
+        local k = math.max(0.3, room / full)
+        EN.headNarrow = EN.headNarrow or {}
+        for i, h in ipairs(EN.HEAD_DECK) do
+            local n = EN.headNarrow[i] or {}
+            n.key, n.x, n.w = h.key, math.floor(h.x * k), math.floor(h.w * k)
+            EN.headNarrow[i] = n
+        end
+        return EN.headNarrow, EN.HEAD_DECK_H
+    end
     return EN.HEAD, EN.HEAD_H
 end
 
@@ -78,7 +91,7 @@ function EN.Where()
     if RD.Console and RD.Console() then
         local C = RD.CON or {}
         local pad = C.pad or 8
-        local head = (RD.Deck and RD.Deck() and RD.DECK_HEAD) or C.head or 14   -- the deck's strip is taller
+        local head = (RD.Deck and RD.Deck() and RD.DeckHead and RD.DeckHead()) or C.head or 14   -- the deck's strip is taller
         return RD.frame or UIParent, pad, -((pad + head) / 2)
     end
     -- the rail itself, shown or not yet: the radar's layout runs just before the view switch shows it
@@ -93,7 +106,13 @@ end
 
 --- An alert's spot ("los", "range" or "over"): point, relative frame, relative point, x, y. LOS and RANGE are centred in
 --- their box; OVER/H's clipping window starts at its box's left edge (the word hangs 4 px in).
-function EN.HeadSpot(kind)
+function EN.HeadSpot(kind, sp)
+    -- the alert boxes switched off (16 Nov 2026): the word shows on the box it is about
+    local RD = NS.RD
+    if sp and sp.heal and RD and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("alerts") then
+        if kind == "over" then return "LEFT", sp.heal, "LEFT", 2, 0 end
+        return "CENTER", sp.heal, "CENTER", 0, 0
+    end
     local f, x0, y = EN.Where()
     local h = headSlot(kind)
     if kind == "over" then return "LEFT", f, "TOPLEFT", x0 + h.x, y end
@@ -112,6 +131,10 @@ function EN.HeadBoxes()
     local key = con and "heads" or "radarHeads"
     EN[key] = EN[key] or {}
     local set = EN[key]
+    if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("alerts") then    -- switched off: the boxes away
+        for _, q in pairs(set) do q:Hide() end
+        return set
+    end
     local f, x0, y = EN.Where()
     local dim = RD.DIM or { 0.22, 1.00, 0.53, 0.4 }
     local list, H = EN.Heads()
@@ -172,7 +195,7 @@ function EN.PlaceWord(sp, word)
     local RD = NS.RD
     if not (RD and RD.On and RD.On() and sp and sp.los) then return false end
     sp.los:ClearAllPoints()
-    sp.los:SetPoint(EN.HeadSpot(word == "RANGE" and "range" or "los"))
+    sp.los:SetPoint(EN.HeadSpot(word == "RANGE" and "range" or "los", sp))
     return true
 end
 
@@ -496,7 +519,7 @@ function EN.Layout(con)
             end
             if sp.los then
                 sp.los:ClearAllPoints()
-                sp.los:SetPoint(EN.HeadSpot("los"))    -- the header's LOS box, the console's or the radar's alert row
+                sp.los:SetPoint(EN.HeadSpot("los", sp))    -- the header's LOS box, the console's or the radar's alert row
             end
             if NS.OV and NS.OV.Anchor and sp.over then NS.OV.Anchor(sp) end
             if con then
@@ -542,6 +565,12 @@ function EN.Gauge(con)
     if not (g and f) then return false end
     local E, gap = EN.GAUGE, RD.RAIL_GAP or 2
     local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("fuel") then   -- the fuel strip switched off
+        if EN.rail then EN.rail:Hide() end
+        g:Hide()
+        for _, x in ipairs({ g.regen, g.fsr, g.chev, g.hud, g.readout }) do if x then x:Hide() end end
+        return false
+    end
     if con then
         if not EN.rail then
             local r = CreateFrame("Frame", nil, f)
