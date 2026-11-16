@@ -1,5 +1,10 @@
 # BiS Healing
 
+## 1.5.2
+
+- **The mouse wheel heals over party frames again** - EllesmereUI's, VuhDo's and the game's own party and raid frames, as well as BiS Healing's. Scroll over the world and the camera still zooms. It works with Clique installed too: Clique was hiding other addons' frames from us. `/bish wheel ours` keeps it to BiS Healing's frames only; `/bish wheel everywhere` is the old way.
+- **Fixed an "action blocked" error** a player saw with a controller turned on, from the overheal word.
+
 ## 1.5.1
 
 - **The mouse wheel heals only over BiS Healing's frames.** A wheel bind used to fire over anyone under the mouse - a friendly player out in the world got healed, and the wheel stopped zooming the camera. Now the wheel heals over your grid cells and radar pips, and zooms the camera everywhere else. Want the old way (wheel heals over other addons' frames too)? `/bish wheel everywhere` - and `/bish wheel frames` to come back.
