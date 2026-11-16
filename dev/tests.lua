@@ -15457,6 +15457,8 @@ do
             local tot = { unit = "targettarget", en = { box = CreateFrame("Frame") } }
             EN.PaintRange(tot)
             ok(tot.en.box.mayBeHostile == true, "its target: dimmed by range, but a plain enemy there stays bright")
+            local bl = RD.Command("box")
+            ok(type(bl) == "string" and bl:find("target box:", 1, true), "/bish alpha radar box: the target box's numbers", bl)
         end
         local keepTier = d.radar.tier
         d.radar.tier = 4

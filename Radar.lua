@@ -5785,6 +5785,7 @@ function RD.Command(rest)
     local P = NS.Print or print
     if word == "strip" then return RD.StripStatus("strip") end
     if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
+    if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
     if word == "heal" then
         if arg == "" or arg:lower() == "default" then
             db().heal = nil

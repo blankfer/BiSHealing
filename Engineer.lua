@@ -324,6 +324,31 @@ function EN.FoldClass(unit, c)
     return r, g, b
 end
 
+--- `/bish alpha radar box`: the target box's own numbers - how bright each layer is, its bar's colour, what the enemy
+--- check last said (Arn, 16 Nov: "the target is right next to me and its dim").
+function EN.BoxStatus()
+    local function num(v) if v == nil then return "nil" end if secret(v) then return "hidden" end
+        return type(v) == "number" and string.format("%.2f", v) or tostring(v) end
+    local sp
+    for _, s in ipairs((NS.RD and NS.RD.spokes) or {}) do if s.unit == "target" then sp = s end end
+    if not sp then
+        local line = "target box: none placed"
+        if NS.Print then NS.Print(line) end
+        return line
+    end
+    local e = sp.en
+    local r, g, b, a
+    if e and e.bar and e.bar.GetStatusBarColor then r, g, b, a = e.bar:GetStatusBarColor() end
+    local tex = e and e.bar and e.bar.GetStatusBarTexture and e.bar:GetStatusBarTexture()
+    local ta = tex and tex.GetAlpha and tex:GetAlpha()
+    local line = string.format("target box: box %s (shown %s), pip %s, plate %s, bar %s, fill %s, colour %s %s %s %s, enemy check %s, range %s",
+        num(e and e.box:GetAlpha()), tostring(e and e.box:IsShown()), num(sp.heal and sp.heal:GetAlpha()),
+        num(sp.deckPlate and sp.deckPlate:GetAlpha()), num(e and e.bar:GetAlpha()), num(ta), num(r), num(g), num(b), num(a),
+        tostring(NS.FG and NS.FG.hostileSeen), tostring(NS.FG and NS.FG.rangeSeen))
+    if NS.Print then NS.Print(line) end
+    return line
+end
+
 --- `/bish alpha radar tot`: what the game said the last time ITS TARGET's class had to be looked for.
 function EN.FoldStatus()
     local okC, _, tok = pcall(UnitClass, "targettarget")
