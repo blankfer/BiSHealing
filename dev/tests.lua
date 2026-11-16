@@ -15496,6 +15496,13 @@ do
                     .. "If cast on a party member, the heal will only jump to other party members. Each jump reduces the "
                     .. "effectiveness of the heal by 50%. Heals 3 total targets.")
                 ok(NS.OV.Usable(chain), "Chain Heal is judged: its first jump lands whole on the one you hover (Arn at 40: OVER never lit)")
+                do  -- "if those two are on the same button it should use chainheal as the math for the overheal not the riptide"
+                    local keepHO = NS.OV.HealOf
+                    NS.OV.HealOf = function(c) return (c == "Chain Heal(Rank 1)") and 344 or nil end
+                    ok(NS.OV.Judge("Riptide+Chain Heal(Rank 1)") == 344 and NS.OV.Judge("Nature's Swiftness+Chain Heal(Rank 1)") == 344,
+                       "a booster in front: the overheal judges the heal after it (Chain Heal), not Riptide")
+                    NS.OV.HealOf = keepHO
+                end
                 ok(not NS.OV.Usable(NS.FE.Parse("Heals all party members within 30 yards for 300 to 350.")), "a true party heal still is not")
                 ok(not NS.OV.Usable(NS.FE.Parse("Heals the target for 120 over 15 sec.")), "nor a heal over time")
                 _G.C_LossOfControl = { GetActiveLossOfControlData = function() return { displayText = "Interrupted",

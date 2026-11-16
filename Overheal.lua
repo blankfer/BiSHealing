@@ -164,6 +164,14 @@ function OV.Judge(cast)
     if type(cast) ~= "string" or cast == "" then return nil end
     local m = cast:match("^macro:(.+)$")
     if m then return OV.MacroHeal(m) end
+    -- WHAT GOES FIRST IS NOT THE HEAL (16 Nov 2026, Arn: "if those two are on the same button it should use chainheal as
+    -- the math for the overheal not the riptide"): "Riptide+Chain Heal(Rank 1)" - a booster or trinket in front, the heal
+    -- after the last "+" - is judged by the heal alone
+    local FM = NS.FM
+    if FM and FM.Front and cast:find("+", 1, true) then
+        local _, _, rest = FM.Front(cast)
+        if type(rest) == "string" and rest ~= "" then cast = rest end
+    end
     local amount = OV.HealOf(cast)
     if amount then return amount, (cast:match("^(.-)%(") or cast) end
     return nil
