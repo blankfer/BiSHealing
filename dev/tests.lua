@@ -15385,6 +15385,39 @@ do
         RD.SetDeckWidth(nil)
         RD.Arm()
         ok(RD.DeckWidth() == nil, "Shift + right-click: its own width again")
+        -- THE STOPS AND THE READOUT (Arn: "fake stops every 25% and if you keep dragging itll pass it" / "see what % im at")
+        ok(RD.SnapScale(0.98) == 1 and RD.SnapScale(1.27) == 1.25 and RD.SnapScale(1.12) == 1.12,
+           "near a quarter the scale sits on it; between them it moves freely")
+        RD.BuildGrip(RD.frame)
+        ok(RD.GripReadout("75%") == "75%" and RD.grip.pct.__text == "75%" and RD.grip.pct:IsShown(), "the % beside the grip while it drags")
+        RD.GripReadout(nil)
+        ok(not RD.grip.pct:IsShown(), "and gone after")
+        do  -- the view button really changes what you see (Arn, alone: "engineer and deck now look indistinguishable")
+            d.radar.view = nil
+            RD.Arm()
+            local deckW = RD.frame.__w
+            RD.ToggleView()
+            local engW = RD.frame.__w
+            ok(RD.EngineerView() and engW < deckW - 100, "one click: the engineer's view is plainly narrower", deckW .. " -> " .. engW)
+            RD.ToggleView()
+            ok(not RD.EngineerView() and RD.frame.__w == deckW, "and back: the deck's own width")
+            d.radar.view = "console"
+            RD.Arm()
+        end
+        -- NO HEADER: THE BOXES SAY IT (Arn: "we just pretend thats the name and put it in that place")
+        do
+            local keepGUN = _G.GetUnitName
+            _G.GetUnitName = function() return nil end
+            ok(RD.BoxName("target") == "TARGET" and RD.BoxName("targettarget") == "ITS TARGET", "nobody targeted: the boxes say what they are for")
+            _G.GetUnitName = function(u) if u == "target" then return "Scarlet Defender" end end
+            ok(RD.BoxName("target") == "SCARLET" and RD.BoxName("targettarget") == "ITS TARGET", "a target: its real name; its target still empty")
+            local hidden = secretString()
+            _G.GetUnitName = function() return hidden end
+            ok(RD.BoxName("target") == hidden, "a hidden name: handed over whole, never swapped for the word")
+            _G.GetUnitName = keepGUN
+            RD.Arm()
+            ok(not RD.deckBox.label:IsShown() and not RD.deckBox.line:IsShown(), "the header line and its words are gone")
+        end
         local keepTier = d.radar.tier
         d.radar.tier = 4
         local T = RD.ConsoleTier({ "player", "party1" })

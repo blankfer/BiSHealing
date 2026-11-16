@@ -1231,6 +1231,33 @@ function RD.GripScale(startScale, left, top, sx, sy, cx, cy)
     return math.max(RD.SCALE_MIN, math.min(RD.SCALE_MAX, s))
 end
 
+-- THE STOPS (Arn, 15 Nov: "fake stops every 25% and if you keep dragging itll pass it"): within RD.SNAP_BAND of a quarter
+-- (50%, 75%, 100% ... 200%) the scale sits on it; drag on past the band and it moves again
+RD.SNAP_STEP, RD.SNAP_BAND = 0.25, 0.04
+function RD.SnapScale(s)
+    if type(s) ~= "number" then return s end
+    local q = math.floor(s / RD.SNAP_STEP + 0.5) * RD.SNAP_STEP
+    if math.abs(s - q) <= RD.SNAP_BAND then return q end
+    return s
+end
+
+--- THE LIVE READOUT (Arn: "would be nice if it updated live so i can see what % im at"): while the grip drags, the scale
+--- ("75%") or the width ("300 px") beside it - the tooltip goes when the mouse leaves the grip, this stays. nil hides it.
+function RD.GripReadout(text)
+    local g = RD.grip
+    if not g then return nil end
+    if not g.pct then
+        g.pct = g:CreateFontString(nil, "OVERLAY")
+        g.pct:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+        g.pct:SetPoint("BOTTOMRIGHT", g, "TOPLEFT", -2, 2)
+        local P = RD.PHOS
+        g.pct:SetTextColor(P[1], P[2], P[3], 1)
+    end
+    g.pct:SetText(text or "")
+    if text then g.pct:Show() else g.pct:Hide() end
+    return text
+end
+
 --- Scale the radar to `s` with its top-left corner staying at (left, top) in screen pixels.
 function RD.ScaleAt(f, s, left, top)
     if combat() then return false end
@@ -1298,6 +1325,7 @@ function RD.StartWidthDrag(g, f, k, l, t, sx)
             z.applied = w
             RD.SetDeckWidth(w)
             RD.Arm()
+            RD.GripReadout(w + 2 * RD.CON.pad .. " px")         -- the window's width, live
         end
     end)
     return true
@@ -1310,6 +1338,7 @@ function RD.EndGrip()
     local widthDrag = g.sizing.width
     g.sizing = nil
     g:SetScript("OnUpdate", nil)
+    RD.GripReadout(nil)                                     -- the live % / px goes with the drag
     if widthDrag then return true end                       -- the width is already saved, the corner held
     if f then
         db().scale = f:GetScale()
@@ -1364,8 +1393,11 @@ function RD.BuildGrip(f)
             local z = self.sizing
             if not z or combat() then RD.EndGrip() return end
             local cx, cy = GetCursorPosition()
-            RD.ScaleAt(f, RD.GripScale(z.scale, z.left, z.top, z.sx, z.sy, cx, cy), z.left, z.top)
+            local s = RD.SnapScale(RD.GripScale(z.scale, z.left, z.top, z.sx, z.sy, cx, cy))
+            RD.ScaleAt(f, s, z.left, z.top)
+            RD.GripReadout(math.floor(s * 100 + 0.5) .. "%")
         end)
+        RD.GripReadout(math.floor(f:GetScale() * 100 + 0.5) .. "%")
     end)
     g:SetScript("OnMouseUp", function() RD.EndGrip() end)
     g:SetScript("OnHide", function() RD.EndGrip() end)
@@ -2134,6 +2166,17 @@ RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2
 RD.TIMER_MIN = 34
 RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
 RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
+RD.DECK_LABEL_H = 12                                -- the band the header and its line take above a top-row pair
+RD.DECK_HEADER = false                              -- the header is gone: the boxes' own names say it (RD.BoxName)
+RD.BOX_WORD = { target = "TARGET", targettarget = "ITS TARGET" }   -- the name line while nobody is there
+
+--- A target-pair box's name line: the real name (a hidden one handed over untouched), else what the box is for.
+function RD.BoxName(unit)
+    local cs = RD.Callsign(unit)
+    if NS.Secret and NS.Secret(cs) then return cs end
+    if (cs == nil or cs == "") and RD.BOX_WORD[unit] then return RD.BOX_WORD[unit] end
+    return cs
+end
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -2182,7 +2225,7 @@ function RD.DeckTag(sp, w)
     end
     t:SetFrameLevel(sp.heal:GetFrameLevel() + 5)            -- over the bar and the icons (they sit below its line)
     if w then t.text:SetWidth(math.max(8, w - 6)) end
-    t.text:SetText(RD.Callsign(sp.unit))
+    t.text:SetText(RD.BoxName(sp.unit))
     t:Show()
     return t
 end
@@ -2268,7 +2311,7 @@ function RD.PaintDeckBox()
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.unit and sp.slot and sp.slot.box then
             RD.PaintHeal(sp)
-            if sp.deckTag then sp.deckTag.text:SetText(RD.Callsign(sp.unit)) end   -- the new target's callsign
+            if sp.deckTag then sp.deckTag.text:SetText(RD.BoxName(sp.unit)) end    -- the new target's callsign, or the box's word
         end
     end
     return true
@@ -2377,7 +2420,10 @@ function RD.DeckLayout(T, order)
         place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw)
     end
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
-    local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD   -- under the deck's taller alert strip
+    -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
+    -- 15 Nov, a screenshot: "TARGET - ITS TARGET" was drawn over the alert boxes)
+    local band = (RD.DECK_HEADER and place.target and place.target.y == 0) and RD.DECK_LABEL_H or 0
+    local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD + band
     local placed = {}
     -- THE ICONS UNDER THE BAR (15 Nov 2026). The kick and the cures are secure buttons that keep their click while unseen
     -- (a secure button's mouse may not change in a fight) - laid over the bar they ate the heal (Arn: "the middle part of
@@ -2468,6 +2514,11 @@ function RD.DeckLayout(T, order)
         box.label:SetText("TARGET · ITS TARGET")
         RD.deckBox = box
     end
+    -- NO HEADER ANY MORE (Arn, 15 Nov night: "instead of the bar up top that says target and its target we just pretend
+    -- thats the name and put it in that place"): the two boxes' own name lines say TARGET / ITS TARGET while nobody is
+    -- there (RD.BoxName); the line and its words stay built, hidden
+    box.line:Hide()
+    box.label:Hide()
     box:ClearAllPoints()
     box:SetPoint("TOPLEFT", f, "TOPLEFT", x0 + place.box.x, -(y0 + place.box.y))
     box:SetSize(place.box.w, place.box.h)
@@ -2868,7 +2919,13 @@ function RD.BuildViewButton(f)
     b.hl:SetAllPoints(b)
     b.hl:SetTexture(RD.WHITE)
     b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
-    b:SetScript("OnClick", function() RD.ToggleView() end)
+    b:SetScript("OnClick", function(self)
+        RD.ToggleView()
+        -- the tooltip says where the NEXT click goes: written again at once (Arn's screenshot, 15 Nov: still "DECK - click:
+        -- the engineer's view" while the engineer's view showed)
+        local onEnter = self.GetScript and self:GetScript("OnEnter")
+        if onEnter and GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then onEnter(self) end
+    end)
     b:SetScript("OnEnter", function(self)
         local tip = self.tip
         if not (tip and GameTooltip) then return end
