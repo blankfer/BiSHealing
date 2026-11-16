@@ -3233,6 +3233,7 @@ local function armCures(sp, unit)
         c.box:SetAttribute("unit", unit)
         c.box:EnableMouse(true)
         c.cure = cure.name
+        RD.DriveCure(c, unit)
         -- the client's marker: a diamond in the cure's colour, only while there is something to cure. Built once per
         -- place and cure; a new unit in the same place is only told who to watch.
         local key = cure.name .. ":" .. math.floor(cx + 0.5) .. ":" .. math.floor(cy + 0.5) .. ":" .. px
@@ -3282,6 +3283,27 @@ local function armCures(sp, unit)
             end
         end
     end
+end
+
+--- THE TARGET BOX'S CURES (15 Nov 2026, Arn's screenshot + probe: a green diamond in the box with no target at all). The
+--- client's marker does not redraw when "target" / "targettarget" changes to someone else or to nobody, so the last
+--- target's poison stayed up. The grid's answer (Auras.lua FA.DRIVE): the CLIENT shows the cure button - and here the
+--- marker's holder too - only while that token is someone you can help, a state driver that works in a fight. Any other
+--- unit: the driver comes off and both show as before.
+function RD.DriveCure(c, unit)
+    local cond = NS.FA and NS.FA.DRIVE and NS.FA.DRIVE[unit or ""] or nil
+    if c.driven == cond then return end
+    for _, fr in ipairs({ c.box, c.holder }) do
+        if fr then
+            if cond and RegisterStateDriver then
+                RegisterStateDriver(fr, "visibility", cond)
+            elseif c.driven and UnregisterStateDriver then
+                UnregisterStateDriver(fr, "visibility")
+                fr:Show()
+            end
+        end
+    end
+    c.driven = cond
 end
 
 --- Your watched self buff (Water Shield): the red lights while it is NOT on you. The client's own icon arriving (its

@@ -14896,6 +14896,24 @@ do
     ok(boxSp[1] and boxSp[1].deckPlate.__h >= M.row and boxSp[2].deckPlate.__h >= M.row,
        "and never shorter than a party row (Arn: \"dont like how the target of target is squished\")", boxSp[2] and boxSp[2].deckPlate.__h)
     ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")
+    -- THE TARGET'S CURES SHOWN BY THE CLIENT ONLY WHILE IT IS A FRIEND (Arn's probe: a green diamond with no target at all)
+    do
+        local keepBook = BOOK[48]
+        BOOK[48] = { name = "Cure Poison", rank = "" }
+        NS.FM.BookChanged()
+        RD.Arm()
+        local tc, mc
+        for _, sp in ipairs(RD.spokes) do
+            if sp.unit == "target" then tc = sp.cures and sp.cures[1] end
+            if sp.unit == "party1" then mc = sp.cures and sp.cures[1] end
+        end
+        ok(tc and DRIVEN[tc.box] == "[@target,help] show; hide" and DRIVEN[tc.holder] == DRIVEN[tc.box],
+           "the target box's cure button and its marker show only while your target is someone you can help", tc and DRIVEN[tc.box])
+        ok(mc and DRIVEN[mc.box] == nil and DRIVEN[mc.holder] == nil, "a party member's cures are never driven - always there")
+        BOOK[48] = keepBook
+        NS.FM.BookChanged()
+        RD.Arm()
+    end
     local empty = 0
     for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
     ok(empty == 0, "no empty boxes: the deck grows down instead", empty)
