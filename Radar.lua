@@ -4924,6 +4924,83 @@ local function toolTip(b, title, what)
     b.tip = { title, what .. ".  " .. where .. "." .. (b.restOnly and "  Out of a fight only." or "") }
 end
 
+--[[ THE MANA TIDE PING (16 Nov 2026, Arn: "every time i drop it" - "a ping can be a ping and we use that, not on the way
+  assist attack or warning" - assist "will make the tanks think i need help"). The button's own click drops the totem
+  and then pings at your feet, the game's plain ping, so the whole group (BiS or not) sees where it stands. A click while
+  it is down pings again: "stand close". An addon may not ping by itself (C_Ping.SendMacroPing is forbidden, measured
+  14 Nov); a /ping inside a secure button's macro is the player's own click. ]]
+function RD.TideMacro() return "/cast " .. RD.TIDE .. "\n/ping [@player]" end
+
+--[[ MANA TIDE FOR BIS USERS (16 Nov 2026, Arn: "yes for bis users too"). Your cast sends TIDE over the shared BiS channel;
+  every BiS Healing deck in the group shows "MANA TIDE" and the totem's seconds on YOUR box (yours too, at once). The
+  channel holds messages through the game's chat lockdown, so in a fight it can land a little late. ]]
+RD.TIDE_COL = { 0.35, 0.85, 1.00, 1 }
+function RD.TideSay()
+    RD.TideHeard(UnitName and plain((UnitName("player"))) or nil, RD.WATER.tide, true)
+    local lib = _G.LibBiSComm
+    if lib and lib.Send then pcall(lib.Send, lib, "BiSHealing", "TIDE", RD.WATER.tide) end
+end
+--- Does this deck box's unit carry this name? (whole "Name Surname" or the first name; a realm is cut off)
+function RD.BoxIsNamed(unit, who)
+    if type(unit) ~= "string" or type(who) ~= "string" then return false end
+    who = who:gsub("%-.*$", "")
+    local okW, whole = pcall(GetUnitName, unit, false)
+    whole = okW and plain(whole) or nil
+    if whole and whole == who then return true end
+    local okF, first = pcall(UnitName, unit)
+    first = okF and plain(first) or nil
+    return first ~= nil and (first == who or first == who:match("^(%S+)"))
+end
+--- A Mana Tide heard (or yours): the tag on that person's box for `secs`.
+function RD.TideHeard(who, secs, mine)
+    secs = math.max(1, math.min(tonumber(secs) or RD.WATER.tide, 30))
+    for k, i in ipairs(RD.conOrder or {}) do
+        local sp = RD.spokes and RD.spokes[i]
+        local u = sp and sp.unit
+        if u and ((mine and u == "player") or RD.BoxIsNamed(u, who)) and sp.deckPlate and sp.deckPlate:IsShown() then
+            RD.TideTag(sp, secs)
+            return sp
+        end
+    end
+    return nil
+end
+function RD.TideTag(sp, secs)
+    local t = sp.tideTag
+    if not t then
+        t = CreateFrame("Frame", nil, sp.deckPlate)
+        t:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
+        t:SetSize(70, 11)
+        t.text = t:CreateFontString(nil, "OVERLAY")
+        t.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+        t.text:SetPoint("RIGHT", t, "RIGHT", 0, 0)
+        t.text:SetJustifyH("RIGHT")
+        local c = RD.TIDE_COL
+        t.text:SetTextColor(c[1], c[2], c[3], c[4])
+        t:SetScript("OnUpdate", function(self, e)
+            self.acc = (self.acc or 0) + (tonumber(e) or 0)
+            if self.acc < 0.25 then return end
+            self.acc = 0
+            local left = math.ceil((self.untilAt or 0) - GetTime())
+            if left <= 0 then self:Hide() return end
+            if left ~= self.shown then self.shown = left self.text:SetText("MANA TIDE " .. left) end
+        end)
+        sp.tideTag = t
+    end
+    local lvl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+    if type(lvl) == "number" then t:SetFrameLevel(lvl + 7) end      -- over the bar and the name line
+    t.untilAt, t.shown, t.acc = GetTime() + secs, math.ceil(secs), 0
+    t.text:SetText("MANA TIDE " .. math.ceil(secs))
+    t:Show()
+    return t
+end
+function RD.TideHook()
+    local lib = _G.LibBiSComm
+    if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
+    lib:RegisterHandler("BiSHealing", "TIDE", function(sender, secs) RD.TideHeard(sender, secs) end)
+    RD.tideHooked = true
+    return true
+end
+
 --- Arm one tool: its click (a macro written out of a fight) and its light point. `macro` nil = this tool is not here.
 local function armTool(b, macro, words, title, what)
     b:SetAttribute("*type1", macro and "macro" or nil)
@@ -4941,7 +5018,7 @@ function RD.ArmTools()
     if combat() or not RD.tide then return false end
     local FM = NS.FM
     local tide = FM and FM.Ranks and #FM.Ranks(RD.TIDE) > 0
-    armTool(RD.tide, tide and ("/cast " .. RD.TIDE) or nil, tide and describe(RD.TIDE), "MANA TIDE", RD.TIDE)
+    armTool(RD.tide, tide and RD.TideMacro() or nil, tide and describe(RD.TIDE), "MANA TIDE", RD.TIDE)
     local potion = RD.BestItem(RD.POTION)
     RD.potion.item = potion
     armTool(RD.potion, potion and ("/use item:" .. potion) or nil, itemWords(potion), "MANA POTION",
@@ -5537,6 +5614,7 @@ function RD.OnCast(unit, spellID)
         RD.readyAt.tide, RD.coolStart.tide = now + RD.COOLS.tide, now
         RD.PaintWaits(now)
         RD.waterUntil = now + RD.WATER.tide
+        RD.TideSay()                                 -- BiS Healing users: MANA TIDE on your box in their deck
         return "tide"
     elseif name == RD.SPRING then
         RD.waterUntil = now + RD.WATER.spring
@@ -6456,7 +6534,7 @@ end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
 if ev.RegisterUnitEvent then pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player") end
 ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
-    if event == "PLAYER_LOGIN" then RD.Apply() return end
+    if event == "PLAYER_LOGIN" then RD.TideHook() RD.Apply() return end
     -- THE LOADING WINDOW (11 Nov 2026): a /reload in a fight lets secure frames be armed while the loading events are
     -- handed out, the lockdown back right after - armed NOW, never left for a later tick (Grid.lua, FG.Start)
     if event == "PLAYER_ENTERING_WORLD" then

@@ -13832,8 +13832,9 @@ do
         NS.FM.BookChanged()
         STATE.powerMax = 1375
         RD.Arm()
-        ok(RD.tide.macro == "/cast Mana Tide Totem" and RD.tide:GetAttribute("*macrotext1") == "/cast Mana Tide Totem",
-           "Mana Tide known: its pip casts it")
+        ok(RD.tide.macro == RD.TideMacro() and RD.tide:GetAttribute("*macrotext1") == RD.TideMacro()
+           and RD.TideMacro():find("^/cast Mana Tide Totem\n"),
+           "Mana Tide known: its pip casts it (and pings, 16 Nov)")
         ok(RD.potion.item == 6149 and RD.potion:GetAttribute("*macrotext1") == "/use item:6149",
            "the best mana potion in the bags (by the level it needs): a click drinks it", RD.potion.item)
         ok(RD.fuel.item == 1205 and RD.fuel:GetAttribute("*macrotext1") == "/use item:1205", "the best drink: a click drinks it")
@@ -15494,6 +15495,18 @@ do
                 ok(not cc:IsShown(), "switched off: no fourth box")
                 RD.SetSw("cc", true)
                 _G.C_LossOfControl = keepLC
+            end
+            -- THE MANA TIDE PING (Arn: "every time i drop it" - "a ping can be a ping")
+            ok(RD.TideMacro():find("/cast Mana Tide Totem", 1, true) and RD.TideMacro():find("\n/ping [@player]", 1, true)
+               and not RD.TideMacro():find("assist", 1, true), "the Mana Tide click: drop it, then a plain ping at your feet")
+            do
+                local mine = RD.TideHeard(nil, 12, true)
+                ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
+                   mine and mine.tideTag and tostring(mine.tideTag.text.__text))
+                ok(RD.TideHeard("Nobody-Here", 12) == nil, "a name not in the group: nothing")
+                ok(RD.BoxIsNamed("player", "Chainheal Ryangosling-Realm") == RD.BoxIsNamed("player", "Chainheal Ryangosling"),
+                   "a realm on the sender is cut off")
+                mine.tideTag:Hide()
             end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
