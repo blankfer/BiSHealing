@@ -14927,6 +14927,19 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- THE FOOD'S OWN ICON (Arn: "put the food icon on the H or Fork" ... "just the food we are eating"): whatever was picked
+    do
+        local keepIcon = _G.GetItemIcon
+        _G.GetItemIcon = function(id) return id == 4599 and 133970 or nil end
+        RD.FoodIcon(4599)
+        local fork = RD.rations.fork or {}
+        ok(RD.rations.food and RD.rations.food:IsShown() and RD.rations.food.__texture == 133970
+           and (not fork[1] or not fork[1]:IsShown()), "the food being eaten shows its icon where the fork was",
+           RD.rations.food and RD.rations.food.__texture)
+        RD.FoodIcon(nil)
+        ok(not RD.rations.food:IsShown() and (not fork[1] or fork[1]:IsShown()), "no food picked: the fork again")
+        _G.GetItemIcon = keepIcon
+    end
     -- THE BOX'S EDGE BY HEALTH (Arn: "need the outline of the boxes to turn colors amber when they are low red very low"):
     -- a step curve the client evaluates on their health - nothing read
     do

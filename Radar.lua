@@ -3596,6 +3596,31 @@ local function armUse(b, id)
     b:SetAttribute("*macrotext1", id and ("/use item:" .. id) or nil)
     b:EnableMouse(id and true or false)
     b.item = id
+    if b == RD.rations then RD.FoodIcon(id) end
+end
+
+--- THE FOOD'S OWN ICON on the rations button (15 Nov 2026, Arn: "put the food icon on the H or Fork" - "not always fish just
+--- the food we are eating" - "pre 60 its exp at 60 its the buff food"). Whatever RD.FoodWanted picked - BiS Tools' XP food
+--- while you level, else the food that gives Well Fed - shows its icon on the button's face, where the drawn fork was; no
+--- icon from the client keeps the fork. The face's alpha (food wanted, out of a fight) still decides whether it shows.
+function RD.FoodIcon(id)
+    local b = RD.rations
+    if not (b and b.face) then return false end
+    local iconOf = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
+    local tex
+    if id and iconOf then
+        local ok, t = pcall(iconOf, id)
+        if ok and t ~= nil and not (NS.Secret and NS.Secret(t)) then tex = t end
+    end
+    if not b.food then
+        b.food = b.face:CreateTexture(nil, "OVERLAY")
+        b.food:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        b.food:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        if b.food.SetTexCoord then b.food:SetTexCoord(0.08, 0.92, 0.08, 0.92) end   -- the icon's own border trimmed
+    end
+    if tex then b.food:SetTexture(tex) b.food:Show() else b.food:Hide() end
+    for _, l in ipairs(b.fork or {}) do if tex then l:Hide() else l:Show() end end
+    return tex ~= nil
 end
 
 --- HOW MUCH MANA A TOOL GIVES BACK, from its own words (out of a fight, plain): "Restores 1350 to 2250 mana" -> the
