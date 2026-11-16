@@ -221,17 +221,18 @@ function FG.DeckPlace(nTanks, nRest, party, m)
     m = m or FG.DECK_SIZES
     local cell, P = m.cell, m.gap
     local W = 5 * cell + 4 * P
-    local box = { w = 2 * cell + P + 2 * m.boxIn, h = m.tank }
-    box.x, box.y = W - box.w, 0
-    local tgtH = box.h - m.boxTop - m.boxIn
-    local target = { x = box.x + m.boxIn, y = m.boxTop, w = cell, h = tgtH }
-    local tot = { x = target.x + cell + P, y = m.boxTop, w = cell, h = tgtH }
-    local area = box.x - P                         -- what the tanks share
+    -- THE TOP ROW IN EQUAL SHARES (Arn, 15 Nov: "as wide as the boxes need to fit, so for us thats 3 boxes so thats how wide
+    -- each box gets"): the tanks, your target and its target split the row evenly - one tank = thirds, two = quarters. No
+    -- tank still keeps a tank's share empty, so the target pair never grows past two thirds. The pair has no outline of its
+    -- own any more (the cyan clashed): a header line above it, and its two boxes the full row height.
+    local n = math.max(nTanks, 1) + 2
+    local bw = math.floor((W - (n - 1) * P) / n)
+    local tx = (n - 2) * (bw + P)
+    local target = { x = tx, y = 0, w = bw, h = m.tank }
+    local tot = { x = tx + bw + P, y = 0, w = W - (tx + bw + P), h = m.tank }
+    local box = { x = tx, y = 0, w = W - tx, h = m.tank }
     local tanks = {}
-    if nTanks > 0 then
-        local tw = math.floor((area - (nTanks - 1) * P) / nTanks)
-        for i = 1, nTanks do tanks[i] = { x = (i - 1) * (tw + P), y = 0, w = tw, h = m.tank } end
-    end
+    for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = bw, h = m.tank } end
     local rest, y, i, first = {}, m.tank + P, 1, true
     while i <= nRest do
         local per = (first and party) and math.max(1, 5 - nTanks) or 5

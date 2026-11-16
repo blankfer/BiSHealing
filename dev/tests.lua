@@ -14908,8 +14908,12 @@ do
     local W = 5 * cell + 4 * P
     local p = FG.DeckPlace(1, 4, true)
     local area = p.box.x - P
-    ok(p.w == W and p.box.x + p.box.w == W and p.target.w == cell and p.tot.w == cell and p.tot.x == p.target.x + cell + P,
-       "the target box sits at the right end, two ordinary-width cells inside it")
+    local third = math.floor((W - 2 * P) / 3)
+    ok(p.w == W and p.box.x + p.box.w == W and p.target.w == third and math.abs(p.tot.w - third) <= 2 and p.tot.x == p.target.x + third + P
+       and p.target.h == p.tanks[1].h and p.target.y == 0,
+       "one tank: the top row in thirds - tank, your target, its target (Arn: \"3 boxes so thats how wide each box gets\")")
+    local p2t = FG.DeckPlace(2, 3, true)
+    ok(p2t.tanks[2].w == p2t.target.w and p2t.tanks[2].x + p2t.tanks[2].w + P == p2t.target.x, "two tanks: quarters")
     ok(#p.tanks == 1 and p.tanks[1].x == 0 and p.tanks[1].w == area, "one tank: one long bar filling everything left of the box",
        tostring(p.tanks[1] and p.tanks[1].w) .. " vs " .. area)
     -- Arn: "1 tank the 4 party uses that whole row they get longer. if 2 tanks the next row is 3 people longer to fill in"
@@ -15016,11 +15020,12 @@ do
        "the kick is your interrupt's own icon in a red rim, not the drawn triangle (Arn: \"use the actual spell icon\")",
        k and k.deckIcon and k.deckIcon.__texture)
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
-       and boxSp[1].deckPlate.__w == M.cell and boxSp[2].deckPlate.__w == M.cell, "the target box's two: your target and its target, one cell each")
+       and math.abs(boxSp[1].deckPlate.__w - mp.target.w) < 1 and math.abs(boxSp[2].deckPlate.__w - mp.tot.w) < 1,
+       "the target pair's two: your target and its target, a share of the top row each")
     local lp = RD.deckBox.label.points and RD.deckBox.label.points[1]
-    ok(boxSp[1] and boxSp[1].deckPlate.__h == M.tank - 2 * M.boxIn and lp and lp[1] == "BOTTOMLEFT" and lp[3] == "TOPLEFT",
-       "the label sits above the box, so its two cells stand the tank's full height (Arn: \"the boxes can be the same size of the tank\")",
-       boxSp[1] and boxSp[1].deckPlate.__h)
+    ok(boxSp[1] and boxSp[1].deckPlate.__h == M.tank and lp and lp[1] == "BOTTOMLEFT" and lp[2] == RD.deckBox.line and lp[3] == "TOPLEFT",
+       "the header sits on a line above the pair, so its two boxes stand the tank's full height", boxSp[1] and boxSp[1].deckPlate.__h)
+    ok(not RD.deckBox.edges and RD.deckBox.line, "no outline round the pair any more (Arn: \"the colors clash too much\"), a line above")
     ok(boxSp[1] and boxSp[1].deckPlate.__h >= M.row and boxSp[2].deckPlate.__h >= M.row,
        "and never shorter than a party row (Arn: \"dont like how the target of target is squished\")", boxSp[2] and boxSp[2].deckPlate.__h)
     ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")

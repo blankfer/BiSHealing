@@ -2046,7 +2046,8 @@ end
 -- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
 -- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
-RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
+RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
+RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -2293,15 +2294,20 @@ function RD.DeckLayout(T, order)
             if sp.deckPlate then sp.deckPlate:Hide() end
         end
     end
-    -- the target box: its outline and its job written on it, then your target and its target inside
+    -- the target pair: no outline (Arn, 15 Nov: "the colors clash too much ... maybe just the header text with a line above
+    -- them"), a thin line over the two boxes with their job written on it, in the deck's quiet grey
     local box = RD.deckBox
     if not box then
         box = CreateFrame("Frame", nil, RD.conLayer)
-        box.edges = edge(box, RD.DECK_BOX_COL, 1)
+        local c = RD.DECK_BOX_COL
+        box.line = box:CreateTexture(nil, "OVERLAY")
+        box.line:SetColorTexture(c[1], c[2], c[3], c[4])
+        box.line:SetHeight(1)
+        box.line:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 0, RD.DECK_LINE_UP)
+        box.line:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", 0, RD.DECK_LINE_UP)
         box.label = box:CreateFontString(nil, "OVERLAY")
         box.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 7, "")
-        box.label:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 2, 2)    -- over the box, in the empty strip above the tank row
-        local c = RD.DECK_BOX_COL
+        box.label:SetPoint("BOTTOMLEFT", box.line, "TOPLEFT", 1, 2)   -- over the line, in the strip above the top row
         box.label:SetTextColor(c[1], c[2], c[3], 1)
         box.label:SetText("TARGET · ITS TARGET")
         RD.deckBox = box
