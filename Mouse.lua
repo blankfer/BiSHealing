@@ -460,8 +460,18 @@ end
 --- "Nature's Swiftness+Healing Wave(Rank 10)". Stored as one string, so the macro that keeps the
 --- binds, Set/Get/Clear and the trimmer all carry it untouched. On cooldown, the first line fails
 --- quietly and the heal still goes out.
-FM.BOOSTERS = { ["Nature's Swiftness"] = true, ["Inner Focus"] = true, ["Divine Favor"] = true }
+FM.BOOSTERS = { ["Nature's Swiftness"] = true, ["Inner Focus"] = true, ["Divine Favor"] = true, ["Riptide"] = true }
 FM.BOOST_MARK = "+"
+
+--- A SPELL THAT GOES FIRST WHEN IT IS READY, AIMED (15 Nov 2026). Arn: "if i drop it on top of chain heal bind will it be
+--- smart to cast rip tide if its cooldown is up and then go back to casting chain heal". Riptide (Forever: a shaman
+--- talent, 408521, 12 s cooldown, a 15 s heal over time, and Chain Heal 25% stronger on that target) rides in front of a
+--- heal like Nature's Swiftness, with two differences: it needs a TARGET - so its line is aimed like the heal, at the
+--- living friend under the mouse - and it is ON the global cooldown, so a press that casts it casts it alone (the heal's
+--- line meets the global cooldown and does nothing). Every press while it cools, its line fails quietly and the heal
+--- goes out. One button: Riptide every 12 s on whoever you are healing, Chain Heal in between - and the Chain Heal that
+--- follows lands on the Riptide target, which is the one it is stronger on.
+FM.AIMED = { ["Riptide"] = true }
 
 --- THE HEALS, READY TO DRAG (8 Oct 2026). Arn: "look at how fojjicore made a little box that tells
 --- you these spells are not max rank, and you can drag and drop them on your bar ... show all the
@@ -472,7 +482,7 @@ FM.BOOST_MARK = "+"
 --- what the spellbook has trained is shown. (No "not max rank" warning on the binds: a healer
 --- downranks on purpose, and the rank button is how.)
 FM.PALETTE = {
-    SHAMAN  = { "Healing Wave", "Lesser Healing Wave", "Chain Heal", "Nature's Swiftness",
+    SHAMAN  = { "Healing Wave", "Lesser Healing Wave", "Chain Heal", "Riptide", "Nature's Swiftness",
                 "Cure Poison", "Cure Disease", "Ancestral Spirit" },
     PRIEST  = { "Flash Heal", "Greater Heal", "Heal", "Lesser Heal", "Renew", "Prayer of Healing",
                 "Power Word: Shield", "Inner Focus", "Dispel Magic", "Abolish Disease", "Resurrection" },
@@ -546,7 +556,7 @@ end
 --- The bind window's tip about boosters, or nil: said only while one is trained and no bind, on
 --- any modifier, has one in front of it yet. Short enough for the header line.
 FM.BOOST_SHORT = { ["Nature's Swiftness"] = "NS", ["Inner Focus"] = "Inner Focus",
-                   ["Divine Favor"] = "Divine Favor" }
+                   ["Divine Favor"] = "Divine Favor", ["Riptide"] = "Riptide" }
 function FM.BoostTip(palette)
     local trained
     for _, s in ipairs(palette or FM.Palette()) do
@@ -677,7 +687,10 @@ function FM.FirstLines(cast, mod)
     for _, s in ipairs(slots) do
         if not seen[s] then seen[s] = true lines[#lines + 1] = "/use " .. s end
     end
-    if boost then lines[#lines + 1] = "/cast " .. boost end
+    if boost then
+        -- an aimed one (Riptide) goes on the living friend under the mouse, never on you by the client's self-cast
+        lines[#lines + 1] = "/cast " .. (FM.AIMED[boost] and "[@mouseover,help,nodead] " or "") .. boost
+    end
     return #lines > 0 and (table.concat(lines, "\n") .. "\n") or ""
 end
 

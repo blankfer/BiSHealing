@@ -6584,6 +6584,43 @@ do
             -- AND RANGE IS STILL THE HEAL'S
             ok(FM.RangeSpell() ~= "Nature's Swiftness", "range is never measured with the booster")
 
+            -- RIPTIDE ON THE CHAIN HEAL BIND (Arn, 15 Nov: "cast rip tide if its cooldown is up and then go back to
+            -- casting chain heal"): it rides in front like a booster, but AIMED at the living friend under the mouse
+            do
+                local keepRight = FM.Get("", "right")
+                FM.Set("", "right", "Chain Heal(Rank 2)")
+                local landed = FM.Landing("", "right", "Riptide(Rank 1)")
+                ok(landed == "Riptide+Chain Heal(Rank 2)", "Riptide dropped on Chain Heal goes in front, the heal and its rank kept",
+                   tostring(landed))
+                FM.Set("", "right", landed)
+                ok(FM.Landing("", "button5", "Riptide") == "Riptide", "Riptide on an empty button is just Riptide")
+                local rc = CreateFrame("Button", "RiptideCell", UIParent, "SecureUnitButtonTemplate")
+                FM.ApplyTo(rc)
+                local rt = rc.__attrs["*macrotext2"] or ""
+                ok(rc.__attrs["*type2"] == "macro"
+                   and rt == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
+                          .. "/cast [@mouseover,help,nodead] Riptide\n/cast [@mouseover] Chain Heal(Rank 2)",
+                   "a click: the guard, Riptide AIMED at that cell (never self-cast), then Chain Heal on the same cell", rt)
+                local body = NS.FK.Encode({ right = landed }, {})
+                local back = NS.FK.Decode(body)
+                ok(back and back.right == landed, "Riptide + Chain Heal is written into the macro and read back whole", body)
+                ok(FM.CycleRank("", "right") == "Riptide+Chain Heal(Rank 3)" or FM.Get("", "right"):find("^Riptide%+Chain Heal"),
+                   "the rank button steps Chain Heal and keeps Riptide in front", tostring(FM.Get("", "right")))
+                FM.Set("", "wheeldown", "Riptide+Chain Heal(Rank 2)")
+                FM.ApplyWheel(FG.anchor)
+                local wd = _G["BiSHealWheelwheeldown"]
+                local wdt = wd and wd.__attrs and wd.__attrs["macrotext"] or ""
+                local g2, r2, c2 = wdt:find("/stopmacro", 1, true), wdt:find("/cast [@mouseover,help,nodead] Riptide", 1, true),
+                                   wdt:find("/cast [@mouseover] Chain Heal(Rank 2)", 1, true)
+                ok(g2 and r2 and c2 and g2 < r2 and r2 < c2, "on the wheel too: guard, aimed Riptide, then Chain Heal", wdt)
+                ok(FM.FirstLines("Nature's Swiftness+Healing Wave", "") == "/cast Nature's Swiftness\n",
+                   "Nature's Swiftness stays a plain line (it needs no target)")
+                FM.Clear("", "wheeldown")
+                FM.Set("", "right", keepRight)
+                if keepRight == nil then FM.Clear("", "right") end
+                FM.ApplyWheel(FG.anchor)
+            end
+
             -- THE WAYS BACK: the heal dropped again is a plain heal; a booster on an empty slot is
             -- just the booster
             RANKS[331] = "Rank 4"
