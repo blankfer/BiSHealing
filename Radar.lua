@@ -5304,6 +5304,46 @@ function RD.RipMarks()
     end
 end
 
+--[[ THE CHAIN HEAL BOUNCE PROBE (16 Nov 2026, Arn: "after I cast chain heal see a chain heal line on the three targets it
+  bounced to? A 3 bounce is a gold line, 3 bounce and 3 crits get a celebration, 1 bounce a buzzer"). Before drawing
+  anything: does the game tell an addon who was healed? UNIT_COMBAT (unit, "HEAL", "CRITICAL"/"", amount, school) is
+  what unit frames show heal numbers from. Armed by hand (`/bish alpha radar bounce on`, it fires for every hit on every
+  unit, so never left on), it records - as KINDS only (plain / hidden / nil), nothing compared - each event within
+  RD.BOUNCE_WINDOW s of your last Chain Heal, and `/bish alpha radar bounce` prints the last ones. ]]
+RD.BOUNCE_WINDOW = 1.5
+RD.bounceLog = {}
+local function kindOf(v)
+    if v == nil then return "nil" end
+    if NS.Secret and NS.Secret(v) then return "hidden" end
+    return tostring(v)
+end
+function RD.BounceArm(on)
+    local f = RD.bounceFrame
+    if on and not f then
+        f = CreateFrame("Frame")
+        f:SetScript("OnEvent", function(_, _, unit, action, flag, amount)
+            local at = RD.chainAt
+            if not at or GetTime() - at > RD.BOUNCE_WINDOW then return end
+            local log = RD.bounceLog
+            if #log >= 24 then table.remove(log, 1) end
+            log[#log + 1] = string.format("+%.2fs %s %s %s amount=%s", GetTime() - at, kindOf(unit), kindOf(action), kindOf(flag),
+                (amount == nil and "nil") or ((NS.Secret and NS.Secret(amount)) and "hidden" or "plain"))
+        end)
+        RD.bounceFrame = f
+    end
+    if not f then return false end
+    if on then pcall(f.RegisterEvent, f, "UNIT_COMBAT") else f:UnregisterAllEvents() end
+    RD.bounceOn = on and true or false
+    return RD.bounceOn
+end
+function RD.BounceStatus()
+    local P = NS.Print or print
+    P("chain heal bounces: probe %s, last Chain Heal %s ago, %d events:", RD.bounceOn and "ON" or "off",
+        RD.chainAt and string.format("%.1fs", GetTime() - RD.chainAt) or "never", #RD.bounceLog)
+    for _, l in ipairs(RD.bounceLog) do P("  %s", l) end
+    return #RD.bounceLog
+end
+
 function RD.TideHook()
     local lib = _G.LibBiSComm
     if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
@@ -5929,6 +5969,10 @@ function RD.OnCast(unit, spellID)
     name = ok and plain(name) or nil
     RD.TideTestCast(name, now)                       -- the Grounding test button (Mana Tide's stand-in), when it shows
     if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
+    if name == "Chain Heal" then                      -- the bounce probe's clock (and later the bounce lines)
+        RD.chainAt = now
+        if RD.bounceOn then RD.bounceLog = {} end
+    end
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end
     if name == RD.TIDE then
@@ -6785,6 +6829,14 @@ function RD.Command(rest)
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
     if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
     if word == "mana" and NS.EN and NS.EN.ManaStatus then return NS.EN.ManaStatus() end
+    if word == "bounce" then
+        if arg == "on" or arg == "off" then
+            local on = RD.BounceArm(arg == "on")
+            P("chain heal bounce probe: %s - cast Chain Heal on a hurt group, then /bish alpha radar bounce", on and "ON" or "off")
+            return on
+        end
+        return RD.BounceStatus()
+    end
     if word == "rip" then
         local l = RD.ripLast
         local line = string.format("riptide: known %s, length %ss, last on %s, %s left", tostring(RD.RipKnown()), tostring(RD.RipLength()),

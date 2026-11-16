@@ -15645,6 +15645,22 @@ do
                 RD.SetSw("attn", true)
                 RD.LitAlpha(b, false)
             end
+            -- THE BOUNCE PROBE (Arn: "see a chain heal line on the three targets it bounced to")
+            do
+                ok(RD.Command("bounce on") == true and RD.bounceOn, "/bish alpha radar bounce on: the probe listens")
+                RD.chainAt = GetTime()
+                RD.bounceLog = {}
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party1", "HEAL", "CRITICAL", secret(), 8)
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party2", "HEAL", "", 120, 8)
+                ok(#RD.bounceLog == 2 and RD.bounceLog[1]:find("party1 HEAL CRITICAL amount=hidden", 1, true)
+                   and RD.bounceLog[2]:find("amount=plain", 1, true), "it records each heal after your Chain Heal, as kinds only", RD.bounceLog[1])
+                RD.chainAt = GetTime() - 5
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party3", "HEAL", "", 1, 8)
+                ok(#RD.bounceLog == 2, "long after the Chain Heal: not recorded")
+                ok(RD.Command("bounce") == 2, "/bish alpha radar bounce: prints them")
+                ok(RD.Command("bounce off") == false and not RD.bounceOn, "and off")
+                RD.chainAt, RD.bounceLog = nil, {}
+            end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
             RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)
