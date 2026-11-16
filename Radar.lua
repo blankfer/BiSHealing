@@ -5318,7 +5318,19 @@ end
   unit, so never left on), it records - as KINDS only (plain / hidden / nil), nothing compared - each event within
   RD.BOUNCE_WINDOW s of your last Chain Heal, and `/bish alpha radar bounce` prints the last ones. ]]
 RD.BOUNCE_WINDOW = 1.5
+RD.BOUNCE_BEFORE = 0.5
 RD.bounceLog = {}
+RD.bounceRing = {}
+--- Your Chain Heal went out: a fresh log, opened with whatever landed in the half second before (marked "before").
+function RD.BounceStart(now)
+    RD.bounceLog = {}
+    for _, e in ipairs(RD.bounceRing) do
+        if now - e.t <= RD.BOUNCE_BEFORE then
+            RD.bounceLog[#RD.bounceLog + 1] = string.format("-%.2fs before %s", now - e.t, e.d)
+        end
+    end
+    RD.bounceRing = {}
+end
 local function kindOf(v)
     if v == nil then return "nil" end
     if NS.Secret and NS.Secret(v) then return "hidden" end
@@ -5329,12 +5341,19 @@ function RD.BounceArm(on)
     if on and not f then
         f = CreateFrame("Frame")
         f:SetScript("OnEvent", function(_, _, unit, action, flag, amount)
+            local now = GetTime()
+            local d = string.format("%s %s %s amount=%s", kindOf(unit), kindOf(action), kindOf(flag),
+                (amount == nil and "nil") or ((NS.Secret and NS.Secret(amount)) and "hidden" or "plain"))
+            -- THE LAST HALF SECOND BEFORE (Arn's first run, 16 Nov: two heals at +0.00, the first target missing - its
+            -- heal can arrive in the same frame BEFORE our cast event, so the cast keeps what came just before it)
+            local ring = RD.bounceRing
+            if #ring >= 12 then table.remove(ring, 1) end
+            ring[#ring + 1] = { t = now, d = d }
             local at = RD.chainAt
-            if not at or GetTime() - at > RD.BOUNCE_WINDOW then return end
+            if not at or now < at or now - at > RD.BOUNCE_WINDOW then return end
             local log = RD.bounceLog
             if #log >= 24 then table.remove(log, 1) end
-            log[#log + 1] = string.format("+%.2fs %s %s %s amount=%s", GetTime() - at, kindOf(unit), kindOf(action), kindOf(flag),
-                (amount == nil and "nil") or ((NS.Secret and NS.Secret(amount)) and "hidden" or "plain"))
+            log[#log + 1] = string.format("+%.2fs %s", now - at, d)
         end)
         RD.bounceFrame = f
     end
@@ -5978,7 +5997,7 @@ function RD.OnCast(unit, spellID)
     if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
     if name == "Chain Heal" then                      -- the bounce probe's clock (and later the bounce lines)
         RD.chainAt = now
-        if RD.bounceOn then RD.bounceLog = {} end
+        if RD.bounceOn then RD.BounceStart(now) end
     end
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end

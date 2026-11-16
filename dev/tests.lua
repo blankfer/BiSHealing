@@ -15660,7 +15660,16 @@ do
                 RD.chainAt = GetTime() - 5
                 RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party3", "HEAL", "", 1, 8)
                 ok(#RD.bounceLog == 2, "long after the Chain Heal: not recorded")
-                ok(RD.Command("bounce") == 2, "/bish alpha radar bounce: prints them")
+                -- the first target's heal can land BEFORE our cast event (Arn's run: two heals at +0.00)
+                RD.bounceRing = {}
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party4", "HEAL", "CRITICAL", secret(), 8)
+                RD.chainAt = GetTime()
+                RD.BounceStart(GetTime())
+                ok(#RD.bounceLog == 1 and RD.bounceLog[1]:find("before party4 HEAL CRITICAL", 1, true),
+                   "a heal just before the cast event opens the log, marked before", RD.bounceLog[1])
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party1", "HEAL", "", secret(), 8)
+                RD.bounceFrame:GetScript("OnEvent")(RD.bounceFrame, "UNIT_COMBAT", "party2", "HEAL", "", secret(), 8)
+                ok(RD.Command("bounce") == 3, "/bish alpha radar bounce: prints them")
                 ok(RD.Command("bounce off") == false and not RD.bounceOn, "and off")
                 RD.chainAt, RD.bounceLog = nil, {}
             end
