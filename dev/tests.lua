@@ -6247,6 +6247,37 @@ do
         ClickCastFrames[theirs] = nil
         FM.WheelOthers()
         ok(theirs.__attrs["bis-wn"] == 0, "a frame taken back out of ClickCastFrames keeps nothing of ours")
+        -- CLIQUE LOADED (Arn's probe, 15 Nov: "ERFPartyHeaderUnitButton1 nil nil"): ClickCastFrames is Clique's EMPTY
+        -- stand-in (core.lua CaptureGlobalRegistry - writes go to Clique, pairs finds nothing, reads answer nil); the frames
+        -- live on Clique.ccframes / Clique.hccframes. The plain table above was kinder than the client.
+        local keepClique = rawget(_G, "Clique")
+        local clique = { ccframes = {}, hccframes = {} }
+        rawset(_G, "Clique", clique)
+        rawset(_G, "ClickCastFrames", setmetatable({}, { __newindex = function(_, k, v) clique.ccframes[k] = (v ~= nil and v ~= false) or nil end }))
+        local erf = CreateFrame("Button", "ERFPartyHeaderUnitButton1", UIParent, "SecureUnitButtonTemplate")
+        local hdr = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        ClickCastFrames[erf] = true                                  -- EllesmereUI's hand-over, as it really goes
+        clique.hccframes["ERFRaidHeaderUnitButton1"] = hdr
+        ok(next(ClickCastFrames) == nil and ClickCastFrames[erf] == nil, "the stand-in looks empty, as in the game")
+        FM.WheelOthers()
+        ok((erf.__attrs["bis-wn"] or 0) >= 1 and erf.__attrs["bis-wb1"] == cell.__attrs["bis-wb1"],
+           "with Clique loaded, Ellesmere's party frame still carries the wheel's map (read off Clique.ccframes)",
+           tostring(erf.__attrs["bis-wn"]))
+        ok((hdr.__attrs["bis-wn"] or 0) >= 1, "and a header frame Clique keeps by name (Clique.hccframes)")
+        ok((theirs.__attrs["bis-wn"] or 0) == 0, "a frame on neither list still keeps nothing of ours")
+        -- a frame made a moment after the roster change gets the second look
+        local late = CreateFrame("Button", nil, UIParent, "SecureUnitButtonTemplate")
+        local keepTimer, queued = rawget(_G, "C_Timer"), {}
+        rawset(_G, "C_Timer", { After = function(s, fn) queued[#queued + 1] = { s, fn } end })
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        FM.resEvents.__scripts.OnEvent(FM.resEvents, "GROUP_ROSTER_UPDATE")
+        ok(#queued == 1 and queued[1][1] == FM.WHEEL_LATER, "a roster change asks for ONE second look a moment later", tostring(#queued))
+        ClickCastFrames[late] = true
+        ok((late.__attrs["bis-wn"] or 0) == 0, "not armed before the second look")
+        queued[1][2]()
+        ok((late.__attrs["bis-wn"] or 0) >= 1 and FM.wheelLater == nil, "the second look arms the frame made late")
+        rawset(_G, "C_Timer", keepTimer)
+        rawset(_G, "Clique", keepClique)
         rawset(_G, "ClickCastFrames", keepCCF)
         rawset(_G, "PartyMemberFrame1", keepParty)
         FM.WheelOthers()

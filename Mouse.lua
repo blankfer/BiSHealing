@@ -1305,6 +1305,7 @@ for i = 1, 4 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "PartyMemberFrame" .
 for i = 1, 5 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "CompactPartyFrameMember" .. i end
 for i = 1, 40 do FM.WHEEL_BLIZZARD[#FM.WHEEL_BLIZZARD + 1] = "CompactRaidFrame" .. i end
 FM.wheelForeign = {}
+FM.WHEEL_LATER = 1                                  -- s after a roster change: the second look for late-made frames
 
 -- (BiS Memories' ns.Gamepad: C_GamePad.IsEnabled is on both censuses; C_InputInterfaceStyle on neither)
 local function gamepadUI()
@@ -1331,6 +1332,16 @@ function FM.WheelOthers(all)
     end
     if type(ClickCastFrames) == "table" then
         for f, v in pairs(ClickCastFrames) do if v then consider(f) end end
+    end
+    -- CLIQUE HOLDS THE LIST (15 Nov 2026, Arn's probe over an Ellesmere party frame: "ERFPartyHeaderUnitButton1 nil nil").
+    -- With Clique loaded - even unused - ClickCastFrames is an EMPTY stand-in whose writes go to Clique (Clique 5.1
+    -- core.lua CaptureGlobalRegistry): pairs() finds nothing and a read answers nil, so every frame EllesmereUI (or VuhDo,
+    -- oUF) handed over was invisible here. Clique keeps them on its public addon table: `ccframes` (frame -> true) and
+    -- `hccframes` (name -> button, frames that came through a secure header). Read only, never written.
+    local C = rawget(_G, "Clique")
+    if type(C) == "table" then
+        if type(C.ccframes) == "table" then for f, v in pairs(C.ccframes) do if v then consider(f) end end end
+        if type(C.hccframes) == "table" then for _, f in pairs(C.hccframes) do consider(f) end end
     end
     if not gamepadUI() then
         for _, name in ipairs(FM.WHEEL_BLIZZARD) do consider(_G[name]) end
@@ -1476,6 +1487,12 @@ pcall(FM.resEvents.RegisterEvent, FM.resEvents, "GROUP_ROSTER_UPDATE")   -- (new
 FM.resEvents:SetScript("OnEvent", function(_, event)
     if event == "GROUP_ROSTER_UPDATE" then
         FM.WheelOthers()                                -- another addon's new frames take the wheel (out of a fight)
+        -- and once more a moment later: a group header makes its new button AFTER this event reaches us, and nothing else
+        -- would look again until the next fight ended. One look per burst of roster changes (the flag), no event touched.
+        if not FM.wheelLater and C_Timer and C_Timer.After then
+            FM.wheelLater = true
+            C_Timer.After(FM.WHEEL_LATER, function() FM.wheelLater = nil FM.WheelOthers() end)
+        end
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then FM.WheelOthers() end
