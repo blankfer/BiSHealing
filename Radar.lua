@@ -3639,14 +3639,12 @@ end
 --- icon from the client keeps the fork. The face's alpha (food wanted, out of a fight) still decides whether it shows.
 --- THE DRINK AND THE POTION TOO (Arn: "same with the drink put the actual drink i am about to drink"): RD.ItemIcon on any
 --- item button - the item it would use, its icon over the drawn sign (the fork, or a tool's pieces), which steps aside.
-function RD.ItemIcon(b, id)
+--- REAL ICONS ON EVERY BUTTON (Arn, 15 Nov: "yes use the real icons on all of them"). One helper: a texture the size of the
+--- button on its face (so the face's alpha - lit or not - still decides whether it shows), and the drawn sign steps aside:
+--- the tool's pieces, the rations' fork, the small icon and ring a totem or the res wore. nil = the drawn sign back.
+function RD.RealIcon(b, tex)
     if not (b and b.face) then return false end
-    local iconOf = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
-    local tex
-    if id and iconOf then
-        local ok, t = pcall(iconOf, id)
-        if ok and t ~= nil and not (NS.Secret and NS.Secret(t)) then tex = t end
-    end
+    if tex ~= nil and NS.Secret and NS.Secret(tex) then tex = nil end
     if not b.food then
         b.food = b.face:CreateTexture(nil, "OVERLAY")
         b.food:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
@@ -3655,8 +3653,29 @@ function RD.ItemIcon(b, id)
     end
     if tex then b.food:SetTexture(tex) b.food:Show() else b.food:Hide() end
     for _, l in ipairs(b.fork or b.pieces or {}) do if tex then l:Hide() else l:Show() end end
+    if b.ringIcon then                                   -- a totem's or the res's ring and small icon
+        for _, l in ipairs(b.ring or {}) do if tex then l:Hide() else l:Show() end end
+        if b.icon then if tex then b.icon:Hide() else b.icon:Show() end end
+    end
     b.iconTex = tex
     return tex ~= nil
+end
+function RD.ItemIcon(b, id)
+    local iconOf = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
+    local tex
+    if id and iconOf then
+        local ok, t = pcall(iconOf, id)
+        if ok then tex = t end
+    end
+    return RD.RealIcon(b, tex)
+end
+function RD.SpellIcon(b, spell)
+    local tex
+    if spell and C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, spell)
+        if ok then tex = t end
+    end
+    return RD.RealIcon(b, tex)
 end
 function RD.FoodIcon(id) return RD.ItemIcon(RD.rations, id) end
 
@@ -3769,6 +3788,8 @@ function RD.ArmTools()
     armTool(RD.fuel, drink and ("/use item:" .. drink) or nil, itemWords(drink), "DRINK", "the best drink in your bags")
     RD.ItemIcon(RD.potion, potion)                   -- the potion and the drink you would use, their own icons
     RD.ItemIcon(RD.fuel, drink)
+    RD.SpellIcon(RD.tide, tide and RD.TIDE or nil)   -- Mana Tide and Mana Spring, their spells' own icons
+    RD.SpellIcon(RD.reserve, spring and RD.SPRING or nil)
     local spring = FM and FM.Ranks and #FM.Ranks(RD.SPRING) > 0
     armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "MANA SPRING",
             RD.SPRING .. " - the last resort: lights only when Mana Tide and your potion are spent (or not here)")
@@ -3810,6 +3831,7 @@ function RD.ArmChaff()
     b.macro, b.spell = macro, spell
     b.tip = spell and { spell:upper(), "The catch-all: lights when an enemy casts and your interrupt is cooling.  "
                         .. "No target needed." } or nil
+    RD.SpellIcon(b, spell)                            -- Grounding Totem's own icon
     if RD.defRail then
         -- ALWAYS SHOWN (Arn, 10 Nov: "lets always show the full square rail even if there is nothing there"): the
         -- panel is a closed square whether the chaff or the res is in it or not. ON THE RADAR ONLY (11 Nov, the
@@ -4010,12 +4032,8 @@ function RD.ArmTotems()
         b:SetAttribute("*type2", m2 and "macro" or nil)
         b:SetAttribute("*macrotext2", m2)
         b.macro, b.spell = m1, spell1
-        local tex = nil
-        if spell1 and C_Spell and C_Spell.GetSpellTexture then
-            local ok, t = pcall(C_Spell.GetSpellTexture, spell1)
-            tex = ok and t or nil
-        end
-        if b.icon then pcall(b.icon.SetTexture, b.icon, tex) end
+        b.ringIcon = true
+        RD.SpellIcon(b, spell1)                       -- the totem spell's own icon, the button's full size
         b:EnableMouse(m1 and true or false)
         if m1 then b:Show() else b:Hide() end
         b.tip = m1 and tip or nil
@@ -4106,12 +4124,8 @@ function RD.ArmRes()
     local unit = res and NS.FN and NS.FN.ResTarget and NS.FN.ResTarget() or nil
     if res ~= b.spell then
         b.spell = res
-        local tex = nil
-        if res and C_Spell and C_Spell.GetSpellTexture then
-            local ok, t = pcall(C_Spell.GetSpellTexture, res)
-            tex = ok and t or nil
-        end
-        if b.icon then pcall(b.icon.SetTexture, b.icon, tex) end
+        b.ringIcon = true
+        RD.SpellIcon(b, res)                          -- your res spell's own icon, the button's full size
     end
     local macro = unit and ("/cast [@" .. unit .. ",help] " .. res) or nil
     if macro ~= b.macro then

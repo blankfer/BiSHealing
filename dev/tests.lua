@@ -14963,6 +14963,26 @@ do
         ok(RD.potion.food and RD.potion.food.__texture == 134851 and (not pp[1] or not pp[1]:IsShown()), "and the potion its potion")
         RD.ItemIcon(RD.fuel, nil)
         ok(not RD.fuel.food:IsShown() and RD.fuel.iconTex == nil and (not dp[1] or dp[1]:IsShown()), "none in your bags: the sign again")
+        -- EVERY BUTTON ITS REAL ICON (Arn: "yes use the real icons on all of them")
+        local keepTex = _G.C_Spell.GetSpellTexture
+        local spellTex = { ["Mana Tide Totem"] = 135861, ["Grounding Totem"] = 136039, ["Ancestral Spirit"] = 136077,
+                           ["Searing Totem"] = 135825 }
+        _G.C_Spell.GetSpellTexture = function(n) return spellTex[n] end
+        RD.SpellIcon(RD.tide, "Mana Tide Totem")
+        RD.SpellIcon(RD.chaff, "Grounding Totem")
+        local tp = RD.tide.pieces or {}
+        ok(RD.tide.food.__texture == 135861 and RD.tide.food:IsShown() and (not tp[1] or not tp[1]:IsShown())
+           and RD.chaff.food.__texture == 136039, "Mana Tide and Grounding wear their spells' own icons, the drawn signs aside")
+        local cb = RD.call
+        if cb then
+            cb.ringIcon = true
+            RD.SpellIcon(cb, "Searing Totem")
+            ok(cb.food.__texture == 135825 and (not cb.ring[1] or not cb.ring[1]:IsShown()) and (not cb.icon or not cb.icon:IsShown()),
+               "a totem button: its spell's icon full size, the ring and the small icon aside")
+            RD.SpellIcon(cb, nil)
+            ok(not cb.food:IsShown() and (not cb.ring[1] or cb.ring[1]:IsShown()), "no spell: the ring again")
+        end
+        _G.C_Spell.GetSpellTexture = keepTex
         _G.GetItemIcon = keepIcon
     end
     -- THE BOX'S EDGE BY HEALTH (Arn: "need the outline of the boxes to turn colors amber when they are low red very low"):
