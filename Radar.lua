@@ -4935,19 +4935,31 @@ end
 --- totem does not exist yet, so the ping falls to you, at the same spot), pings it, and goes back to your target - only
 --- when it really got the totem (a friendly that is not in your group); left on it with no target before, it clears.
 --- Every line is a secure slash command run by your own click, so it works in a fight.
-function RD.TideMacro()
-    return "/cast " .. RD.TIDE .. "\n/target " .. RD.TIDE .. "\n/ping [@target,help,noparty,noraid][@player]"
+--- One spec per button that behaves like Mana Tide: the real one, and the Grounding Totem stand-in for testing (Arn, 16 Nov:
+--- "its a 5 min cool down so i dont want to sit there waiting lets do grounding totem"). `life` = how long the totem
+--- stands (the tag's seconds), `len` = its cooldown (the chat line), `key` = its slot in RD.readyAt (our clock).
+local function val(v) if type(v) == "function" then return v() end return v end
+RD.TIDE_SPEC = { spell = RD.TIDE, key = "tide", word = "MANA TIDE",
+                 life = function() return RD.WATER.tide end,
+                 len = function() return (RD.cdLen and RD.cdLen.tide) or RD.COOLS.tide end }
+RD.TEST_SPEC = { spell = "Grounding Totem", key = "groundTest", word = "GROUNDING", life = 45, len = 15 }
+
+function RD.TideMacroFor(spell)
+    return "/cast " .. spell .. "\n/target " .. spell .. "\n/ping [@target,help,noparty,noraid][@player]"
         .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]"
 end
+function RD.TideMacro() return RD.TideMacroFor(RD.TIDE) end
 
 --[[ MANA TIDE FOR BIS USERS (16 Nov 2026, Arn: "yes for bis users too"). Your cast sends TIDE over the shared BiS channel;
   every BiS Healing deck in the group shows "MANA TIDE" and the totem's seconds on YOUR box (yours too, at once). The
   channel holds messages through the game's chat lockdown, so in a fight it can land a little late. ]]
 RD.TIDE_COL = { 0.35, 0.85, 1.00, 1 }
-function RD.TideSay()
-    RD.TideHeard(UnitName and plain((UnitName("player"))) or nil, RD.WATER.tide, true)
+function RD.TideSay(spec)
+    spec = spec or RD.TIDE_SPEC
+    local life = val(spec.life)
+    RD.TideHeard(UnitName and plain((UnitName("player"))) or nil, life, true, spec.word)
     local lib = _G.LibBiSComm
-    if lib and lib.Send then pcall(lib.Send, lib, "BiSHealing", "TIDE", RD.WATER.tide) end
+    if lib and lib.Send then pcall(lib.Send, lib, "BiSHealing", "TIDE", life, spec.word) end
 end
 --- Does this deck box's unit carry this name? (whole "Name Surname" or the first name; a realm is cut off)
 function RD.BoxIsNamed(unit, who)
@@ -4960,25 +4972,26 @@ function RD.BoxIsNamed(unit, who)
     first = okF and plain(first) or nil
     return first ~= nil and (first == who or first == who:match("^(%S+)"))
 end
---- A Mana Tide heard (or yours): the tag on that person's box for `secs`.
-function RD.TideHeard(who, secs, mine)
-    secs = math.max(1, math.min(tonumber(secs) or RD.WATER.tide, 30))
-    for k, i in ipairs(RD.conOrder or {}) do
+--- A Mana Tide heard (or yours): the tag on that person's box for `secs`, saying `word` (MANA TIDE unless told).
+function RD.TideHeard(who, secs, mine, word)
+    secs = math.max(1, math.min(tonumber(secs) or RD.WATER.tide, 60))
+    word = (type(word) == "string" and word ~= "" and #word <= 12) and word:upper() or "MANA TIDE"
+    for _, i in ipairs(RD.conOrder or {}) do
         local sp = RD.spokes and RD.spokes[i]
         local u = sp and sp.unit
         if u and ((mine and u == "player") or RD.BoxIsNamed(u, who)) and sp.deckPlate and sp.deckPlate:IsShown() then
-            RD.TideTag(sp, secs)
+            RD.TideTag(sp, secs, word)
             return sp
         end
     end
     return nil
 end
-function RD.TideTag(sp, secs)
+function RD.TideTag(sp, secs, word)
     local t = sp.tideTag
     if not t then
         t = CreateFrame("Frame", nil, sp.deckPlate)
         t:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
-        t:SetSize(70, 11)
+        t:SetSize(80, 11)
         t.text = t:CreateFontString(nil, "OVERLAY")
         t.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
         t.text:SetPoint("RIGHT", t, "RIGHT", 0, 0)
@@ -4991,14 +5004,15 @@ function RD.TideTag(sp, secs)
             self.acc = 0
             local left = math.ceil((self.untilAt or 0) - GetTime())
             if left <= 0 then self:Hide() return end
-            if left ~= self.shown then self.shown = left self.text:SetText("MANA TIDE " .. left) end
+            if left ~= self.shown then self.shown = left self.text:SetText(self.word .. " " .. left) end
         end)
         sp.tideTag = t
     end
     local lvl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
     if type(lvl) == "number" then t:SetFrameLevel(lvl + 7) end      -- over the bar and the name line
+    t.word = word or "MANA TIDE"
     t.untilAt, t.shown, t.acc = GetTime() + secs, math.ceil(secs), 0
-    t.text:SetText("MANA TIDE " .. math.ceil(secs))
+    t.text:SetText(t.word .. " " .. math.ceil(secs))
     t:Show()
     return t
 end
@@ -5006,53 +5020,121 @@ end
   action bar's own ping writes "[Mana Tide Totem (Rank 2)] is ready!", which only the game can send). Our own line, as
   cooldown addons do: when it goes down, its link and "down - ready again in 5:00"; a click while it is cooling, the time
   left. Party or raid only (alone: nothing), one line per RD.TIDE_CHAT_GAP seconds. The time is OUR clock of your cast
-  (RD.readyAt.tide), never the client's cooldown object. ]]
+  (RD.readyAt[key]), never the client's cooldown object. ]]
 RD.TIDE_CHAT_GAP = 3
 local function mmss(s)
     s = math.max(0, math.floor(s + 0.5))
     return string.format("%d:%02d", math.floor(s / 60), s % 60)
 end
-function RD.TideLink()
+function RD.TideLink(spec)
+    spec = spec or RD.TIDE_SPEC
     local link
     if C_Spell and C_Spell.GetSpellLink then
-        local ok, l = pcall(C_Spell.GetSpellLink, RD.TIDE)
+        local ok, l = pcall(C_Spell.GetSpellLink, spec.spell)
         if ok then link = plain(l) end
     end
-    return type(link) == "string" and link or ("[" .. RD.TIDE .. "]")
+    return type(link) == "string" and link or ("[" .. spec.spell .. "]")
 end
-function RD.TideChatLine(cooling)
+function RD.TideChatLine(cooling, spec)
+    spec = spec or RD.TIDE_SPEC
     local now = GetTime()
     if cooling then
-        local left = (RD.readyAt.tide or 0) - now
+        local left = (RD.readyAt[spec.key] or 0) - now
         if left <= 0 then return nil end
-        return RD.TideLink() .. " - " .. mmss(left) .. " cooldown"
+        return RD.TideLink(spec) .. " - " .. mmss(left) .. " cooldown"
     end
-    local len = (RD.cdLen and RD.cdLen.tide) or RD.COOLS.tide
-    return RD.TideLink() .. " down - ready again in " .. mmss(len)
+    return RD.TideLink(spec) .. " down - ready again in " .. mmss(val(spec.len))
 end
-function RD.TideChat(cooling)
+function RD.TideChat(cooling, spec)
     local now = GetTime()
     if RD.tideChatAt and now - RD.tideChatAt < RD.TIDE_CHAT_GAP then return nil end
     local chan = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY" or nil)
     if not chan then return nil end
-    local line = RD.TideChatLine(cooling)
+    local line = RD.TideChatLine(cooling, spec)
     if not line then return nil end
     RD.tideChatAt = now
     local ok, err = pcall(SendChatMessage, line, chan)
     RD.tideChatErr = (not ok) and tostring(err) or nil
     return ok and line or nil
 end
---- A click on the Mana Tide button while it is cooling: the time left in chat (the drop itself is said on the cast).
-function RD.TideClicked()
-    local left = (RD.readyAt.tide or 0) - GetTime()
-    if left > 1 then return RD.TideChat(true) end
+--- A click on the button while it is cooling: the time left in chat (the drop itself is said on the cast).
+function RD.TideClicked(spec)
+    spec = spec or RD.TIDE_SPEC
+    local left = (RD.readyAt[spec.key] or 0) - GetTime()
+    if left > 1 then return RD.TideChat(true, spec) end
     return nil
+end
+
+--[[ THE TEST BUTTON (16 Nov 2026): a small button left of the deck, Grounding Totem in Mana Tide's shoes - the same macro
+  (drop + ping, the next click pings the standing totem), the same chat lines, the same tag for BiS users, with a 15 s
+  cooldown instead of 5 min. `/bish alpha radar tidetest` shows or hides it (out of a fight); never saved. ]]
+function RD.BuildTideTest()
+    if RD.tideTest then return RD.tideTest end
+    local f = RD.frame
+    if not f or combat() then return nil end
+    local spec = RD.TEST_SPEC
+    local b = CreateFrame("Button", "BiSHealingTideTest", f, "SecureActionButtonTemplate")
+    if b.RegisterForClicks then b:RegisterForClicks("AnyDown") end
+    b:SetSize(RD.SYS_PX + 6, RD.SYS_PX + 6)
+    b:SetPoint("TOPRIGHT", f, "TOPLEFT", -6, 0)
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetAllPoints(b)
+    b.bg:SetColorTexture(0, 0, 0, 0.6)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+    b.icon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+    if b.icon.SetTexCoord then b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, spec.spell)
+        if ok then pcall(b.icon.SetTexture, b.icon, t) end
+    end
+    b.edges = edge(b, { 1, 0.7, 0.28, 1 }, 1.5)
+    b.label = b:CreateFontString(nil, "OVERLAY")
+    b.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+    b.label:SetPoint("TOP", b, "BOTTOM", 0, -2)
+    b.label:SetTextColor(1, 0.75, 0.3, 1)
+    b.label:SetText("TEST")
+    local okCd, cd = pcall(CreateFrame, "Cooldown", nil, b, "CooldownFrameTemplate")
+    if okCd and cd then cd:SetAllPoints(b.icon) b.cd = cd end
+    b:SetAttribute("*type1", "macro")
+    b:SetAttribute("*macrotext1", RD.TideMacroFor(spec.spell))
+    b:HookScript("PostClick", function() RD.TideClicked(RD.TEST_SPEC) end)
+    b:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("TEST: " .. spec.spell:upper())
+        GameTooltip:AddLine("Works like the Mana Tide button: click drops it and pings; click again while it stands pings the totem. "
+            .. "Chat line and the BiS tag too. /bish alpha radar tidetest hides it.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    b:Hide()
+    RD.tideTest = b
+    return b
+end
+function RD.ToggleTideTest()
+    if combat() or RD.inFight then (NS.Print or print)("test button: out of a fight only") return nil end
+    local b = RD.BuildTideTest()
+    if not b then return nil end
+    b:SetShown(not b:IsShown())
+    return b:IsShown()
+end
+--- Our cast of the test spell while the test button shows: its clock, its sweep, the tag and the chat line.
+function RD.TideTestCast(name, now)
+    local b, spec = RD.tideTest, RD.TEST_SPEC
+    if not (b and b:IsShown() and name == spec.spell) then return false end
+    local len = val(spec.len)
+    RD.readyAt[spec.key] = now + len
+    if b.cd and b.cd.SetCooldown then pcall(b.cd.SetCooldown, b.cd, now, len) end
+    RD.TideSay(spec)
+    RD.TideChat(false, spec)
+    return true
 end
 
 function RD.TideHook()
     local lib = _G.LibBiSComm
     if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
-    lib:RegisterHandler("BiSHealing", "TIDE", function(sender, secs) RD.TideHeard(sender, secs) end)
+    lib:RegisterHandler("BiSHealing", "TIDE", function(sender, secs, word) RD.TideHeard(sender, secs, false, word) end)
     RD.tideHooked = true
     if RD.tide and RD.tide.HookScript and not RD.tide.tideChatHooked then
         RD.tide:HookScript("PostClick", function() RD.TideClicked() end)
@@ -5672,6 +5754,7 @@ function RD.OnCast(unit, spellID)
     local ok, name = false, nil
     if getName then ok, name = pcall(getName, spellID) end
     name = ok and plain(name) or nil
+    RD.TideTestCast(name, now)                       -- the Grounding test button (Mana Tide's stand-in), when it shows
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end
     if name == RD.TIDE then
@@ -6517,6 +6600,11 @@ function RD.Command(rest)
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
     if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
     if word == "over" and NS.OV and NS.OV.Status then return NS.OV.Status() end
+    if word == "tidetest" then
+        local on = RD.ToggleTideTest()
+        P("test button (Grounding Totem as Mana Tide): %s", on == nil and "not now" or (on and "shown, left of the deck" or "hidden"))
+        return on
+    end
     if word == "sw" then
         local k, v = arg:lower():match("^(%S*)%s*(%S*)$")
         if k == "" then return RD.ToggleSwitches() end

@@ -15538,6 +15538,26 @@ do
                 ok(RD.BoxIsNamed("player", "Chainheal Ryangosling-Realm") == RD.BoxIsNamed("player", "Chainheal Ryangosling"),
                    "a realm on the sender is cut off")
                 mine.tideTag:Hide()
+                -- the Grounding test button (Arn: "its a 5 min cool down ... lets do grounding totem")
+                ok(RD.ToggleTideTest() == true and RD.tideTest:IsShown(), "/bish alpha radar tidetest: the test button shows")
+                ok(RD.tideTest:GetAttribute("*macrotext1") == RD.TideMacroFor("Grounding Totem"), "its click: Grounding, the same drop + ping")
+                local keepSCM, keepIG = _G.SendChatMessage, _G.IsInGroup
+                local said = {}
+                _G.SendChatMessage = function(msg) said[#said + 1] = msg end
+                _G.IsInGroup = function() return true end
+                RD.tideChatAt = nil
+                ok(RD.TideTestCast("Grounding Totem", GetTime()) and said[1] and said[1]:find("Grounding Totem%] down %- ready again in 0:15"),
+                   "dropped: the chat line with its 15 s", said[1])
+                local me
+                for _, sp in ipairs(RD.spokes) do if sp.unit == "player" and sp.tideTag and sp.tideTag:IsShown() then me = sp end end
+                ok(me and me.tideTag.text.__text == "GROUNDING 45", "and the tag on your box says GROUNDING", me.tideTag and me.tideTag.text.__text)
+                RD.tideChatAt = nil
+                ok(RD.TideClicked(RD.TEST_SPEC) and said[2]:find("0:1%d cooldown"), "a click while cooling: the time left", said[2])
+                ok(RD.TideTestCast("Healing Wave", GetTime()) == false, "another spell: nothing")
+                _G.SendChatMessage, _G.IsInGroup = keepSCM, keepIG
+                ok(RD.ToggleTideTest() == false, "and hidden again")
+                if me then me.tideTag:Hide() end
+                RD.readyAt.groundTest, RD.tideChatAt = nil, nil
             end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
