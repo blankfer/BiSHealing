@@ -32,6 +32,14 @@ Spell research (private, names account folders): `_bisdev/docs/spells/` - interr
   Water Shield, Inner Fire) · RAID KICK (Grounding Totem; Psychic Scream / Howl of Terror / War Stomp for others) ·
   MANA (Mana Tide, potion, Mana Spring, drink) · TOTEMS in use order CALL > BRING > RECALL.
 - **Rails (information):** regen %, the five-second rule, role; self-buff charges, totem timers; room kept for 3D totems.
+- **The black box comes along** (Arn: "dont forget my black box"): it stays the instrument's bottom rail, under the deck,
+  as on the radar - keypad, code screen, recording lamp (BlackBox.lua, unchanged). LOS / RANGE / OVER/H move up under
+  the fuel bar, so its code screen has its whole row back.
+- **The red light counts BiS Healing in your group** (Arn: "we are going to use the redlight to show how many people in
+  raid are using bis healing ... thats how we will see if the druids are using it for innervate calls"): the lamp shows
+  a number - group members running BiS Healing (LibBiSComm's version notice, VER, already says who runs what; you
+  counted too) - so a raid leader sees at a glance whether the druids can answer Innervate calls (BiS> in). Read only out
+  of a fight, from the lib's peer list; nothing new on the wire. Hover: their names, class-coloured.
 - **Support mode:** a class that doesn't heal (or anyone who picks it) gets the same people, smaller, with only what
   THEIR class can do lit: warlock = the Felhunter's Devour Magic + Spell Lock, mage = Remove Lesser Curse + Counterspell,
   rogue / warrior = the kick. No health reading. Offered on first load to a class that can't heal; never forced.
