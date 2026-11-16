@@ -14837,6 +14837,20 @@ do
     ok(r.rest[36].y == S.tank + P + 7 * (S.row + P) and r.w == W, "36 more: eight rows of five, and never wider", r.rest[36].y)
     local z = FG.DeckPlace(0, 5, true)
     ok(#z.tanks == 0 and z.rest[5].y == z.rest[1].y, "nobody to call a tank: five in the first row")
+    -- NOBODY NAMED: THE MOST HEALTH (Arn: "if there is no tank in the group the one with the most health goes up there")
+    do
+        local keepMax = _G.UnitHealthMax
+        local mx = { player = 9000, party1 = 3000, party2 = 5200, party3 = 4100 }
+        _G.UnitHealthMax = function(u) return mx[u] end
+        local units = { "player", "party1", "party2", "party3" }
+        local order, nT = NS.RD.DeckOrder(units, 5)
+        ok(nT == 1 and units[order[1]] == "party2", "no tank named: the most max health takes the tank row (never you)",
+           tostring(units[order[1]]))
+        _G.UnitHealthMax = function() return nil end
+        local o2, n2 = NS.RD.DeckOrder(units, 5)
+        ok(n2 <= 1, "no health to read: the class guess, as before")
+        _G.UnitHealthMax = keepMax
+    end
 
     -- THE RADAR AS THE DECK: the engineer's boxes in the deck's places, in the radar's own hull
     local RD = NS.RD

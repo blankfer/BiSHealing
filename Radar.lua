@@ -2114,7 +2114,10 @@ function RD.DeckOrder(units, n)
         end
     end
     if #tanks == 0 then
-        local g = RD.GuessTank(present, units)
+        -- NOBODY NAMED: THE MOST HEALTH (Arn, 15 Nov: "as a fallback can we do it so if there is no tank in the group the one
+        -- with the most health goes up there") - the biggest max health, read plain out of a fight, never you; only when no
+        -- health can be read, the class guess (RD.GuessTank)
+        local g = RD.MostHealth(rest, units) or RD.GuessTank(present, units)
         if g then
             tanks[1] = g
             for k, i in ipairs(rest) do if i == g then table.remove(rest, k) break end end
@@ -2138,6 +2141,24 @@ function RD.PaintDeckBox()
         end
     end
     return true
+end
+
+--- Of these places, the one whose person has the most max health (plain; never you), or nil when none can be read.
+function RD.MostHealth(places, units)
+    local best, bestHp
+    for _, i in ipairs(places or {}) do
+        local u = units[i]
+        if u and u ~= "player" then
+            local okMe, me = false, nil
+            if UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
+            local ok, mx = pcall(UnitHealthMax, u)
+            mx = ok and plain(mx) or nil
+            if not (okMe and plain(me) == true) and type(mx) == "number" and mx > 0 and (not bestHp or mx > bestHp) then
+                best, bestHp = i, mx
+            end
+        end
+    end
+    return best
 end
 
 --- The deck's places: no pet; then the target box's two (no kick of their own). THE KICK ON EVERYONE (Arn: "a small
