@@ -2858,6 +2858,15 @@ function RD.TotemTimer(k)
     return t
 end
 
+--- A standing totem's name is its CREATURE's, rank and all ("Mana Spring Totem II"); the spell has no numeral. Off it comes,
+--- and /cast picks your highest rank (16 Nov 2026, Arn: "water and earth totem still not drop when click" - his water and
+--- earth were rank 2, air and fire rank 1).
+function RD.TotemSpell(name)
+    if type(name) ~= "string" then return nil end
+    local bare = name:gsub("%s+[IVX]+$", "")
+    return bare ~= "" and bare or nil
+end
+
 --- Out of a fight: learn the standing totem's name for each slot (kept), and arm each box's click with its remembered one.
 function RD.LearnTimers()
     if combat() or RD.inFight then return false end
@@ -2866,8 +2875,8 @@ function RD.LearnTimers()
     for _, t in ipairs(RD.timers or {}) do
         local okI, _, name = pcall(GetTotemInfo, t.slot)
         name = okI and plain(name) or nil
-        if type(name) == "string" and name ~= "" then d.totemSlots[t.slot] = name end
-        local want = d.totemSlots[t.slot]
+        if type(name) == "string" and name ~= "" then d.totemSlots[t.slot] = RD.TotemSpell(name) end
+        local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
         t:SetAttribute("type1", want and "macro" or nil)
         t:SetAttribute("macrotext1", want and ("/cast " .. want) or nil)

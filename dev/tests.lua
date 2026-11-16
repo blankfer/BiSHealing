@@ -15552,6 +15552,9 @@ do
             ok(RD.TimerSpot(t, RD.SYS_PX + 10) == true, "a narrow timer: the number sits on the icon")
             ok(RD.TimerSpot(t, RD.SYS_PX + 40) == false, "a long one: beside it")
             ok(RD.DECK_TAG.y <= -4 and RD.DECK_TAG.x >= 4, "the name clear of the box's top edge")
+            ok(RD.TotemSpell("Mana Spring Totem II") == "Mana Spring Totem" and RD.TotemSpell("Strength of Earth Totem IV")
+               == "Strength of Earth Totem" and RD.TotemSpell("Windfury Totem") == "Windfury Totem",
+               "a standing totem's rank numeral off: the click casts the spell (Arn: water and earth would not drop)")
             -- "the target enemy health is too dim": a heal's range never reaches an enemy, so the target box is never dimmed
             local tsp = { unit = "target", en = { box = CreateFrame("Frame") } }
             tsp.en.box:SetAlpha(0.3)
