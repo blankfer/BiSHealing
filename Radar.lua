@@ -3637,8 +3637,9 @@ end
 --- the food we are eating" - "pre 60 its exp at 60 its the buff food"). Whatever RD.FoodWanted picked - BiS Tools' XP food
 --- while you level, else the food that gives Well Fed - shows its icon on the button's face, where the drawn fork was; no
 --- icon from the client keeps the fork. The face's alpha (food wanted, out of a fight) still decides whether it shows.
-function RD.FoodIcon(id)
-    local b = RD.rations
+--- THE DRINK AND THE POTION TOO (Arn: "same with the drink put the actual drink i am about to drink"): RD.ItemIcon on any
+--- item button - the item it would use, its icon over the drawn sign (the fork, or a tool's pieces), which steps aside.
+function RD.ItemIcon(b, id)
     if not (b and b.face) then return false end
     local iconOf = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
     local tex
@@ -3653,8 +3654,31 @@ function RD.FoodIcon(id)
         if b.food.SetTexCoord then b.food:SetTexCoord(0.08, 0.92, 0.08, 0.92) end   -- the icon's own border trimmed
     end
     if tex then b.food:SetTexture(tex) b.food:Show() else b.food:Hide() end
-    for _, l in ipairs(b.fork or {}) do if tex then l:Hide() else l:Show() end end
+    for _, l in ipairs(b.fork or b.pieces or {}) do if tex then l:Hide() else l:Show() end end
+    b.iconTex = tex
     return tex ~= nil
+end
+function RD.FoodIcon(id) return RD.ItemIcon(RD.rations, id) end
+
+--- An item tool's icon, lit by the client like its pieces were: full where the tool's own curve says it helps (below
+--- `at` on your mana), faded above - white, so the icon keeps its own colours.
+RD.ICON_FADED = 0.3
+RD.iconCurves = {}
+function RD.IconCurve(at)
+    at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.98))
+    local key = math.floor(at * 100 + 0.5)
+    if RD.iconCurves[key] then return RD.iconCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local x, F = key / 100, RD.ICON_FADED
+    pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
+    pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, 1))
+    pcall(c.AddPoint, c, x + 0.0001, CreateColor(1, 1, 1, F))
+    pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    RD.iconCurves[key] = c
+    return c
 end
 
 --- HOW MUCH MANA A TOOL GIVES BACK, from its own words (out of a fight, plain): "Restores 1350 to 2250 mana" -> the
@@ -3743,6 +3767,8 @@ function RD.ArmTools()
     local drink = RD.BestItem("Drink")
     RD.fuel.item = drink
     armTool(RD.fuel, drink and ("/use item:" .. drink) or nil, itemWords(drink), "DRINK", "the best drink in your bags")
+    RD.ItemIcon(RD.potion, potion)                   -- the potion and the drink you would use, their own icons
+    RD.ItemIcon(RD.fuel, drink)
     local spring = FM and FM.Ranks and #FM.Ranks(RD.SPRING) > 0
     armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "MANA SPRING",
             RD.SPRING .. " - the last resort: lights only when Mana Tide and your potion are spent (or not here)")
@@ -4529,6 +4555,13 @@ function RD.PaintTools(fight)
             if c then
                 local ok, col = pcall(UnitPowerPercent, "player", 0, true, c)
                 drew = ok and paint(b.pieces, col) or false
+            end
+            -- an item tool showing its own icon (the drink, the potion): lit full / faded by its own white curve
+            if drew and b.iconTex and b.food then
+                local ic = RD.IconCurve(b.at)
+                local okI, icol = false, nil
+                if ic then okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic) end
+                if not (okI and paint({ b.food }, icol)) then b.food:SetVertexColor(1, 1, 1, RD.ICON_FADED) end
             end
             local sw = b.cd and not b.cd.wait and RD.SwipeCurve(b.at)   -- a cooling disc keeps its own colour
             if drew and sw then

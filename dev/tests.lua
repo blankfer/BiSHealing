@@ -14952,6 +14952,17 @@ do
            RD.rations.food and RD.rations.food.__texture)
         RD.FoodIcon(nil)
         ok(not RD.rations.food:IsShown() and (not fork[1] or fork[1]:IsShown()), "no food picked: the fork again")
+        -- THE DRINK AND THE POTION (Arn: "same with the drink put the actual drink i am about to drink")
+        local icons = { [159] = 132794, [929] = 134851 }
+        _G.GetItemIcon = function(id) return icons[id] end
+        RD.ItemIcon(RD.fuel, 159)
+        RD.ItemIcon(RD.potion, 929)
+        local dp, pp = RD.fuel.pieces or {}, RD.potion.pieces or {}
+        ok(RD.fuel.food and RD.fuel.food.__texture == 132794 and RD.fuel.iconTex == 132794 and (not dp[1] or not dp[1]:IsShown()),
+           "the drink button shows the drink you would drink, its drawn sign aside", RD.fuel.food and RD.fuel.food.__texture)
+        ok(RD.potion.food and RD.potion.food.__texture == 134851 and (not pp[1] or not pp[1]:IsShown()), "and the potion its potion")
+        RD.ItemIcon(RD.fuel, nil)
+        ok(not RD.fuel.food:IsShown() and RD.fuel.iconTex == nil and (not dp[1] or dp[1]:IsShown()), "none in your bags: the sign again")
         _G.GetItemIcon = keepIcon
     end
     -- THE BOX'S EDGE BY HEALTH (Arn: "need the outline of the boxes to turn colors amber when they are low red very low"):
