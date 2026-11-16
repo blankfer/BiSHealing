@@ -170,6 +170,15 @@ function OV.Judge(cast)
 end
 
 --- The middle of a heal's "for X to Y", or nil (not a heal we can judge, or its text is not loaded yet).
+--- A parsed heal the word may judge: a direct heal on ONE target. CHAIN HEAL COUNTS (16 Nov 2026, Arn at level 40: OVER
+--- never lit - his left button is Chain Heal, and Forever's text, "If cast on a party member, the heal will only jump to
+--- other party members", read as a party heal and was skipped): its FIRST jump lands whole on the one you hover, which
+--- is all a hover judges. HoTs and true party heals stay out.
+function OV.Usable(p)
+    if type(p) ~= "table" or p.hot then return false end
+    if type(p.lo) ~= "number" or type(p.hi) ~= "number" then return false end
+    return (not p.partial) or p.chain == true
+end
 function OV.HealOf(cast)
     if type(cast) ~= "string" or cast == "" then return nil end
     if cast:match("^macro:") then return (OV.MacroHeal(cast:match("^macro:(.+)$"))) end
@@ -183,8 +192,7 @@ function OV.HealOf(cast)
         if ok then desc = plain(t) end
     end
     local p = desc and NS.FE and NS.FE.Parse and NS.FE.Parse(desc)
-    local amount = p and not p.hot and not p.partial and type(p.lo) == "number" and type(p.hi) == "number"
-        and (p.lo + p.hi) / 2 or nil
+    local amount = OV.Usable(p) and (p.lo + p.hi) / 2 or nil
     if amount and amount <= 0 then amount = nil end
     -- remembered, a "no" too (false); a blank text (not loaded yet) is asked again next time
     if amount or (type(desc) == "string" and desc ~= "") then OV.cache[cast] = amount or false end
@@ -207,7 +215,8 @@ function OV.Status()
     for _, b in ipairs(OV.BUTTONS or {}) do
         local cast = OV.BindFor(b[2], OV.Mod and OV.Mod() or "")
         local ok, amt = pcall(OV.Judge, cast)
-        lines[#lines + 1] = string.format("  %s: %s -> %s", tostring(b[2]), tostring(cast or "nothing"), tostring(ok and amt or "error"))
+        local said = not ok and "error" or (amt and ("heals ~" .. math.floor(amt + 0.5)) or "not judged")
+        lines[#lines + 1] = string.format("  %s: %s -> %s", tostring(b[2]), tostring(cast or "nothing"), said)
     end
     for _, l in ipairs(lines) do P(l) end
     return table.concat(lines, "\n")

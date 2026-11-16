@@ -15492,6 +15492,12 @@ do
                 ok(cc.loss.word.__text == "NATURE LOCKED", "a plain school lockout: the school named", tostring(cc.loss.word.__text))
                 ok(RD.Command("cc"):find("loss of control:", 1, true), "/bish alpha radar cc: the readout")
                 ok(RD.Command("over"):find("overheal: mode", 1, true), "/bish alpha radar over: why the last hover lit OVER or not")
+                local chain = NS.FE.Parse("Heals the friendly target for 320 to 368, then jumps to heal additional nearby targets. "
+                    .. "If cast on a party member, the heal will only jump to other party members. Each jump reduces the "
+                    .. "effectiveness of the heal by 50%. Heals 3 total targets.")
+                ok(NS.OV.Usable(chain), "Chain Heal is judged: its first jump lands whole on the one you hover (Arn at 40: OVER never lit)")
+                ok(not NS.OV.Usable(NS.FE.Parse("Heals all party members within 30 yards for 300 to 350.")), "a true party heal still is not")
+                ok(not NS.OV.Usable(NS.FE.Parse("Heals the target for 120 over 15 sec.")), "nor a heal over time")
                 _G.C_LossOfControl = { GetActiveLossOfControlData = function() return { displayText = "Interrupted",
                     locType = secret(), startTime = secret(), duration = secret(), timeRemaining = secret() } end }
                 EN.LossPaint()
