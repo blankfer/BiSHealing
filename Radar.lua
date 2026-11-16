@@ -1962,8 +1962,60 @@ end
   outlined target box on top, then rows of five, then the tools row and the totems under them, the black box under all.
   The kick and the cures hang inside each box's right end, over the bar (their own clicks). Empty places are hidden: the
   deck grows down instead. Out of a fight only, like every layout here. ]]
-RD.DECK = { cell = 62, row = 24, tank = 32, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }
+RD.DECK = { cell = 84, row = 24, tank = 32, gap = 3, boxIn = 2, boxTop = 10, chip = 11, kick = 16 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
+RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
+
+--- A box's plate: the whole box - its two sides and the middle - drawn dark with a thin edge, under the pip and the icons.
+function RD.DeckPlate(sp)
+    local p = sp.deckPlate
+    if not p then
+        p = CreateFrame("Frame", nil, RD.conLayer)
+        p.bg = p:CreateTexture(nil, "BACKGROUND")
+        p.bg:SetAllPoints(p)
+        p.bg:SetColorTexture(0, 0, 0, 0.35)
+        p.edges = edge(p, RD.DIM, 1)
+        sp.deckPlate = p
+    end
+    return p
+end
+
+--- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals at the top-left of
+--- the box's middle, as a tracker tags a flight. Plain only - a hidden name shows nothing, never a guess.
+function RD.Callsign(unit)
+    if type(unit) ~= "string" then return "" end
+    local ok, n = pcall(GetUnitName, unit, false)
+    n = ok and plain(n) or nil
+    if type(n) ~= "string" or n == "" then return "" end
+    return ((n:match("^(%S+)")) or n):upper()
+end
+function RD.DeckTag(sp, w)
+    local t = sp.deckTag
+    if not t then
+        t = CreateFrame("Frame", nil, sp.heal)
+        t:SetAllPoints(sp.heal)
+        t.text = t:CreateFontString(nil, "OVERLAY")
+        t.text:SetFont(RD.DECK_TAG.font, RD.DECK_TAG.size, "OUTLINE")
+        t.text:SetPoint("TOPLEFT", t, "TOPLEFT", 3, -2)
+        t.text:SetJustifyH("LEFT")
+        local c = RD.DECK_TAG.col
+        t.text:SetTextColor(c[1], c[2], c[3], c[4])
+        sp.deckTag = t
+    end
+    t:SetFrameLevel(sp.heal:GetFrameLevel() + 2)            -- over the engineer's bar (pip + 1), under the icons (+ 3)
+    if w then t.text:SetWidth(math.max(8, w - 6)) end
+    t.text:SetText(RD.Callsign(sp.unit))
+    t:Show()
+    return t
+end
+
+--- Out of the deck: every box's plate and callsign away (the radar and the engineer's view draw neither).
+function RD.DeckClear()
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.deckPlate then sp.deckPlate:Hide() end
+        if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
+    end
+end
 
 --- The deck's order: the tanks first (the radar's own answer, RD.LogicBand; nobody named = one guessed, RD.GuessTank),
 --- then everyone else in place order (a raid's place is its group and spot), the empty places last. Answers the order
@@ -2001,7 +2053,10 @@ end
 function RD.PaintDeckBox()
     if not RD.Deck() then return false end
     for _, sp in ipairs(RD.spokes or {}) do
-        if sp.unit and sp.slot and sp.slot.box then RD.PaintHeal(sp) end
+        if sp.unit and sp.slot and sp.slot.box then
+            RD.PaintHeal(sp)
+            if sp.deckTag then sp.deckTag.text:SetText(RD.Callsign(sp.unit)) end   -- the new target's callsign
+        end
     end
     return true
 end
@@ -2041,33 +2096,45 @@ function RD.DeckLayout(T, order)
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
     local x0, y0 = (W - place.w) / 2, C.pad + C.head
     local placed = {}
+    -- THREE PARTS A BOX (15 Nov 2026, Arn: "the sides of the healing box works the middle its clicks" - "the middle part of
+    -- the healing frame cast the cure disease"): the kick and the cures are secure buttons that keep their click while
+    -- unseen (a secure button's mouse may not change in a fight), so laid over the bar they ate the heal. Now each box is a
+    -- plate with the KICK's slot on its LEFT side, the CURES' slots on its RIGHT side, and the heal pip - your binds, the
+    -- bar and the name - only in the MIDDLE between them. Nothing overlaps the middle.
     local function put(i, r, kick)
         local sp = RD.spokes[i]
         if not (sp and r) then return end
-        sp.heal:SetSize(r.w, r.h)
-        local cy = y0 + r.y + r.h / 2
-        at(sp.heal, x0 + r.x + r.w / 2, cy)
+        local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
+        local ks, cs = math.min(M.kick, r.h - 4), math.min(M.chip, r.h - 6)
+        local nc = #(sp.cures or {})
+        local lw = (kick and sp.bogey) and (ks + 4) or 0          -- the left side: the kick's slot
+        local rw = nc > 0 and (nc * (cs + 2) + 2) or 0           -- the right side: the cures' slots
+        local plate = RD.DeckPlate(sp)
+        plate:SetSize(r.w, r.h)
+        at(plate, left + r.w / 2, cy)
+        plate:Show()
+        local mw = math.max(8, r.w - lw - rw)
+        sp.heal:SetSize(mw, r.h - 2)
+        at(sp.heal, left + lw + mw / 2, cy)
         sp.heal:Show()
         settle(sp)
         placed[i] = r
         local lvl = sp.heal:GetFrameLevel()
-        local right = x0 + r.x + r.w - 2                  -- the icons hang from the box's right end, inward
         if kick and sp.bogey then
-            local ks = math.min(M.kick, r.h - 4)
             sp.bogey:SetSize(ks, ks)
-            at(sp.bogey, right - ks / 2, cy)
+            at(sp.bogey, left + 2 + ks / 2, cy)
             sp.bogey:SetFrameLevel(lvl + 3)
-            right = right - ks - 2
         end
+        local x = right - 2
         for _, c in ipairs(sp.cures or {}) do
-            local cs = math.min(M.chip, r.h - 6)
             c.box:SetSize(cs, cs)
-            at(c.box, right - cs / 2, cy)
+            at(c.box, x - cs / 2, cy)
             c.box:SetFrameLevel(lvl + 3)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            right = right - cs - 2
+            x = x - cs - 2
         end
+        RD.DeckTag(sp, mw)
     end
     for k = 1, nT do put(order[k], place.tanks[k], true) end
     for r, i in ipairs(crew) do put(i, place.rest[r], true) end
@@ -2075,7 +2142,11 @@ function RD.DeckLayout(T, order)
     for k = 1, T.n do
         local i = order[k]
         local sp = i and RD.spokes[i]
-        if sp and not placed[i] then sp.heal:Hide() if sp.bogey then sp.bogey:Hide() end end
+        if sp and not placed[i] then
+            sp.heal:Hide()
+            if sp.bogey then sp.bogey:Hide() end
+            if sp.deckPlate then sp.deckPlate:Hide() end
+        end
     end
     -- the target box: its outline and its job written on it, then your target and its target inside
     local box = RD.deckBox
@@ -2118,6 +2189,7 @@ function RD.ConsoleLayout()
     RD.conLayer:Show()
     for _, q in pairs(RD.conSquares or {}) do q:Hide() end
     if RD.deckBox then RD.deckBox:Hide() end
+    RD.DeckClear()                                   -- the deck puts back the ones it places
     local T = RD.ConsoleTier()
     local order = RD.conOrder or {}
     if RD.Deck() then
@@ -2176,6 +2248,7 @@ function RD.RadarLayout()
     end
     if RD.conLayer then RD.conLayer:Hide() end
     if RD.deckBox then RD.deckBox:Hide() end          -- the deck's target box goes with the console's layer
+    RD.DeckClear()
     return true
 end
 

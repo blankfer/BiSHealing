@@ -14843,6 +14843,8 @@ do
     local d = NS.DB()
     local keep = { alpha = d.alpha, alphaOn = d.alphaOn, classes = STATE.classes.party1, look = d.look }
     STATE.classes.party1 = "WARRIOR"
+    local keepGUN = _G.GetUnitName
+    _G.GetUnitName = function(u) return u == "party1" and "Ragefang Ironhide" or "Some One" end   -- Forever's two-part names
     d.look, d.alpha = "radar", true
     SlashCmdList.BISHEALING("alpha deck on")              -- the real door: the radar is armed again, as the deck
     RD.Arm()
@@ -14854,12 +14856,35 @@ do
         if sp.unit == "party1" then tankSp = sp end
         if sp.slot and sp.slot.box and sp.unit then boxSp[#boxSp + 1] = sp end   -- a bigger layout's old places are empty
     end
-    ok(tankSp and math.abs(tankSp.heal.__w - mp.tanks[1].w) < 1 and tankSp.heal.__h == M.tank,
-       "the warrior (no role named: the guess) is the tank row's long box", tankSp and tankSp.heal.__w)
+    ok(tankSp and tankSp.deckPlate and math.abs(tankSp.deckPlate.__w - mp.tanks[1].w) < 1 and tankSp.deckPlate.__h == M.tank,
+       "the warrior (no role named: the guess) is the tank row's long box", tankSp and tankSp.deckPlate and tankSp.deckPlate.__w)
+    ok(tankSp and tankSp.deckTag and tankSp.deckTag.text.__text == "RAGEFANG",
+       "its callsign on the box, like a flight tracker (Arn: \"puts names on the boxes\")", tankSp and tankSp.deckTag and tankSp.deckTag.text.__text)
+    -- NOTHING CLICKABLE OVER THE MIDDLE (Arn: "the middle part of the healing frame cast the cure disease"): the kick on the
+    -- left side, the cures on the right, the heal pip alone between them
+    local function rect(fr)
+        local q = fr.points and fr.points[1]
+        if not q then return nil end
+        return q[4] - fr.__w / 2, q[4] + fr.__w / 2
+    end
+    local overlaps = 0
+    for _, sp in ipairs(RD.spokes) do
+        if sp.unit and sp.heal:IsShown() and sp.deckPlate then
+            local a1, a2 = rect(sp.heal)
+            local takers = {}
+            if sp.bogey and sp.bogey:IsShown() then takers[#takers + 1] = sp.bogey end
+            for _, c in ipairs(sp.cures or {}) do takers[#takers + 1] = c.box end
+            for _, t in ipairs(takers) do
+                local b1, b2 = rect(t)
+                if a1 and b1 and b1 < a2 and b2 > a1 then overlaps = overlaps + 1 end
+            end
+        end
+    end
+    ok(overlaps == 0, "no kick or cure button lies over any box's middle: a click there is always your heal", overlaps)
     ok(tankSp and tankSp.bogey:GetAttribute("unit") == "party1target" and tankSp.bogey.__w <= M.kick,
        "its kick square hangs inside its box: your interrupt at whatever it is fighting")
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
-       and boxSp[1].heal.__w == M.cell and boxSp[2].heal.__w == M.cell, "the target box's two: your target and its target, one cell each")
+       and boxSp[1].deckPlate.__w == M.cell and boxSp[2].deckPlate.__w == M.cell, "the target box's two: your target and its target, one cell each")
     ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")
     local empty = 0
     for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
@@ -14878,6 +14903,7 @@ do
     RD.Arm()
     ok(not RD.Deck() and not RD.deckBox:IsShown(), "deck off: back to the radar as it was")
     d.alpha, d.alphaOn, STATE.classes.party1, d.look = keep.alpha, keep.alphaOn, keep.classes, keep.look
+    _G.GetUnitName = keepGUN
     if NS.AlphaApply then NS.AlphaApply() end
     if RD.On() then RD.Arm() end
 end
