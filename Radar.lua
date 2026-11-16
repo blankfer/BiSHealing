@@ -5066,6 +5066,9 @@ function RD.CastStrip(sp, lit)
     local b = sp and sp.castStrip
     if not b then return false end
     if not lit or not RD.Deck() then b:SetAlpha(0) return false end
+    -- over the box's health bar, whatever was built over the pip since (a plain frame: allowed in a fight)
+    local pl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+    if type(pl) == "number" then b:SetFrameLevel(pl + 8) end
     if not b.SetTimerDuration or not Enum or not Enum.StatusBarTimerDirection then return false end
     local tok = sp.tok
     local dir, dur = Enum.StatusBarTimerDirection.RemainingTime, nil
@@ -5098,6 +5101,26 @@ function RD.CastStrip(sp, lit)
     end
     b:SetAlpha(1)
     return true
+end
+
+--- `/bish alpha deck strip`: what the mini cast bars are doing (Arn 15 Nov: the kick lit on a box, no bar under it).
+--- One line: how many are made, how many showing, the client's timer bar there or not, the last failure. Answers the line.
+function RD.StripStatus(rest)
+    if rest ~= "strip" then return nil end
+    local made, shown, timer = 0, 0, nil
+    for _, sp in ipairs(RD.spokes or {}) do
+        local b = sp.castStrip
+        if b then
+            made = made + 1
+            if b:GetAlpha() > 0 then shown = shown + 1 end
+            if timer == nil then timer = b.SetTimerDuration and true or false end
+        end
+    end
+    local enumOK = (Enum and Enum.StatusBarTimerDirection and Enum.StatusBarInterpolation) and true or false
+    local line = string.format("cast bars: %d made, %d showing, timer bar %s, enums %s, last failure: %s", made, shown,
+        tostring(timer), tostring(enumOK), tostring(RD.stripErr or "none"))
+    if NS.Print then NS.Print(line) end
+    return line
 end
 
 local function paintContact(sp, lit)

@@ -12816,6 +12816,9 @@ do
         _G.UnitCastingDuration = function(u) if u == "party3target" then return castObj end end
         RD.CastStrip(sp, true)
         ok(handed.d == castObj and handed.dir == 0, "a cast: fills")
+        local said = RD.StripStatus("strip")
+        ok(said and said:find("timer bar true", 1, true) and said:find("last failure: none", 1, true),
+           "/bish alpha deck strip: one line of what the bars are doing")
         RD.CastStrip(sp, false)
         ok(sp.castStrip:GetAlpha() == 0, "the cast over: gone")
         RD.Deck = function() return false end

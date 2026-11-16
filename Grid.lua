@@ -4242,5 +4242,6 @@ if NS.AlphaFeature then
         apply = function()
             if InCombatLockdown and InCombatLockdown() then return end
             if NS.RD and NS.RD.Arm and NS.RD.On and NS.RD.On() then pcall(NS.RD.Arm) end
-        end }
+        end,
+        cmd = function(rest) return NS.RD and NS.RD.StripStatus and NS.RD.StripStatus(rest) end }
 end
