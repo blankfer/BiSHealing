@@ -15491,6 +15491,11 @@ do
                 EN.LossPaint()
                 ok(cc.loss.word.__text == "NATURE LOCKED", "a plain school lockout: the school named", tostring(cc.loss.word.__text))
                 ok(RD.Command("cc"):find("loss of control:", 1, true), "/bish alpha radar cc: the readout")
+                _G.C_LossOfControl = { GetActiveLossOfControlData = function() return { displayText = "Interrupted",
+                    locType = secret(), startTime = secret(), duration = secret(), timeRemaining = secret() } end }
+                EN.LossPaint()
+                ok(EN.lossWay and EN.lossWay:find("remaining", 1, true) and cc.loss.bar:GetScript("OnUpdate") == EN.LossTick,
+                   "no timer object: the bar counts down from the data's own (hidden) numbers", tostring(EN.lossWay))
                 RD.SetSw("cc", false)
                 ok(not cc:IsShown(), "switched off: no fourth box")
                 RD.SetSw("cc", true)
@@ -15504,6 +15509,23 @@ do
                 ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
                    mine and mine.tideTag and tostring(mine.tideTag.text.__text))
                 ok(RD.TideHeard("Nobody-Here", 12) == nil, "a name not in the group: nothing")
+                -- the party's chat (Arn: "i want the cool down to put it in the chat when i click it")
+                local keepSCM, keepIG, keepIR = _G.SendChatMessage, _G.IsInGroup, _G.IsInRaid
+                local said = {}
+                _G.SendChatMessage = function(msg, chan) said[#said + 1] = { msg, chan } end
+                _G.IsInGroup, _G.IsInRaid = function() return true end, function() return false end
+                RD.tideChatAt = nil
+                ok(RD.TideChat(false) and said[1][2] == "PARTY" and said[1][1]:find("down %- ready again in 5:00"),
+                   "Mana Tide down: its link and ready again in 5:00, in party chat", said[1] and said[1][1])
+                ok(RD.TideChat(false) == nil and #said == 1, "never two lines inside 3 seconds")
+                RD.tideChatAt, RD.readyAt.tide = nil, GetTime() + 192
+                ok(RD.TideClicked() and said[2][1]:find(" %- 3:12 cooldown"), "a click while cooling: the time left", said[2] and said[2][1])
+                RD.tideChatAt, RD.readyAt.tide = nil, nil
+                ok(RD.TideClicked() == nil, "a click when it is ready: nothing said (the drop is said on the cast)")
+                _G.IsInGroup = function() return false end
+                RD.tideChatAt = nil
+                ok(RD.TideChat(false) == nil, "alone: nothing in chat")
+                _G.SendChatMessage, _G.IsInGroup, _G.IsInRaid = keepSCM, keepIG, keepIR
                 ok(RD.BoxIsNamed("player", "Chainheal Ryangosling-Realm") == RD.BoxIsNamed("player", "Chainheal Ryangosling"),
                    "a realm on the sender is cut off")
                 mine.tideTag:Hide()

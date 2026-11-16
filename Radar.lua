@@ -4993,11 +4993,62 @@ function RD.TideTag(sp, secs)
     t:Show()
     return t
 end
+--[[ MANA TIDE IN THE PARTY'S CHAT (16 Nov 2026, Arn: "i want the cool down to put it in the chat when i click it" - the
+  action bar's own ping writes "[Mana Tide Totem (Rank 2)] is ready!", which only the game can send). Our own line, as
+  cooldown addons do: when it goes down, its link and "down - ready again in 5:00"; a click while it is cooling, the time
+  left. Party or raid only (alone: nothing), one line per RD.TIDE_CHAT_GAP seconds. The time is OUR clock of your cast
+  (RD.readyAt.tide), never the client's cooldown object. ]]
+RD.TIDE_CHAT_GAP = 3
+local function mmss(s)
+    s = math.max(0, math.floor(s + 0.5))
+    return string.format("%d:%02d", math.floor(s / 60), s % 60)
+end
+function RD.TideLink()
+    local link
+    if C_Spell and C_Spell.GetSpellLink then
+        local ok, l = pcall(C_Spell.GetSpellLink, RD.TIDE)
+        if ok then link = plain(l) end
+    end
+    return type(link) == "string" and link or ("[" .. RD.TIDE .. "]")
+end
+function RD.TideChatLine(cooling)
+    local now = GetTime()
+    if cooling then
+        local left = (RD.readyAt.tide or 0) - now
+        if left <= 0 then return nil end
+        return RD.TideLink() .. " - " .. mmss(left) .. " cooldown"
+    end
+    local len = (RD.cdLen and RD.cdLen.tide) or RD.COOLS.tide
+    return RD.TideLink() .. " down - ready again in " .. mmss(len)
+end
+function RD.TideChat(cooling)
+    local now = GetTime()
+    if RD.tideChatAt and now - RD.tideChatAt < RD.TIDE_CHAT_GAP then return nil end
+    local chan = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY" or nil)
+    if not chan then return nil end
+    local line = RD.TideChatLine(cooling)
+    if not line then return nil end
+    RD.tideChatAt = now
+    local ok, err = pcall(SendChatMessage, line, chan)
+    RD.tideChatErr = (not ok) and tostring(err) or nil
+    return ok and line or nil
+end
+--- A click on the Mana Tide button while it is cooling: the time left in chat (the drop itself is said on the cast).
+function RD.TideClicked()
+    local left = (RD.readyAt.tide or 0) - GetTime()
+    if left > 1 then return RD.TideChat(true) end
+    return nil
+end
+
 function RD.TideHook()
     local lib = _G.LibBiSComm
     if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
     lib:RegisterHandler("BiSHealing", "TIDE", function(sender, secs) RD.TideHeard(sender, secs) end)
     RD.tideHooked = true
+    if RD.tide and RD.tide.HookScript and not RD.tide.tideChatHooked then
+        RD.tide:HookScript("PostClick", function() RD.TideClicked() end)
+        RD.tide.tideChatHooked = true
+    end
     return true
 end
 
@@ -5019,6 +5070,10 @@ function RD.ArmTools()
     local FM = NS.FM
     local tide = FM and FM.Ranks and #FM.Ranks(RD.TIDE) > 0
     armTool(RD.tide, tide and RD.TideMacro() or nil, tide and describe(RD.TIDE), "MANA TIDE", RD.TIDE)
+    if RD.tide.HookScript and not RD.tide.tideChatHooked then           -- a click while cooling: the time left in chat
+        RD.tide:HookScript("PostClick", function() RD.TideClicked() end)
+        RD.tide.tideChatHooked = true
+    end
     local potion = RD.BestItem(RD.POTION)
     RD.potion.item = potion
     armTool(RD.potion, potion and ("/use item:" .. potion) or nil, itemWords(potion), "MANA POTION",
@@ -5615,6 +5670,7 @@ function RD.OnCast(unit, spellID)
         RD.PaintWaits(now)
         RD.waterUntil = now + RD.WATER.tide
         RD.TideSay()                                 -- BiS Healing users: MANA TIDE on your box in their deck
+        RD.TideChat(false)                           -- and the party's chat: down, ready again in 5:00
         return "tide"
     elseif name == RD.SPRING then
         RD.waterUntil = now + RD.WATER.spring

@@ -400,7 +400,20 @@ function EN.LossBuild(q)
     q.loss = L
     return L
 end
+EN.LOSS_EVERY = 0.1
+--- While the box is lit without the game's timer: timeRemaining asked again, handed to the bar untouched.
+function EN.LossTick(bar, elapsed)
+    EN.lossLast = (EN.lossLast or 0) + (tonumber(elapsed) or 0)
+    if EN.lossLast < EN.LOSS_EVERY then return end
+    EN.lossLast = 0
+    local LC = C_LossOfControl
+    local ok, data = false, nil
+    if LC and LC.GetActiveLossOfControlData then ok, data = pcall(LC.GetActiveLossOfControlData, 1) end
+    if not ok or type(data) ~= "table" then bar:SetScript("OnUpdate", nil) bar:Hide() return end
+    if data.timeRemaining ~= nil then pcall(bar.SetValue, bar, data.timeRemaining) end
+end
 local function lossOff(L)
+    L.bar:SetScript("OnUpdate", nil)
     L.bar:Hide()
     if L.cd and L.cd.Clear then pcall(L.cd.Clear, L.cd) end
 end
@@ -435,14 +448,20 @@ function EN.LossPaint()
         end
         if L.cd and L.cd.SetCooldownFromDurationObject then pcall(L.cd.SetCooldownFromDurationObject, L.cd, obj) end
     end
+    EN.lossWay = timed and "timer" or nil
     if not timed then
-        -- the plain numbers, when the game hands them plainly: the seconds still count on the cooldown
-        local st, du = data.startTime, data.duration
-        if not secret(st) and not secret(du) and type(st) == "number" and type(du) == "number" and du > 0 then
-            if L.cd and L.cd.SetCooldown then L.cd:SetCooldown(st, du) end
-        end
-        L.bar:SetMinMaxValues(0, 1)
-        L.bar:SetValue(1)                                -- no timer bar from the game: the box lit full, the words say it
+        -- NO TIMER OBJECT (Arn, 16 Nov: "the interrupted does not have a cast bar or timer on how much is left"): the data's
+        -- own numbers, handed over untouched (secret or not) - the cooldown counts the seconds from start + duration, and
+        -- the bar is fed timeRemaining of duration, asked again a few times a second while the box is lit (EN.LossTick)
+        local st, du, tr = data.startTime, data.duration, data.timeRemaining
+        local okC = L.cd and L.cd.SetCooldown and st ~= nil and du ~= nil and pcall(L.cd.SetCooldown, L.cd, st, du)
+        local okB = du ~= nil and tr ~= nil and pcall(L.bar.SetMinMaxValues, L.bar, 0, du) and pcall(L.bar.SetValue, L.bar, tr)
+        if not okB then L.bar:SetMinMaxValues(0, 1) L.bar:SetValue(1) end   -- nothing to count: lit full, the words say it
+        EN.lossWay = (okB and "remaining" or "none") .. (okC and "+seconds" or "")
+        EN.lossLast = 0
+        L.bar:SetScript("OnUpdate", okB and EN.LossTick or nil)
+    else
+        L.bar:SetScript("OnUpdate", nil)
     end
     return true
 end
@@ -452,8 +471,8 @@ function EN.LossStatus()
     local okN, n = false, nil
     if LC and LC.GetActiveLossOfControlDataCount then okN, n = pcall(LC.GetActiveLossOfControlDataCount) end
     local nK = not okN and "refused" or n == nil and "nil" or secret(n) and "hidden" or tostring(n)
-    local line = string.format("loss of control: api %s, count %s, last look %s, box %s",
-        LC and "yes" or "no", nK, tostring(EN.lossSeen or "never"),
+    local line = string.format("loss of control: api %s, count %s, last look %s, countdown %s, box %s",
+        LC and "yes" or "no", nK, tostring(EN.lossSeen or "never"), tostring(EN.lossWay or "none yet"),
         tostring(EN.heads and EN.heads.cc and EN.heads.cc:IsShown() or false))
     if NS.Print then NS.Print(line) end
     return line
