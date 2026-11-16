@@ -14903,6 +14903,10 @@ do
        k and k.deckIcon and k.deckIcon.__texture)
     ok(#boxSp == 2 and boxSp[1].unit == "target" and boxSp[2].unit == "targettarget"
        and boxSp[1].deckPlate.__w == M.cell and boxSp[2].deckPlate.__w == M.cell, "the target box's two: your target and its target, one cell each")
+    local lp = RD.deckBox.label.points and RD.deckBox.label.points[1]
+    ok(boxSp[1] and boxSp[1].deckPlate.__h == M.tank - 2 * M.boxIn and lp and lp[1] == "BOTTOMLEFT" and lp[3] == "TOPLEFT",
+       "the label sits above the box, so its two cells stand the tank's full height (Arn: \"the boxes can be the same size of the tank\")",
+       boxSp[1] and boxSp[1].deckPlate.__h)
     ok(boxSp[1] and boxSp[1].deckPlate.__h >= M.row and boxSp[2].deckPlate.__h >= M.row,
        "and never shorter than a party row (Arn: \"dont like how the target of target is squished\")", boxSp[2] and boxSp[2].deckPlate.__h)
     ok(RD.deckBox and RD.deckBox:IsShown() and RD.deckBox.label:GetText() == "TARGET · ITS TARGET", "the box is outlined, its job written on it")

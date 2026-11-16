@@ -2008,7 +2008,9 @@ end
 -- NARROW AND TALL (Arn, 15 Nov: "also taller 9:16 just a number throwing out there i hate moving mouse lef and right"):
 -- five to a row still, each box thinner and taller - the deck about 320 wide instead of 450; a full raid comes out near
 -- 9:16, a party (two rows) stays wider than tall.
-RD.DECK = { cell = 58, row = 50, tank = 62, gap = 3, boxIn = 2, boxTop = 10, chip = 12, kick = 12, icons = 14 }
+-- boxTop = boxIn: the target box's label sits ABOVE the box (Arn, 15 Nov: "there is plenty of space to write target of
+-- target up there so the boxes can be the same size of the tank"), so its two cells stand the tank row's full height
+RD.DECK = { cell = 58, row = 50, tank = 62, gap = 3, boxIn = 2, boxTop = 2, chip = 12, kick = 12, icons = 14 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -2232,7 +2234,7 @@ function RD.DeckLayout(T, order)
         box.edges = edge(box, RD.DECK_BOX_COL, 1)
         box.label = box:CreateFontString(nil, "OVERLAY")
         box.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 7, "")
-        box.label:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -1)
+        box.label:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 2, 2)    -- over the box, in the empty strip above the tank row
         local c = RD.DECK_BOX_COL
         box.label:SetTextColor(c[1], c[2], c[3], 1)
         box.label:SetText("TARGET · ITS TARGET")
