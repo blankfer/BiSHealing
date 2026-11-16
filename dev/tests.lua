@@ -11965,8 +11965,10 @@ do
         for _, sp in ipairs(RD.spokes) do
             local q = sp.pet.points and sp.pet.points[1]
             if sp.petUnit and q then
-                for _, other in ipairs(RD.spokes) do
-                    local s = other.slot
+                -- the radar's own places only: a place beyond its layout (the deck's target box, switched on and off by an
+                -- earlier block) is hidden and parked, not a person on the scope
+                for oi, other in ipairs(RD.spokes) do
+                    local s = oi <= #RD.slots and other.slot or {}
                     for _, spot in ipairs({ { s.rh, s.ph }, { s.rc, s.pc }, { s.rb, s.pb } }) do
                         if spot[1] then
                             local x, y = RD.Point(s, spot[1])
@@ -14879,7 +14881,7 @@ do
     local mp = FG.DeckPlace(1, 2, true, M)
     -- NARROW AND TALL (Arn: "also taller 9:16 ... i hate moving mouse lef and right"): five to a row, thin tall boxes
     local raid40 = FG.DeckPlace(2, 38, false, M)
-    ok(raid40.w <= 310 and raid40.h >= 1.5 * raid40.w, "the deck stays narrow; a full raid comes out taller than wide (near 9:16)",
+    ok(raid40.w <= 390 and raid40.h >= 1.4 * raid40.w, "the deck stays narrow (wider boxes for 22 px icons); a full raid comes out taller than wide",
        raid40.w .. " x " .. raid40.h)
     local tankSp, boxSp = nil, {}
     for _, sp in ipairs(RD.spokes) do
@@ -14967,6 +14969,23 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- NAMES IN THE TARGET BOX TOO (Arn: "names here too"): a plain name as a callsign, a hidden (secret) one handed whole
+    do
+        local keepGUN = _G.GetUnitName
+        local hidden = secretString()
+        _G.GetUnitName = function(u)
+            if u == "target" then return hidden end
+            if u == "targettarget" then return "Ragefang Ironhide" end
+            return "Some One"
+        end
+        ok(RD.Callsign("targettarget") == "RAGEFANG", "its target (the tank): the plain name's callsign")
+        ok(RD.Callsign("target") == hidden, "your target in a dungeon (its name secret): handed to the label untouched, never cut")
+        RD.PaintDeckBox()
+        local tSp
+        for _, sp in ipairs(RD.spokes) do if sp.unit == "targettarget" and sp.deckTag then tSp = sp end end
+        ok(tSp and tSp.deckTag.text.__text == "RAGEFANG", "the box's second cell shows it after a target change")
+        _G.GetUnitName = keepGUN
+    end
     -- A RAMP, NOT A SWITCH (Arn: "mana potion ... 100% bright at 10% mana" - "mana tide full brightness at 25% mana" -
     -- "if water restores 800 mana ... it should light up to 100% when i am at 1600 mana needed")
     do

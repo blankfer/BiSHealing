@@ -2042,7 +2042,10 @@ end
 -- 9:16, a party (two rows) stays wider than tall.
 -- boxTop = boxIn: the target box's label sits ABOVE the box (Arn, 15 Nov: "there is plenty of space to write target of
 -- target up there so the boxes can be the same size of the tank"), so its two cells stand the tank row's full height
-RD.DECK = { cell = 58, row = 50, tank = 62, gap = 3, boxIn = 2, boxTop = 2, chip = 12, kick = 12, icons = 14 }
+-- ONE ICON SIZE (Arn, 15 Nov: "the interrupt section under the frames lets make it the same size icons as everything
+-- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
+-- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
+RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
 RD.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan: the target box
 RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
 
@@ -2064,10 +2067,14 @@ end
 --- of the whole box (Arn, 15 Nov: "run the name across the whole box" - in the middle alone it was "CHA..."); the box's
 --- icons sit under that line, so the name never covers them. Plain only - a hidden name shows nothing, never a guess.
 RD.DECK_NAME_BAND = 9                              -- the top line the name owns
+--- A HIDDEN NAME IS STILL SHOWN (Arn, 15 Nov, the target box empty of names: "names here too"): in a dungeon the game hides
+--- an enemy's name - a secret - and a secret may not be cut or put in capitals, but a font string takes it untouched, so it
+--- is handed over as it is (the game writes it whole). Only a plain name becomes the first-word capitals callsign.
 function RD.Callsign(unit)
     if type(unit) ~= "string" then return "" end
     local ok, n = pcall(GetUnitName, unit, false)
-    n = ok and plain(n) or nil
+    if not ok or n == nil then return "" end
+    if NS.Secret and NS.Secret(n) then return n end
     if type(n) ~= "string" or n == "" then return "" end
     return ((n:match("^(%S+)")) or n):upper()
 end
@@ -3547,11 +3554,30 @@ local function armCures(sp, unit)
                             local part = button[k]
                             if type(part) == "table" and part.Hide then pcall(part.Hide, part) end
                         end
+                        -- THE CURE'S OWN ICON, IN ITS DEBUFF'S COLOUR (15 Nov 2026, Arn: "when it lights up it lights up with
+                        -- its icon the same size as the other stuff but with its color - poison green, disease brownish,
+                        -- magic blue"): the cure spell's icon filling the marker, a rim in the debuff type's colour - drawn
+                        -- by the client only while such a debuff is on them (it was a small diamond in that colour)
+                        local tex
+                        if C_Spell and C_Spell.GetSpellTexture then
+                            local okT, t = pcall(C_Spell.GetSpellTexture, cure.name)
+                            if okT then tex = t end
+                        end
                         local d = button:CreateTexture(nil, "OVERLAY")
-                        d:SetTexture(RD.WHITE)
-                        d:SetPoint("CENTER") d:SetSize(px * 0.72, px * 0.72)
-                        d:SetVertexColor(col[1], col[2], col[3], col[4])
-                        if d.SetRotation then d:SetRotation(math.pi / 4) end
+                        d:SetPoint("CENTER") d:SetSize(px - 2, px - 2)
+                        if tex then
+                            d:SetTexture(tex)
+                            if d.SetTexCoord then d:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+                        else
+                            d:SetTexture(RD.WHITE)                    -- no icon from the client: the old coloured diamond
+                            d:SetSize(px * 0.72, px * 0.72)
+                            d:SetVertexColor(col[1], col[2], col[3], col[4])
+                            if d.SetRotation then d:SetRotation(math.pi / 4) end
+                        end
+                        local rim = CreateFrame("Frame", nil, button)
+                        rim:SetSize(px, px)
+                        rim:SetPoint("CENTER")
+                        edge(rim, col, 1.5)
                         if button.EnableMouse then pcall(button.EnableMouse, button, false) end
                         if button.SetMouseClickEnabled then pcall(button.SetMouseClickEnabled, button, false) end
                         -- the GCD sweep on the marker: drawn only while the client draws the marker
