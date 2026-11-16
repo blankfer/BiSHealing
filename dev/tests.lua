@@ -12807,7 +12807,7 @@ do
         ok(RD.CastStrip(sp, true) and handed.d == chanObj and handed.dir == 1 and sp.castStrip:GetAlpha() == 1,
            "a channel (Whirlwind): its own duration handed untouched, draining")
         local c = sp.castStrip.__color
-        ok(c and c[1] == RD.CAST_COL[1] and c[2] == RD.CAST_COL[2], "one you can interrupt: amber")
+        ok(c and c[1] == RD.CAST_COL[1] and c[2] == RD.CAST_COL[2], "one you can interrupt: red, an enemy cast")
         NI = true
         RD.CastStrip(sp, true)
         c = sp.castStrip.__color
@@ -14945,6 +14945,10 @@ do
         _G.UnitHealthMax = function() return nil end
         local o2, n2 = NS.RD.DeckOrder(units, 5)
         ok(n2 <= 1, "no health to read: the class guess, as before")
+        _G.UnitHealthMax = function(u) return mx[u] end
+        local alone = { "player" }
+        local o3, n3 = NS.RD.DeckOrder(alone, 5)
+        ok(n3 == 1 and alone[o3[1]] == "player", "no party: you go up there (Arn: \"no party we go up there\")")
         _G.UnitHealthMax = keepMax
     end
 

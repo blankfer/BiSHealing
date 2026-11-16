@@ -2160,6 +2160,8 @@ function RD.DeckOrder(units, n)
         -- with the most health goes up there") - the biggest max health, read plain out of a fight, never you; only when no
         -- health can be read, the class guess (RD.GuessTank)
         local g = RD.MostHealth(rest, units) or RD.GuessTank(present, units)
+        -- ALONE: YOU (Arn, 15 Nov, solo with an empty tank row: "no party we go up there")
+        if not g and #rest == 1 then g = rest[1] end
         if g then
             tanks[1] = g
             for k, i in ipairs(rest) do if i == g then table.remove(rest, k) break end end
@@ -5033,9 +5035,9 @@ RD.BogeyAlpha = bogeyAlpha
 -- bottom of the party member that is targeting him?"). In the deck only: a thin bar along the bottom of the box of whoever
 -- targets the caster, lit with the kick. The client runs it: the cast's own duration object handed untouched to
 -- SetTimerDuration (a channel drains, a cast fills), nothing read. Grey when the cast cannot be interrupted (the shield's
--- flag through the client's ternary when secret), amber otherwise.
+-- flag through the client's ternary when secret), red otherwise.
 RD.CAST_STRIP_H = 3
-RD.CAST_COL = { 1.00, 0.70, 0.10 }
+RD.CAST_COL = { 0.85, 0.15, 0.15 }       -- red: an enemy cast (Arn: "make the progress bar red to indicate a enemy cast")
 RD.CAST_SHIELDED = { 0.55, 0.57, 0.62 }
 
 --- Built OUT OF A FIGHT, from the deck's layout (Arn 15 Nov, "interrups dont show up now": built at the first cast, in a
