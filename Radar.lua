@@ -2377,7 +2377,11 @@ function RD.PaintTimer(t)
         if ok then obj = o end
     end
     if obj and cd.SetCooldownFromDurationObject and pcall(cd.SetCooldownFromDurationObject, cd, obj) then return true end
-    local st, d = okI and plain(start) or nil, okI and plain(dur) or nil
+    local st, d = nil, nil
+    if okI then
+        st = plain(start)
+        d = plain(dur)
+    end
     if type(st) == "number" and type(d) == "number" and d > 0 and cd.SetCooldown then
         cd:SetCooldown(st, d)
     elseif cd.Clear then
