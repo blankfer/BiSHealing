@@ -15335,6 +15335,37 @@ do
         ok(small.w < big.w and RD.DECK_SMALL.row / RD.DECK_SMALL.cell > RD.DECK.row / RD.DECK.cell,
            "narrower, and its boxes taller for their width (Arn: \"slightly more narrow and more tall\")", small.w .. " vs " .. big.w)
     end
+    -- THE 9:16 ENGINEER (Arn: "if our deck is 16:9 engineering is 9:16"; picked A, then the raid rule for 10 / 20 / 40)
+    do
+        local S = RD.DECK_SMALL
+        local pp = FG.EngPlace(1, 4, 1, true, S)
+        ok(pp.w == S.w and #pp.tanks == 1 and pp.target.y == 0 and pp.tanks[1].w == pp.target.w,
+           "a party: the top row in thirds - tank, your target, its target", pp.tanks[1].w)
+        ok(#pp.rest == 5 and pp.rest[1].y == pp.rest[2].y and pp.rest[3].y > pp.rest[1].y and pp.rest[1].w == pp.rest[2].w
+           and pp.rest[2].x + pp.rest[2].w == S.w, "then the others two to a row, filling the width")
+        ok(pp.rest[5].short and pp.rest[5].h == S.pet2 and pp.rest[5].w == S.w, "the pet last, a little shorter (alone: the whole row)")
+        local deckW = FG.DeckPlace(1, 5, true, RD.DECK).w
+        ok(pp.h > pp.w and pp.w < deckW, "taller than wide, and narrower than the deck: the deck turned on its side",
+           pp.w .. " x " .. pp.h)
+        local p3 = FG.EngPlace(2, 3, 0, true, S)
+        ok(p3.rest[3].w == S.w, "two tanks: three others, the lone last one takes the whole row")
+        local rr = FG.EngPlace(4, 36, 6, false, S)
+        ok(#rr.tanks == 4 and rr.tanks[4].x + rr.tanks[4].w == S.w and rr.tanks[1].y == 0 and rr.tanks[1].short,
+           "a raid: the four tanks share their own row")
+        ok(rr.target.y > rr.tanks[1].h and rr.target.w + rr.tot.w + S.gap == S.w and rr.target.h == S.rtgt,
+           "your target and its target a short row under them")
+        local five = rr.rest[1].y == rr.rest[5].y and rr.rest[6].y > rr.rest[1].y and rr.rest[6].x == 0
+        ok(#rr.rest == 42 and five and rr.rest[1].short and rr.rest[1].h == S.row5,
+           "then everyone five across in short boxes, so each raid group lines up")
+        ok(rr.rest[37].h == S.pet5 and rr.rest[37].x == 0 and rr.rest[37].y > rr.rest[36].y, "the six pets last, on their own rows")
+        ok(rr.w == S.w and rr.h < 640, "never wider; a full raid stays on the screen", rr.w .. " x " .. rr.h)
+        ok(not RD.classBtn or not RD.classBtn:IsShown(), "no size button: the group decides (Arn: \"we can get rid of the button\")")
+        local keepTier = d.radar.tier
+        d.radar.tier = 4
+        local T = RD.ConsoleTier({ "player", "party1" })
+        ok(T.n == 5, "a size picked before is not obeyed any more: a party is a party", T.n)
+        d.radar.tier = keepTier
+    end
     d.radar.view, RD.FORCE_DISC = nil, true
     RD.Arm()
     ok(not RD.Deck() and not RD.deckBox:IsShown(), "the suite's door: the retired disc")

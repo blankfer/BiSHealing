@@ -1603,7 +1603,10 @@ function RD.ConsoleTier(units)
     for i in pairs(units or RD.units or {}) do if type(i) == "number" and i > hi then hi = i end end
     local need = #RD.CON_TIERS
     for k, t in ipairs(RD.CON_TIERS) do if hi <= t.n then need = k break end end
-    local k = math.min(#RD.CON_TIERS, math.max(tonumber(db().tier) or 1, need))
+    -- THE GROUP DECIDES (Arn, 15 Nov: "5 man 10 man 20man 40 man rules to apply automatically ... we can get rid of the
+    -- button"): a picked size counts only behind the retired disc's suite door
+    local picked = RD.FORCE_DISC and tonumber(db().tier) or 1
+    local k = math.min(#RD.CON_TIERS, math.max(picked, need))
     return RD.CON_TIERS[k], k
 end
 
@@ -2058,7 +2061,9 @@ end
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
 -- THE ENGINEER'S VIEW (Arn, 15 Nov: his cousin "already thought it took too much space" - "we dont go wider we can go
 -- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
-RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22 }
+RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22,
+                  -- the 9:16 engineer (FG.EngPlace): one narrow width; a party's rows, then a raid's short ones
+                  w = 206, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10 }
 RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
 RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
@@ -2296,7 +2301,12 @@ function RD.DeckLayout(T, order)
     end
     local firstPet = #crew + 1
     for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
-    local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
+    local place
+    if RD.Compact() then
+        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M)
+    else
+        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M)
+    end
     local W = math.max(C.pad * 2 + place.w, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
     local x0, y0 = (W - place.w) / 2, C.pad + RD.DECK_HEAD   -- under the deck's taller alert strip
     local placed = {}
@@ -2309,35 +2319,48 @@ function RD.DeckLayout(T, order)
         local sp = RD.spokes[i]
         if not (sp and r) then return end
         local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
-        local ih = M.icons
-        local ph = r.h - ih - 1                                   -- the pip: everything above the icon row
-        local ks, cs = math.min(M.kick, ih - 2), math.min(M.chip, ih - 2)
-        local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         local plate = RD.DeckPlate(sp)
         plate:SetSize(r.w, r.h)
         at(plate, left + r.w / 2, cy)
         plate:Show()
-        sp.heal:SetSize(r.w - 2, ph)
-        at(sp.heal, left + r.w / 2, y0 + r.y + 1 + ph / 2)
+        placed[i] = r
+        -- A SHORT BOX (the engineer's raid rows): the bar takes the box's whole height, the icons a thin column at its
+        -- right end - kick at the foot, cures above it - never over the bar (a secure icon keeps its click unseen)
+        local is = r.short and (M.short or 10) or nil
+        local ih = is and 0 or M.icons
+        local ph = is and (r.h - 2) or (r.h - ih - 1)            -- the pip: the bar's height
+        local pw = is and (r.w - 3 - is) or (r.w - 2)            -- and its width
+        local ks = is or math.min(M.kick, ih - 2)
+        local cs = is or math.min(M.chip, ih - 2)
+        local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
+        sp.heal:SetSize(pw, ph)
+        at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
         sp.heal:Show()
         settle(sp)
-        placed[i] = r
         local lvl = sp.heal:GetFrameLevel()
+        local colX = right - 1 - (is or 0) / 2                    -- a short box's icon column
+        local footY = y0 + r.y + r.h - 1 - (is or 0) / 2
         if kick and sp.bogey then
             sp.bogey:SetSize(ks, ks)
-            at(sp.bogey, left + 2 + ks / 2, icy)
+            if is then at(sp.bogey, colX, footY) else at(sp.bogey, left + 2 + ks / 2, icy) end
             sp.bogey:SetFrameLevel(lvl + 3)
             RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
         RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
         local x = right - 2
+        local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
             c.box:SetSize(cs, cs)
-            at(c.box, x - cs / 2, icy)
+            if is then
+                at(c.box, colX, cyCol)
+                cyCol = cyCol - is - 1
+            else
+                at(c.box, x - cs / 2, icy)
+                x = x - cs - 2
+            end
             c.box:SetFrameLevel(lvl + 3)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            x = x - cs - 2
         end
         RD.DeckTag(sp, r.w)                               -- the name across the whole box
     end
@@ -2665,6 +2688,7 @@ function RD.PlaceViewButton()
         b:SetSize(RD.SYS_PX, RD.SYS_PX)
         if c then c:SetPoint("BOTTOM", b, "TOP", 0, 4) c:SetSize(RD.SYS_PX, RD.SYS_PX) end
     end
+    if c then c:SetShown(not RD.Deck()) end                -- the deck and the engineer size themselves: no size button
     RD.PaintViewButton()
 end
 
