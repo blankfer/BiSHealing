@@ -5290,7 +5290,14 @@ function RD.RipMarks()
     for _, sp in ipairs(RD.spokes or {}) do
         local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
         if has and not sp.ripMark then
-            local m = sp.deckPlate:CreateTexture(nil, "OVERLAY", nil, 6)
+            -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the
+            -- health bar, which lives in the pip; the callsign's road: a child frame lifted over the pip, RD.DeckTag)
+            local hold = CreateFrame("Frame", nil, sp.deckPlate)
+            hold:SetAllPoints(sp.deckPlate)
+            local hl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+            if type(hl) == "number" and hold.SetFrameLevel then hold:SetFrameLevel(hl + 6) end
+            sp.ripHold = hold
+            local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
             m:SetSize(14, 14)
             m:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
             if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end

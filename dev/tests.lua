@@ -15582,6 +15582,9 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                ok(tsp.ripHold and tsp.ripHold:GetFrameLevel() > tsp.heal:GetFrameLevel() + 1,
+                   "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
+                   tsp.ripHold and tsp.ripHold:GetFrameLevel(), tsp.heal:GetFrameLevel())
                 ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
