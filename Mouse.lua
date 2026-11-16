@@ -678,7 +678,48 @@ end
 
 --- The lines a bind casts BEFORE its heal: its own trinket slots, plus the ones ticked on its
 --- modifier's tab, then its booster.
-function FM.FirstLines(cast, mod)
+--[[ RIPTIDE AS A CAST SEQUENCE (16 Nov 2026). Arn: "when i put riptide and chain heal on the same left click it gets stuck
+  trying to cast riptide" - and his test of the plain two lines: "Nothing casts, with a red 'Spell is not ready yet'". On
+  Forever a /cast of a spell that is cooling STOPS the macro, so the heal's line never runs. A cast sequence only moves on
+  when a spell really casts, so it goes Riptide, then enough heals to cover Riptide's cooldown, then Riptide again - ready
+  by then (Arn's test, five Chain Heals: "it works, riptide comes back after 5 chain heals"). FM.SeqCount: the heals that
+  fill Riptide's 12 s less its own global cooldown, from the heal's own cast time (Chain Heal 2.5 s -> 5). reset=15: a
+  15 s pause starts it over at Riptide. ]]
+FM.RIPTIDE_CD = 12
+FM.SEQ_RESET = 15
+function FM.SeqCount(heal)
+    local name = type(heal) == "string" and (heal:match("^(.-)%(") or heal) or nil
+    local ct
+    if name and C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, name)
+        if ok and type(info) == "table" then ct = tonumber(info.castTime) end
+    end
+    local secs = (ct and ct > 0) and (ct / 1000) or 2.5
+    secs = math.max(1.5, secs)
+    return math.max(3, math.min(8, math.ceil((FM.RIPTIDE_CD - 1.5) / secs)))
+end
+--- The lines that cast a bind's heal, after the guard: what goes first, then the heal - or, with an aimed booster
+--- (Riptide), the trinkets and then ONE cast sequence. `room` = characters left in the macro (a sequence shortens to fit).
+function FM.HealLines(spell, mod, heal, room)
+    local _, boost = FM.Front(spell)
+    if boost and FM.AIMED[boost] then
+        local front = FM.FirstLines(spell, mod, true)
+        local head = front .. "/castsequence [@mouseover] reset=" .. FM.SEQ_RESET .. " " .. boost
+        local n, text = FM.SeqCount(heal), nil
+        while true do
+            local parts = { head }
+            for _ = 1, n do parts[#parts + 1] = heal end
+            text = table.concat(parts, ", ")
+            if n <= 3 or not room or #text <= room then break end
+            n = n - 1
+        end
+        return text
+    end
+    return FM.FirstLines(spell, mod) .. "/cast [@mouseover] " .. heal
+end
+FM.MACRO_MAX = 255
+
+function FM.FirstLines(cast, mod, noAimed)
     if type(cast) ~= "string" or FM.PingOf(cast) then return "" end
     local slots, boost = FM.Front(cast)
     for _, s in ipairs(FM.TabTrinkets(mod)) do slots[#slots + 1] = s end
@@ -687,7 +728,7 @@ function FM.FirstLines(cast, mod)
     for _, s in ipairs(slots) do
         if not seen[s] then seen[s] = true lines[#lines + 1] = "/use " .. s end
     end
-    if boost then
+    if boost and not (noAimed and FM.AIMED[boost]) then
         -- an aimed one (Riptide) goes on the living friend under the mouse, never on you by the client's self-cast
         lines[#lines + 1] = "/cast " .. (FM.AIMED[boost] and "[@mouseover,help,nodead] " or "") .. boost
     end
@@ -1217,9 +1258,9 @@ function FM.ApplyTo(cell)
                     -- spent on a dead or hostile cell.
                     local _, heal = FM.Boost(spell)
                     kind, cast = "macro", nil
-                    text = FM.ResLine(spell)
+                    local lead = FM.ResLine(spell)
                         .. "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                        .. FM.FirstLines(spell, m.key) .. "/cast [@mouseover] " .. heal
+                    text = lead .. FM.HealLines(spell, m.key, heal, FM.MACRO_MAX - #lead)
                 elseif spell and FM.ResLine(spell) ~= "" then
                     -- a heal with a res in front of it: one macro, the client picks at the click
                     kind, cast = "macro", nil
@@ -1434,9 +1475,8 @@ function FM.ApplyWheel(owner)
                         -- healable. A booster rides between the two: after the guard, so Nature's
                         -- Swiftness is never spent on a wheel turn over nobody.
                         local _, healCast = FM.Boost(spell)
-                        text = front .. "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                            .. FM.FirstLines(spell, m.key)
-                            .. "/cast [@mouseover] " .. healCast
+                        local lead = front .. "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
+                        text = lead .. FM.HealLines(spell, m.key, healCast, FM.MACRO_MAX - #lead)
                     end
                     b:SetAttribute("type", (text or macro) and "macro" or nil)
                     b:SetAttribute("macrotext", text)

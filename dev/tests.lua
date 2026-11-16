@@ -6597,10 +6597,24 @@ do
                 local rc = CreateFrame("Button", "RiptideCell", UIParent, "SecureUnitButtonTemplate")
                 FM.ApplyTo(rc)
                 local rt = rc.__attrs["*macrotext2"] or ""
+                -- 16 Nov: Forever stops a macro at a spell that is cooling ("Nothing casts, with a red 'Spell is not ready
+                -- yet'"), so Riptide in front is ONE cast sequence: Riptide, then five Chain Heals (Arn: "5 chain heals and then
+                -- it refreshes riptide"), a 15 s pause starts it over
+                local CH = "Chain Heal(Rank 2)"
                 ok(rc.__attrs["*type2"] == "macro"
                    and rt == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                          .. "/cast [@mouseover,help,nodead] Riptide\n/cast [@mouseover] Chain Heal(Rank 2)",
-                   "a click: the guard, Riptide AIMED at that cell (never self-cast), then Chain Heal on the same cell", rt)
+                          .. "/castsequence [@mouseover] reset=15 Riptide, " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH,
+                   "a click: the guard, then one cast sequence - Riptide, five Chain Heals, Riptide again", rt)
+                ok(not rt:find("/cast [@mouseover,help,nodead] Riptide", 1, true), "never the plain Riptide line that stalls the macro")
+                ok(#rt <= FM.MACRO_MAX, "the macro fits", #rt)
+                local keepInfo = C_Spell.GetSpellInfo
+                C_Spell.GetSpellInfo = function() return { castTime = 1500 } end
+                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 7, "a 1.5 s heal: seven of them cover Riptide's cooldown")
+                C_Spell.GetSpellInfo = function() return { castTime = 3000 } end
+                ok(FM.SeqCount("Healing Wave(Rank 1)") == 4, "a 3 s heal: four")
+                C_Spell.GetSpellInfo = keepInfo
+                local short = FM.HealLines("Riptide+" .. CH, "", CH, 120)
+                ok(#short <= 120 and select(2, short:gsub("Chain Heal", "")) == 3, "too long for the macro: fewer heals, never past it", short)
                 local body = NS.FK.Encode({ right = landed }, {})
                 local back = NS.FK.Decode(body)
                 ok(back and back.right == landed, "Riptide + Chain Heal is written into the macro and read back whole", body)
@@ -6610,9 +6624,8 @@ do
                 FM.ApplyWheel(FG.anchor)
                 local wd = _G["BiSHealWheelwheeldown"]
                 local wdt = wd and wd.__attrs and wd.__attrs["macrotext"] or ""
-                local g2, r2, c2 = wdt:find("/stopmacro", 1, true), wdt:find("/cast [@mouseover,help,nodead] Riptide", 1, true),
-                                   wdt:find("/cast [@mouseover] Chain Heal(Rank 2)", 1, true)
-                ok(g2 and r2 and c2 and g2 < r2 and r2 < c2, "on the wheel too: guard, aimed Riptide, then Chain Heal", wdt)
+                local g2, r2 = wdt:find("/stopmacro", 1, true), wdt:find("/castsequence [@mouseover] reset=15 Riptide, Chain Heal(Rank 2)", 1, true)
+                ok(g2 and r2 and g2 < r2, "on the wheel too: guard, then the Riptide cast sequence", wdt)
                 ok(FM.FirstLines("Nature's Swiftness+Healing Wave", "") == "/cast Nature's Swiftness\n",
                    "Nature's Swiftness stays a plain line (it needs no target)")
                 FM.Clear("", "wheeldown")
