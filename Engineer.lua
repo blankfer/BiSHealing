@@ -57,9 +57,10 @@ EN.HEAD_H = 16
 -- little narrower, so all five fit the deck's own width without shrinking (a narrower window still scales them, EN.Heads)
 -- THREE LETTERS EACH (Arn, 16 Nov: "some of those boxes are bigger than the actual things it prints LOS RNG OVH maybe we
 -- can save space too"): the word boxes sized to their three letters
-EN.HEAD_DECK = { { key = "los", x = 0, w = 36 }, { key = "range", x = 40, w = 36 }, { key = "over", x = 80, w = 38 },
-                 { key = "cc", x = 122, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
-                 { key = "rip", x = 208, w = 134 } } -- the Riptide bar: six squares the size of the deck's icons (EN.RipPaint)
+EN.HEAD_DECK = { { key = "los", x = 0, w = 34 }, { key = "range", x = 37, w = 34 }, { key = "over", x = 74, w = 36 },
+                 { key = "cc", x = 113, w = 76 },    -- the fourth box, loss of control (EN.LossPaint)
+                 { key = "rip", x = 192, w = 134 },  -- the Riptide bar: six squares the size of the deck's icons (EN.RipPaint)
+                 { key = "mana", x = 329, w = 34 } } -- party mana: a bar per mana user, shown under the line (EN.ManaPaint)
 -- ONE ICON SIZE (Arn, 16 Nov: "whatever size we use on the interrupts and bottom shelf lets use that for the riptide box
 -- up top ... make them fit that icon tallness"): the strip is the icons' 22 px tall, and the Riptide bar is six 22 px
 -- squares (6 x 22 + its 2 px edge), its Riptide icon as big as the kick and the tools
@@ -142,9 +143,10 @@ function EN.HeadBoxes()
     local set = EN[key]
     local deck = con and RD.Deck and RD.Deck() and RD.Sw
     local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
-        if not deck then return key ~= "cc" and key ~= "rip" end
+        if not deck then return key ~= "cc" and key ~= "rip" and key ~= "mana" end
         if key == "cc" then return RD.Sw("cc") end
         if key == "rip" then return RD.Sw("rip") and RD.RipKnown and RD.RipKnown() end
+        if key == "mana" then return RD.Sw("mana") end
         return RD.Sw("alerts")
     end
     local f, x0, y = EN.Where()
@@ -179,6 +181,7 @@ function EN.HeadBoxes()
     end
     if set.cc and set.cc:IsShown() then EN.LossPaint() end
     if set.rip and set.rip:IsShown() then EN.RipPaint() end
+    EN.ManaLayout()
     if not con then
         EN.TintRadarHeads()
         -- the black box's screen may be up (a code being typed): the boxes wait under it
@@ -587,6 +590,206 @@ function EN.RipPaint()
     return true
 end
 
+--[[ PARTY MANA (16 Nov 2026, Arn: "the mana thing is so i have a better clue of when to drop mana tide since it hits the
+  whole party ... show party bars that are only mana and a way to only show once they are all below a certain percentage" -
+  "lets make it 50% not too early not too late" - "up top where the riptide duration and los goes"). The top row's last box:
+  one thin bar per mana user in YOUR group (Mana Tide's reach: your party, your raid group), the game's own mana handed
+  over untouched, each bar's colour from a curve the client evaluates on their mana % - see-through above EN.MANA_LINE,
+  blue under it. So a bar shows only once that person is under the line.
+  AND EVERYONE: the Mana Tide button gets a glow that sits under a chain of plain frames, one per mana user, each frame's
+  alpha that person's curve alpha (1 under the line, 0 over). A child's alpha is its parents' multiplied: the glow shows
+  only when EVERY link is 1 - all of them under the line - with nothing compared by us (Forever hides the numbers in a
+  fight). Whether SetAlpha takes the hidden alpha is probed (EN.chainSeen, /bish alpha radar mana). Repainted on the
+  radar's own tick, every EN.MANA_EVERY s; the members are picked at layout (out of a fight). ]]
+EN.MANA_LINE = 0.5
+EN.MANA_COL = { 0.30, 0.55, 1.00 }
+EN.MANA_EVERY = 0.5
+EN.MANA_MAX = 5
+EN.MANA_CLASSES = { PRIEST = true, MAGE = true, WARLOCK = true, SHAMAN = true, PALADIN = true, DRUID = true, HUNTER = true }
+function EN.ManaCurve()
+    if EN.manaCurve then return EN.manaCurve end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local C, x = EN.MANA_COL, EN.MANA_LINE
+    pcall(c.AddPoint, c, 0.00, CreateColor(C[1], C[2], C[3], 1))
+    pcall(c.AddPoint, c, x, CreateColor(C[1], C[2], C[3], 1))
+    pcall(c.AddPoint, c, x + 0.0001, CreateColor(C[1], C[2], C[3], 0))
+    pcall(c.AddPoint, c, 1.00, CreateColor(C[1], C[2], C[3], 0))
+    EN.manaCurve = c
+    return c
+end
+--- Your group's mana users (out of a fight): the party, or your raid group.
+function EN.ManaUnits()
+    local out, cand = {}, {}
+    if IsInRaid and IsInRaid() then
+        local own
+        for i = 1, 40 do
+            if UnitIsUnit and plain(UnitIsUnit("raid" .. i, "player")) == true and GetRaidRosterInfo then
+                local ok, _, _, sub = pcall(GetRaidRosterInfo, i)
+                if ok then own = plain(sub) end
+            end
+        end
+        for i = 1, 40 do
+            local ok, _, _, sub = false, nil, nil, nil
+            if GetRaidRosterInfo then ok, _, _, sub = pcall(GetRaidRosterInfo, i) end
+            if ok and own and plain(sub) == own then cand[#cand + 1] = "raid" .. i end
+        end
+    else
+        cand = { "player", "party1", "party2", "party3", "party4" }
+    end
+    for _, u in ipairs(cand) do
+        local okE, there = pcall(UnitExists, u)
+        local okC, _, tok = pcall(UnitClass, u)
+        if okE and plain(there) == true and okC and EN.MANA_CLASSES[plain(tok) or ""] then out[#out + 1] = u end
+        if #out >= EN.MANA_MAX then break end
+    end
+    return out
+end
+function EN.ManaBuild(q)
+    if q.mana then return q.mana end
+    local M = { bars = {} }
+    for k = 1, EN.MANA_MAX do
+        local b = CreateFrame("StatusBar", nil, q)
+        b:SetOrientation("VERTICAL")
+        b:SetStatusBarTexture(EN.TEX)
+        b:SetMinMaxValues(0, 1)
+        b:SetValue(0)
+        b.bg = b:CreateTexture(nil, "BACKGROUND")
+        b.bg:SetAllPoints(b)
+        b.bg:SetColorTexture(EN.MANA_COL[1], EN.MANA_COL[2], EN.MANA_COL[3], 0.12)
+        b:Hide()
+        M.bars[k] = b
+    end
+    q.mana = M
+    return M
+end
+--- The glow on the Mana Tide button, under its chain of one frame per mana user (built out of a fight).
+function EN.TideChain()
+    local RD = NS.RD
+    local b = RD and RD.tide
+    if not b or EN.chain then return EN.chain end
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    local links, parent = {}, b
+    for k = 1, EN.MANA_MAX do
+        local f = CreateFrame("Frame", nil, parent)
+        f:SetAllPoints(b)
+        if f.SetFrameLevel and b.GetFrameLevel then
+            local lvl = b:GetFrameLevel()
+            if type(lvl) == "number" then f:SetFrameLevel(lvl + 2 + k) end
+        end
+        links[k] = f
+        parent = f
+    end
+    local top = links[#links]
+    local glow = {}
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+        local t = top:CreateTexture(nil, "OVERLAY", nil, 7)
+        t:SetColorTexture(0.35, 0.85, 1.00, 1)
+        if side == "TOP" or side == "BOTTOM" then
+            t:SetPoint(side .. "LEFT", top, side .. "LEFT", -2, side == "TOP" and 2 or -2)
+            t:SetPoint(side .. "RIGHT", top, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
+            t:SetHeight(2)
+        else
+            t:SetPoint("TOP" .. side, top, "TOP" .. side, side == "LEFT" and -2 or 2, 2)
+            t:SetPoint("BOTTOM" .. side, top, "BOTTOM" .. side, side == "LEFT" and -2 or 2, -2)
+            t:SetWidth(2)
+        end
+        glow[#glow + 1] = t
+    end
+    EN.chain = { links = links, glow = glow }
+    return EN.chain
+end
+--- Out of a fight: who the bars are for, and where they stand in the box.
+function EN.ManaLayout()
+    local q = EN.heads and EN.heads.mana
+    if not q then return false end
+    local M = EN.ManaBuild(q)
+    if not (InCombatLockdown and InCombatLockdown()) then EN.manaUnits = EN.ManaUnits() end
+    local units = EN.manaUnits or {}
+    local w, h = q:GetWidth(), q:GetHeight()
+    local n = #units
+    if type(w) ~= "number" or type(h) ~= "number" or w <= 0 then return false end
+    local bw = n > 0 and math.max(2, math.floor((w - 3 - (n - 1)) / n)) or 0
+    for k, b in ipairs(M.bars) do
+        if k <= n and q:IsShown() then
+            b:ClearAllPoints()
+            b:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", 2 + (k - 1) * (bw + 1), 2)
+            b:SetSize(bw, h - 4)
+            b.unit = units[k]
+            b:Show()
+        else
+            b.unit = nil
+            b:Hide()
+        end
+    end
+    EN.TideChain()
+    EN.lastMana = 0
+    EN.ManaPaint()
+    return true
+end
+--- Each bar its mana and its curve colour; each chain link its curve alpha. Answers how many bars painted.
+function EN.ManaPaint()
+    local q = EN.heads and EN.heads.mana
+    local chain = EN.chain
+    local on = q and q:IsShown()
+    local curve = EN.ManaCurve()
+    local n, refused = 0, false
+    local units = EN.manaUnits or {}
+    if chain then
+        for k, f in ipairs(chain.links) do
+            local u = on and units[k]
+            if not on or #units == 0 then
+                f:SetAlpha(k == 1 and 0 or 1)                -- no box, or nobody: no glow
+            elseif not u then
+                f:SetAlpha(1)                                -- an unused link lets the rest decide
+            else
+                local ok, col = false, nil
+                if curve and UnitPowerPercent then ok, col = pcall(UnitPowerPercent, u, 0, true, curve) end
+                local set = false
+                if ok and type(col) == "table" and col.GetRGBA then
+                    set = pcall(function() local _, _, _, a = col:GetRGBA() f:SetAlpha(a) end)
+                end
+                if not set then refused = true f:SetAlpha(0) end
+            end
+        end
+        EN.chainSeen = (not on) and "box off" or (#units == 0 and "nobody") or (refused and "refused") or "chained"
+    end
+    if not (on and q.mana) then return 0 end
+    for _, b in ipairs(q.mana.bars) do
+        local u = b.unit
+        if u and b:IsShown() then
+            local okM, mx = pcall(UnitPowerMax, u, 0)
+            local okV, v = pcall(UnitPower, u, 0)
+            if okM and okV then pcall(b.SetMinMaxValues, b, 0, mx) pcall(b.SetValue, b, v) end
+            local ok, col = false, nil
+            if curve and UnitPowerPercent then ok, col = pcall(UnitPowerPercent, u, 0, true, curve) end
+            if not (ok and type(col) == "table" and col.GetRGBA and pcall(function() b:SetStatusBarColor(col:GetRGBA()) end)) then
+                b:SetStatusBarColor(EN.MANA_COL[1], EN.MANA_COL[2], EN.MANA_COL[3], 1)   -- no curve: always shown
+            end
+            n = n + 1
+        end
+    end
+    return n
+end
+function EN.ManaTick()
+    local now = GetTime()
+    if EN.lastMana and now - EN.lastMana < EN.MANA_EVERY then return end
+    EN.lastMana = now
+    EN.ManaPaint()
+end
+--- `/bish alpha radar mana`: who the bars are for, and whether the "everyone low" glow could be chained.
+function EN.ManaStatus()
+    local names = {}
+    for _, u in ipairs(EN.manaUnits or {}) do names[#names + 1] = u end
+    local line = string.format("party mana: line %d%%, bars for %s, glow %s, box %s", EN.MANA_LINE * 100,
+        #names > 0 and table.concat(names, " ") or "nobody", tostring(EN.chainSeen or "not built"),
+        tostring(EN.heads and EN.heads.mana and EN.heads.mana:IsShown() or false))
+    if NS.Print then NS.Print(line) end
+    return line
+end
+
 --- `/bish alpha radar box`: the target box's own numbers - how bright each layer is, its bar's colour, what the enemy
 --- check last said (Arn, 16 Nov: "the target is right next to me and its dim").
 function EN.BoxStatus()
@@ -880,7 +1083,7 @@ local function wrap()
             return r
         end
     end
-    if look then RD.Look = function(...) local r = look(...) EN.Range() return r end end
+    if look then RD.Look = function(...) local r = look(...) EN.Range() EN.ManaTick() return r end end
     -- a new ship (the group grew or shrank): the radar's alert boxes take its colours
     local ship = RD.ApplyShip
     if ship then RD.ApplyShip = function(...) local r = ship(...) EN.TintRadarHeads() return r end end

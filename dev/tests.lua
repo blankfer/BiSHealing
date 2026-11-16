@@ -15595,6 +15595,30 @@ do
                 RD.Arm()
                 ok(not (EN.heads.rip and EN.heads.rip:IsShown()), "no Riptide known: no bar")
             end
+            -- PARTY MANA (Arn: "a way to only show once they are all below a certain percentage" - "50%")
+            do
+                RD.Arm()
+                local mq = EN.heads and EN.heads.mana
+                ok(mq and mq:IsShown(), "the party mana box on the top row")
+                ok(#(EN.manaUnits or {}) >= 1 and mq.mana.bars[1]:IsShown(), "a bar for each mana user in your group", #(EN.manaUnits or {}))
+                local keepUPP = _G.UnitPowerPercent
+                _G.UnitPowerPercent = function() return { GetRGBA = function() return 0.3, 0.55, 1, secret() end } end
+                EN.ManaPaint()
+                ok(EN.chainSeen == "chained" and EN.chain.links[1].__alpha ~= nil, "in a fight: each link's alpha handed the hidden curve alpha, never tested", tostring(EN.chainSeen))
+                _G.UnitPowerPercent = function() return { GetRGBA = function() return 0.3, 0.55, 1, 1 end } end
+                EN.ManaPaint()
+                local all = true
+                for k = 1, #EN.manaUnits do if EN.chain.links[k]:GetAlpha() ~= 1 then all = false end end
+                ok(all, "everyone under half: every link lit, the Mana Tide glow shows")
+                _G.UnitPowerPercent = function(u) return { GetRGBA = function() return 0.3, 0.55, 1, (u == "player") and 0 or 1 end } end
+                EN.ManaPaint()
+                ok(EN.chain.links[1]:GetAlpha() == 0, "one of them over half: that link dark, so the glow is not shown")
+                _G.UnitPowerPercent = keepUPP
+                ok(RD.Command("mana"):find("party mana: line 50%%", 1), "/bish alpha radar mana: the readout")
+                RD.SetSw("mana", false)
+                ok(not mq:IsShown() and EN.chain.links[1]:GetAlpha() == 0, "switched off: no box, no glow")
+                RD.SetSw("mana", true)
+            end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
             RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)
