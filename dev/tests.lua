@@ -5321,6 +5321,7 @@ local AURAS = { player = { HELPFUL = {}, HARMFUL = {} },
                 party1 = { HELPFUL = {}, HARMFUL = {} },
                 party2 = { HELPFUL = {}, HARMFUL = {} } }
 local TOTEMS = { false, false, false, false }
+STATE.totemName = {}                                    -- a slot's standing totem's name, when a test gives one
 _G.C_UnitAuras = { GetAuraDataByIndex = function(unit, i, filter)
     if STATE.inCombat then error("Auras cannot be accessed when secret while tainted", 2) end
     local list = AURAS[unit] and AURAS[unit][filter or "HELPFUL"]
@@ -5330,7 +5331,8 @@ _G.GetTotemInfo = function(slot)
     if STATE.inCombat then error("attempt to compare a secret number value", 2) end
     -- MEASURED 11 Nov 2026 (Arn's BiS? probe, out of a fight): an EMPTY slot answers true, "", 0, 0 - never false.
     -- A down totem: true, its name, the GetTime() it went down, its length (300 s).
-    if TOTEMS[slot] then return true, "Totem", CLOCK, 300 end
+    -- the fifth answer is the totem's icon (the game's own GetTotemInfo shape: have, name, start, length, icon)
+    if TOTEMS[slot] then return true, STATE.totemName[slot] or "Totem", CLOCK, 300, 136000 + slot end
     return true, "", 0, 0
 end
 -- GetTotemDuration (in the 16001 census): the client's duration object for a slot, fight or not - an opaque thing to
@@ -14955,6 +14957,42 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- THE TOTEM TIMERS (Arn: "4 boxes ... 5:00 timer ... grey air blue water brown earth and red fire") and A CLICK DROPS
+    -- IT AGAIN ("will it remember what [totem icon timer] and i click it will it be able to drop it")
+    do
+        local keepT = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
+        local keepTex = _G.C_Spell.GetSpellTexture
+        _G.C_Spell.GetSpellTexture = function(n) return n == "Mana Spring Totem" and 136053 or nil end
+        local timers = {}
+        for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
+        ok(timers[1].slot == 4 and timers[2].slot == 3 and timers[3].slot == 2 and timers[4].slot == 1,
+           "four boxes in the order air, water, earth, fire (the game's slots 4, 3, 2, 1)")
+        TOTEMS[3], STATE.totemName[3] = true, "Mana Spring Totem"
+        RD.LearnTimers()
+        RD.PaintTimers()
+        local w = timers[2]
+        ok(w.icon.__texture == 136003 and w.cd and w.cd.__fromDuration ~= false, "the water box: the standing totem's own icon and the game's countdown",
+           w.icon.__texture)
+        ok(w.totem == "Mana Spring Totem" and w:GetAttribute("type1") == "macro" and w:GetAttribute("macrotext1") == "/cast Mana Spring Totem"
+           and NS.DB().radar.totemSlots[3] == "Mana Spring Totem",
+           "dropped out of a fight: the box remembers it (kept) and its click drops it again", w:GetAttribute("macrotext1"))
+        TOTEMS[3] = false
+        RD.LearnTimers()
+        RD.PaintTimers()
+        ok(w:GetAttribute("macrotext1") == "/cast Mana Spring Totem" and w.base.__texture == 136053,
+           "the totem gone: the click still drops it, and its icon waits dim under the empty slot")
+        STATE.inCombat = true
+        TOTEMS[3], STATE.totemName[3] = true, "Healing Stream Totem"
+        ok(pcall(RD.LearnTimers) and w.totem == "Mana Spring Totem", "a totem swapped in a fight: nothing written mid-fight")
+        STATE.inCombat = false
+        RD.LearnTimers()
+        ok(w.totem == "Healing Stream Totem", "and learned when the fight ends")
+        for k = 1, 4 do TOTEMS[k] = keepT[k] end
+        STATE.totemName[3] = nil
+        NS.DB().radar.totemSlots = nil
+        for k = 1, 4 do timers[k]:Hide() end
+        _G.C_Spell.GetSpellTexture = keepTex
+    end
     -- THE FOOD'S OWN ICON (Arn: "put the food icon on the H or Fork" ... "just the food we are eating"): whatever was picked
     do
         local keepIcon = _G.GetItemIcon

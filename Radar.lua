@@ -2084,6 +2084,7 @@ end
 --- Out of the deck: every box's plate and callsign away (the radar and the engineer's view draw neither); the kick back
 --- to its drawn triangle.
 function RD.DeckClear()
+    for _, t in ipairs(RD.timers or {}) do t:Hide() end   -- the totem timers are the deck's alone
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.deckPlate then sp.deckPlate:Hide() end
         if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
@@ -2267,13 +2268,158 @@ function RD.DeckLayout(T, order)
     box:Show()
     put(T.n + 1, place.target, false)
     put(T.n + 2, place.tot, false)
-    -- the deck of buttons under the crew: the tools row, then the totems
+    -- the deck of buttons under the crew: the tools row, then the totems with their four timers
     local yt = y0 + place.h + C.gap + RD.SYS_PX / 2
     toolsRow(W, yt)
     local H = yt + RD.SYS_PX / 2 + C.pad
-    H = H + totemRow(W, yt)
+    H = H + RD.DeckTotemRow(W, yt)
     f:SetSize(W, H)
     return { W = W, H = H, tier = T, placed = placed, place = place, deck = true, rows = { tools = yt } }
+end
+
+--[[ THE TOTEMS' TIMERS (15 Nov 2026, Arn: "we have a lot of room on the totem class utility row, can we add 4 boxes can be
+  long to acommodate 5:00 timer for the totems, with a icon of what totem it is in this order grey air blue water brown
+  earth and red fire"). On the deck's totem row: CALL, BRING, RECALL at its left, then four long boxes to its right edge,
+  air / water / earth / fire, each edged in its element's colour, the standing totem's icon at its left and the GAME'S own
+  countdown beside it (a Cooldown fed GetTotemDuration's object - the client counts and writes the number, in a fight too;
+  out of a fight the plain start/length). The icon from GetTotemInfo, handed to the texture untouched (secret or not).
+  Shown for anyone who has totems (the totem buttons armed, RD.ArmTotems); repainted on PLAYER_TOTEM_UPDATE. ]]
+RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 fire, 2 earth, 3 water, 4 air
+    { slot = 4, col = { 0.72, 0.74, 0.80, 1 } },   -- air: grey
+    { slot = 3, col = { 0.25, 0.55, 1.00, 1 } },   -- water: blue
+    { slot = 2, col = { 0.62, 0.42, 0.22, 1 } },   -- earth: brown
+    { slot = 1, col = { 1.00, 0.32, 0.26, 1 } },   -- fire: red
+}
+--[[ A CLICK DROPS IT AGAIN (Arn, 15 Nov: "will it remember what [totem icon timer] and i click it will it be able to drop
+  it, we drop the totem first out of combat and make a macro in it"). Each box is a secure button: out of a fight the
+  standing totem's NAME is plain, so it is remembered for its slot (db().totemSlots, kept across a reload) and the box's
+  click becomes `/cast <that totem>` - which then works in a fight too. Under the live icon, the remembered totem's icon,
+  dim: an empty slot still shows what a click drops. A totem swapped in mid-fight is learned when the fight ends (the
+  names are secret in one). ]]
+RD.TIMER_DIM = 0.45
+function RD.TotemTimer(k)
+    RD.timers = RD.timers or {}
+    local t = RD.timers[k]
+    if t then return t end
+    local spec = RD.TOTEM_TIMERS[k]
+    t = CreateFrame("Button", nil, RD.conLayer, "SecureActionButtonTemplate")
+    if t.RegisterForClicks then t:RegisterForClicks("AnyDown") end
+    t.bg = t:CreateTexture(nil, "BACKGROUND")
+    t.bg:SetAllPoints(t)
+    t.bg:SetColorTexture(0, 0, 0, 0.4)
+    t.edges = edge(t, spec.col, 1.5)
+    t.base = t:CreateTexture(nil, "BORDER")                 -- the remembered totem, dim
+    t.base:SetPoint("TOPLEFT", t, "TOPLEFT", 2, -2)
+    t.base:SetPoint("BOTTOMLEFT", t, "BOTTOMLEFT", 2, 2)
+    if t.base.SetTexCoord then t.base:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    t.base:SetAlpha(RD.TIMER_DIM)
+    t.icon = t:CreateTexture(nil, "ARTWORK")                -- the standing totem, the game's own icon
+    t.icon:SetPoint("TOPLEFT", t, "TOPLEFT", 2, -2)
+    t.icon:SetPoint("BOTTOMLEFT", t, "BOTTOMLEFT", 2, 2)
+    if t.icon.SetTexCoord then t.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    t:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(self.totem and self.totem:upper() or "TOTEM TIMER")
+        GameTooltip:AddLine(self.totem and "Click: drop it again." or "Drop a totem out of a fight: this box remembers it.",
+            1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    t:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    local okCd, cd = pcall(CreateFrame, "Cooldown", nil, t, "CooldownFrameTemplate")
+    if okCd and cd then
+        cd:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 2, 0)
+        cd:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2)
+        if cd.SetDrawSwipe then cd:SetDrawSwipe(false) end          -- the number only: a long box takes no round swipe
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+        t.cd = cd
+    end
+    t.slot = spec.slot
+    RD.timers[k] = t
+    return t
+end
+
+--- Out of a fight: learn the standing totem's name for each slot (kept), and arm each box's click with its remembered one.
+function RD.LearnTimers()
+    if combat() or RD.inFight then return false end
+    local d = db()
+    d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
+    for _, t in ipairs(RD.timers or {}) do
+        local okI, _, name = pcall(GetTotemInfo, t.slot)
+        name = okI and plain(name) or nil
+        if type(name) == "string" and name ~= "" then d.totemSlots[t.slot] = name end
+        local want = d.totemSlots[t.slot]
+        t.totem = want
+        t:SetAttribute("type1", want and "macro" or nil)
+        t:SetAttribute("macrotext1", want and ("/cast " .. want) or nil)
+        local tex
+        if want and C_Spell and C_Spell.GetSpellTexture then
+            local ok, x = pcall(C_Spell.GetSpellTexture, want)
+            if ok then tex = x end
+        end
+        pcall(t.base.SetTexture, t.base, tex)
+    end
+    return true
+end
+
+--- One timer box from its slot: the icon untouched, the game's own countdown (or nothing for an empty slot).
+function RD.PaintTimer(t)
+    if not (t and t:IsShown()) then return false end
+    local okI, _, _, start, dur, icon = pcall(GetTotemInfo, t.slot)
+    pcall(t.icon.SetTexture, t.icon, okI and icon or nil)
+    local cd = t.cd
+    if not cd then return okI end
+    local obj
+    if GetTotemDuration then
+        local ok, o = pcall(GetTotemDuration, t.slot)
+        if ok then obj = o end
+    end
+    if obj and cd.SetCooldownFromDurationObject and pcall(cd.SetCooldownFromDurationObject, cd, obj) then return true end
+    local st, d = okI and plain(start) or nil, okI and plain(dur) or nil
+    if type(st) == "number" and type(d) == "number" and d > 0 and cd.SetCooldown then
+        cd:SetCooldown(st, d)
+    elseif cd.Clear then
+        cd:Clear()
+    end
+    return true
+end
+function RD.PaintTimers()
+    for _, t in ipairs(RD.timers or {}) do RD.PaintTimer(t) end
+end
+
+--- The deck's totem row: the totem buttons you know at its left, then the four timers to its right edge. Answers the height
+--- it took (0 = no totems: nothing shown).
+function RD.DeckTotemRow(W, y)
+    local list = {}
+    for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
+    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
+    for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
+    if #list == 0 then return 0 end
+    local C, gap = RD.CON, RD.CON.toolGap
+    local y6 = y + RD.SYS_PX + C.gap
+    local x = C.pad + RD.SYS_PX / 2
+    for k, b in ipairs(list) do
+        at(square("totem" .. k, RD.SYS_PX), x, y6)
+        at(b, x, y6)
+        x = x + RD.SYS_PX + gap
+    end
+    local left = x - RD.SYS_PX / 2 + 4                 -- where the timers start, after the buttons
+    local n = #RD.TOTEM_TIMERS
+    local tw = math.floor((W - C.pad - left - (n - 1) * gap) / n)
+    for k = 1, n do
+        local t = RD.TotemTimer(k)
+        t:SetSize(tw, RD.SYS_PX)
+        t:ClearAllPoints()
+        t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", left + (k - 1) * (tw + gap), -(y6 - RD.SYS_PX / 2))
+        t.icon:SetWidth(RD.SYS_PX - 4)
+        t.base:SetWidth(RD.SYS_PX - 4)
+        t:Show()
+    end
+    RD.LearnTimers()                                   -- each box's remembered totem, and its click
+    RD.PaintTimers()
+    return RD.SYS_PX + C.gap
 end
 
 --- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
@@ -5118,6 +5264,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         if RD.Active() and not combat() then RD.Arm() end
         return
     end
+    if event == "PLAYER_TOTEM_UPDATE" then                      -- the deck's four timers: the game's own countdowns
+        RD.LearnTimers()                                         -- out of a fight: the totem dropped, remembered for its box
+        RD.PaintTimers()
+    end
     if event == "PLAYER_TOTEM_UPDATE" and (RD.inFight or combat()) then
         if RD.TotemSlotChanged(a1) and RD.Active() then RD.PaintTotems() end   -- a fight: the slot number only
         return
@@ -5151,6 +5301,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
             RD.ArmTools()                  -- the numbers are plain again: each tool re-learns where it lights
             RD.PaintQuiet() RD.PaintShield() RD.PickFuel() RD.PaintFuel()
         end
+        RD.LearnTimers()                   -- a totem swapped in the fight: its box learns it now
         return
     end
     if not RD.Active() then return end
