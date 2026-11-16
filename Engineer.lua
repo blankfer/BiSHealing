@@ -304,6 +304,9 @@ function EN.Paint(sp)
         if okD and plain(dead) == true then c = (FG and FG.DEAD_COLOR) or { 0.35, 0.10, 0.10 } end
     end
     e.bar:SetStatusBarColor(c[1], c[2], c[3], 1)
+    -- AN ENEMY IS RED (Arn: "enemies in target and target of target showing up with green health bars"): only the
+    -- target box's two units can be a foe; the grid's own road, a secret answer goes through the client's curve
+    if (unit == "target" or unit == "targettarget") and FG and FG.PaintHostile then FG.PaintHostile(e, unit, c) end
     e.box:Show()
     return true
 end

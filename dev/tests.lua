@@ -14976,6 +14976,28 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- AN ENEMY IS RED (Arn: "enemies in target and target of target showing up with green health bars")
+    do
+        local tSp
+        for _, sp in ipairs(RD.spokes) do if sp.unit == "target" then tSp = sp end end
+        local keepH = STATE.hostile.target
+        STATE.hostile.target = true
+        NS.EN.Paint(tSp)
+        local c = tSp and tSp.en and tSp.en.bar.__color
+        ok(c and math.abs(c[1] - NS.FG.HOSTILE[1]) < 0.01 and math.abs(c[2] - NS.FG.HOSTILE[2]) < 0.01,
+           "an enemy as your target: its bar red")
+        STATE.hostileSecret = true
+        tSp.en.bar.__color = nil
+        NS.EN.Paint(tSp)
+        ok(tSp.en.bar.__color ~= nil, "in a dungeon (the answer secret): the client's curve still colours it")
+        STATE.hostileSecret = false
+        STATE.hostile.target = false
+        NS.EN.Paint(tSp)
+        c = tSp.en.bar.__color
+        ok(c and math.abs(c[1] - NS.FG.HOSTILE[1]) > 0.01 or (c and math.abs(c[2] - NS.FG.HOSTILE[2]) > 0.01),
+           "a friend as your target: not red")
+        STATE.hostile.target = keepH
+    end
     -- THE TOTEM ROW SPLIT (Arn: "split totem down the middle and put the call recall and bring in the center")
     do
         local keepM = {}
