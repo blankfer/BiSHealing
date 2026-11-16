@@ -15437,6 +15437,22 @@ do
             RD.SetSw("tools", false)
             RD.SetSw("tools", true)
             ok(RD.tide and RD.tide:IsShown(), "tools off then on: the tools shown again")
+            -- the mock was kinder than the client: after a /reload the tools are not shown yet at the first layout
+            do
+                local placed = {}
+                for _, k in ipairs(RD.TOOL_KEYS) do
+                    local b = RD[k]
+                    if b then b:Hide() b:ClearAllPoints() end
+                end
+                RD.DeckTools(400, 300)
+                local all = true
+                for _, k in ipairs(RD.TOOL_KEYS) do
+                    local b = RD[k]
+                    if b and not (b.GetPoint and b:GetPoint()) then all = false end
+                end
+                ok(all, "every tool is placed even before the game shows it (the /reload case)")
+                RD.Arm()
+            end
             -- the sliders (Arn: "maybe we also put the sliders there for width and height")
             local wsl, hsl = RD.swPanel.sliders.width, RD.swPanel.sliders.height
             ok(wsl and hsl, "the panel has a WIDTH and a BOX HEIGHT slider")

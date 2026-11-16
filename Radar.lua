@@ -2214,12 +2214,13 @@ RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- 
 function RD.DeckTools(W, top)
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
     local per = math.max(1, math.floor((W - 2 * C.pad + gap) / (S + gap)))
-    -- the tools in use (shown, or hidden by the switch), in their order; a narrow window (Arn's shot, 16 Nov: "the mana
-    -- thing did not center"): the mana four on a line of their own, centred in their box, the rest wrapped under
+    -- every tool, in its order - NOT only the shown ones (Arn, 16 Nov: "all the buttons for food are gone" after a /reload:
+    -- at the first layout the game has not shown them yet, so a "shown only" list placed none); a narrow window (Arn's
+    -- shot: "the mana thing did not center"): the mana four on a line of their own, centred in their box, the rest under
     local all, mana, rest = {}, {}, {}
     for _, k in ipairs(RD.TOOL_KEYS) do
         local b = RD[k]
-        if b and (b:IsShown() or b.swHidden) then
+        if b then
             all[#all + 1] = b
             if RD.MANA_KEYS[k] then mana[#mana + 1] = b else rest[#rest + 1] = b end
         end
