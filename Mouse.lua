@@ -687,25 +687,75 @@ end
   15 s pause starts it over at Riptide. ]]
 FM.RIPTIDE_CD = 12
 FM.SEQ_RESET = 15
-FM.SEQ_EXTRA = 1           -- one heal more than the cooldown needs (Arn, 16 Nov: "add one more chain heal") - six Chain Heals
-function FM.SeqCount(heal)
-    local name = type(heal) == "string" and (heal:match("^(.-)%(") or heal) or nil
-    local ct
-    if name and C_Spell and C_Spell.GetSpellInfo then
-        local ok, info = pcall(C_Spell.GetSpellInfo, name)
-        if ok and type(info) == "table" then ct = tonumber(info.castTime) end
+--[[ COUNTED FROM THE GLOBAL COOLDOWN, NOT THE CAST TIME (16 Nov 2026). Arn, in Scarlet Monastery: Riptide "sometimes does
+  not cast, then randomly works again" - "i move to cancel a cast lets be honest". A cancelled Chain Heal still moves the
+  list on, so six of them could run out in 6 x 1.5 s and land on Riptide while it cooled: the list sticks there until it
+  is ready. What no cancel can beat is the GLOBAL COOLDOWN every cast start triggers: one step per GCD at most. So the
+  heals are enough steps of one GCD to outlast Riptide's cooldown: ceil(cooldown / GCD) - 8 at 12 s and 1.5 s, and the
+  list can never come back early. Arn: "make a way for it to read the spell book ... trolls have a racial for 10% faster
+  cast ... haste items": the GCD is 1.5 s shortened by your spell haste (UnitSpellHaste, gear and racials), never under
+  1 s, and Riptide's cooldown is the spell's own (GetSpellBaseCooldown); both read when the macro is written, out of a
+  fight, and written again when they change (FM.SeqWatch). Shortening the GCD with haste errs SAFE: if Forever does not
+  shorten it, the list is just a step longer. ]]
+FM.GCD_BASE = 1.5
+FM.GCD_FLOOR = 1.0
+FM.SEQ_MAX = 14
+--- Your spell haste in %, plain, or 0 (unknown counts as none).
+function FM.Haste()
+    if not UnitSpellHaste then return 0 end
+    local ok, h = pcall(UnitSpellHaste, "player")
+    if not ok or (NS.Secret and NS.Secret(h)) or type(h) ~= "number" or h ~= h then return 0 end
+    return math.max(0, math.min(h, 400))
+end
+--- The global cooldown your casts start, in seconds.
+function FM.SeqGcd()
+    return math.max(FM.GCD_FLOOR, FM.GCD_BASE / (1 + FM.Haste() / 100))
+end
+--- Riptide's own cooldown off the spell book, else 12 s.
+function FM.RiptideCooldown()
+    local id
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, "Riptide")
+        id = ok and type(info) == "table" and info.spellID or nil
     end
-    local secs = (ct and ct > 0) and (ct / 1000) or 2.5
-    secs = math.max(1.5, secs)
-    return math.max(3, math.min(8, math.ceil((FM.RIPTIDE_CD - 1.5) / secs) + FM.SEQ_EXTRA))
+    if id and not (NS.Secret and NS.Secret(id)) and GetSpellBaseCooldown then
+        local ok, ms = pcall(GetSpellBaseCooldown, id)
+        if ok and not (NS.Secret and NS.Secret(ms)) and type(ms) == "number" and ms >= 3000 and ms <= 60000 then return ms / 1000 end
+    end
+    return FM.RIPTIDE_CD
+end
+--- How many heals follow Riptide: enough global cooldowns to outlast its cooldown, so even cancelled casts never bring the
+--- list back while it cools. `heal` is kept for callers; every heal starts the same global cooldown.
+function FM.SeqCount(heal)
+    local n = math.ceil(FM.RiptideCooldown() / FM.SeqGcd() - 0.001)
+    return math.max(3, math.min(FM.SEQ_MAX, n))
+end
+--- The list's reset: longer than Riptide's cooldown, so a pause never lands it on a cooling Riptide.
+function FM.SeqReset()
+    return math.max(FM.SEQ_RESET, math.ceil(FM.RiptideCooldown()) + 1)
+end
+FM.GUARD = "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
+--- A bind's whole heal text after `pre` (a res line, the wheel's front): the guard, then FM.HealLines - except a Riptide
+--- sequence with nothing in front of it, which carries the guard in its own conditions ([@mouseover,help,nodead]) and so
+--- has 70 more letters for heals (eight ranked Chain Heals do not fit beside the guard line).
+function FM.GuardedHeal(pre, spell, mod, heal)
+    pre = pre or ""
+    local _, boost = FM.Front(spell)
+    if boost and FM.AIMED[boost] and FM.FirstLines(spell, mod, true) == "" then
+        return pre .. FM.HealLines(spell, mod, heal, FM.MACRO_MAX - #pre, true)
+    end
+    local lead = pre .. FM.GUARD
+    return lead .. FM.HealLines(spell, mod, heal, FM.MACRO_MAX - #lead)
 end
 --- The lines that cast a bind's heal, after the guard: what goes first, then the heal - or, with an aimed booster
 --- (Riptide), the trinkets and then ONE cast sequence. `room` = characters left in the macro (a sequence shortens to fit).
-function FM.HealLines(spell, mod, heal, room)
+--- `guarded`: no guard line before it, so the sequence asks for a living friend itself.
+function FM.HealLines(spell, mod, heal, room, guarded)
     local _, boost = FM.Front(spell)
     if boost and FM.AIMED[boost] then
         local front = FM.FirstLines(spell, mod, true)
-        local head = front .. "/castsequence [@mouseover] reset=" .. FM.SEQ_RESET .. " " .. boost
+        local cond = guarded and "[@mouseover,help,nodead]" or "[@mouseover]"
+        local head = front .. "/castsequence " .. cond .. " reset=" .. FM.SeqReset() .. " " .. boost
         local n, text = FM.SeqCount(heal), nil
         while true do
             local parts = { head }
@@ -1259,9 +1309,7 @@ function FM.ApplyTo(cell)
                     -- spent on a dead or hostile cell.
                     local _, heal = FM.Boost(spell)
                     kind, cast = "macro", nil
-                    local lead = FM.ResLine(spell)
-                        .. "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                    text = lead .. FM.HealLines(spell, m.key, heal, FM.MACRO_MAX - #lead)
+                    text = FM.GuardedHeal(FM.ResLine(spell), spell, m.key, heal)
                 elseif spell and FM.ResLine(spell) ~= "" then
                     -- a heal with a res in front of it: one macro, the client picks at the click
                     kind, cast = "macro", nil
@@ -1476,8 +1524,7 @@ function FM.ApplyWheel(owner)
                         -- healable. A booster rides between the two: after the guard, so Nature's
                         -- Swiftness is never spent on a wheel turn over nobody.
                         local _, healCast = FM.Boost(spell)
-                        local lead = front .. "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                        text = lead .. FM.HealLines(spell, m.key, healCast, FM.MACRO_MAX - #lead)
+                        text = FM.GuardedHeal(front, spell, m.key, healCast)
                     end
                     b:SetAttribute("type", (text or macro) and "macro" or nil)
                     b:SetAttribute("macrotext", text)
@@ -1560,8 +1607,31 @@ FM.resEvents:SetScript("OnEvent", function(_, event)
     end
 end)
 
+--- THE SEQUENCE WATCH: haste from new gear or a racial, or a new Riptide rank, changes how many heals follow Riptide; the
+--- macros are written again (FM.Apply queues it in a fight) only when that number or the reset really moved.
+function FM.SeqSig()
+    return FM.SeqCount() .. "/" .. FM.SeqReset()
+end
+do
+    local okW, w = pcall(CreateFrame, "Frame")
+    if okW and w then
+        pcall(w.RegisterEvent, w, "PLAYER_EQUIPMENT_CHANGED")
+        pcall(w.RegisterEvent, w, "SPELLS_CHANGED")
+        if w.RegisterUnitEvent then pcall(w.RegisterUnitEvent, w, "UNIT_SPELL_HASTE", "player") end
+        w:SetScript("OnEvent", function()
+            local sig = FM.SeqSig()
+            if FM.seqSig == nil then FM.seqSig = sig return end    -- the first answer: the macros were written with it
+            if sig == FM.seqSig then return end
+            FM.seqSig = sig
+            if FM.Apply then FM.Apply() end
+        end)
+        FM.seqWatch = w
+    end
+end
+
 --- Push every bind onto every cell and the wheel. Queued when the fight is on.
 function FM.Apply()
+    FM.seqSig = FM.SeqSig and FM.SeqSig() or nil
     if InCombatLockdown and InCombatLockdown() then
         FM.pending = true
         return false
