@@ -12812,6 +12812,10 @@ do
         RD.CastStrip(sp, true)
         c = sp.castStrip.__color
         ok(c and c[1] == RD.CAST_SHIELDED[1], "one you cannot: grey, like the shield")
+        NI = secret()
+        sp.castStrip:SetAlpha(0)
+        ok(RD.CastStrip(sp, true) and sp.castStrip:GetAlpha() == 1, "in a fight (the flag secret): still shows, the client picks the colour")
+        NI = true
         _G.UnitChannelDuration = function() return nil end
         _G.UnitCastingDuration = function(u) if u == "party3target" then return castObj end end
         RD.CastStrip(sp, true)

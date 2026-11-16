@@ -5084,7 +5084,9 @@ function RD.CastStrip(sp, lit)
     local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
     if not pcall(b.SetTimerDuration, b, dur, interp, dir) then b:SetAlpha(0) return false end
     local A, G = RD.CAST_COL, RD.CAST_SHIELDED
-    local ni = NS.KG and NS.KG.Protected(tok) or false
+    -- never `x and flag or false`: in a fight the flag is a secret boolean and `and`/`or` test it (live 15 Nov, Radar:5087)
+    local ni = false
+    if NS.KG then ni = NS.KG.Protected(tok) end
     if NS.Secret and NS.Secret(ni) then
         local tern = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
         local drew = false
