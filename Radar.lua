@@ -6368,6 +6368,7 @@ end
 -- when i click them ... like the bis grid in normal view"). No standing range mark any more (the red rim dashes asked
 -- the client about every spoke on every look): a heal that FAILS on the pip under the mouse flashes why, under it.
 local clickWords
+RD.SHORT_WORD = { RANGE = "RNG" }    -- the words as shown: three letters each, the boxes sized to them
 function RD.ClickWords()
     if clickWords then return clickWords end
     clickWords = {}
@@ -6396,7 +6397,7 @@ function RD.HeardError(msg)
     end
     local sp = RD.over
     if not (word and sp and sp.los and sp.unit) then return nil end
-    sp.los.word:SetText(word)
+    sp.los.word:SetText(RD.SHORT_WORD[word] or word)     -- RNG on screen, RANGE inside (Arn, 16 Nov: "LOS RNG OVH")
     if NS.EN and NS.EN.PlaceWord then NS.EN.PlaceWord(sp, word) end   -- the console: into its own header box
     sp.los:SetAlpha(1)
     if sp.losFade then sp.losFade:Stop() sp.losFade:Play() end

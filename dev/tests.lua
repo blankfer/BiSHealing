@@ -12637,8 +12637,8 @@ do
            "in the grid's flash red")
         ok(sp1.los:GetAlpha() == 0, "and only there")
         fire(RD.events, "UI_ERROR_MESSAGE", 51, "Out of range.")
-        ok(sp2.los.word.__text == "RANGE" and sp2.los:GetAlpha() == 1, "out of range: RANGE", sp2.los.word.__text)
-        ok(RD.HeardError("Not enough mana") == nil and sp2.los.word.__text == "RANGE", "any other error: nothing new")
+        ok(sp2.los.word.__text == "RNG" and sp2.los:GetAlpha() == 1, "out of range: RNG (16 Nov, three letters)", sp2.los.word.__text)
+        ok(RD.HeardError("Not enough mana") == nil and sp2.los.word.__text == "RNG", "any other error: nothing new")
         ok(RD.HeardError(secretString()) == nil, "a secret error text is never read")
         d.flash = false
         ok(RD.HeardError(LOSMSG) == nil, "the grid's LOS flash switched off: off here too")
@@ -12883,8 +12883,8 @@ do
            and brp == "LEFT" and o.win:DoesClipChildren() and o.bar:GetWidth() == OV.SPAN and o.bar:GetAlpha() == 0,
            "OVER hangs off the fill's end; the bar (never seen, " .. OV.SPAN .. " px) ends at a CLIPPING window: only a full bar shows it")
         local wc = o.word.__color or {}
-        ok(o.word.__text == "OVER/H" and wc[1] == 1.00 and wc[2] == 0.24 and wc[3] == 0.92,
-           "the word: OVER/H, in the cockpit's magenta (Arn: \"magenta\", \"Over/H\")", tostring(o.word.__text))
+        ok(o.word.__text == "OVH" and wc[1] == 1.00 and wc[2] == 0.24 and wc[3] == 0.92,
+           "the word: OVH, in the cockpit's magenta (Arn, 16 Nov: \"LOS RNG OVH\")", tostring(o.word.__text))
         ok(OV.listening == "party1", "only the hovered unit is listened to")
         STATE.shift = true
         fire(OV.events, "MODIFIER_STATE_CHANGED")
@@ -15129,8 +15129,8 @@ do
         local list, H = NS.EN.Heads()
         local q = NS.EN.heads and NS.EN.heads.los
         local pt, rel, rp = NS.EN.HeadSpot("los")
-        ok(list == NS.EN.HEAD_DECK and H == NS.EN.HEAD_DECK_H and q and q.__h == H and q.__w >= 46 and pt == "CENTER",
-           "the deck's LOS / RANGE / OVER/H boxes are taller and wider, the word centred on its box", q and q.__h)
+        ok(list == NS.EN.HEAD_DECK and H == NS.EN.HEAD_DECK_H and q and q.__h == H and q.__w >= 34 and pt == "CENTER",
+           "the deck's LOS / RNG / OVH boxes: taller, sized to three letters, the word centred on its box", q and q.__w)
     end
     -- NAMES IN THE TARGET BOX TOO (Arn: "names here too"): a plain name as a callsign, a hidden (secret) one handed whole
     do

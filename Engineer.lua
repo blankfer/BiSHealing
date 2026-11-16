@@ -55,9 +55,11 @@ EN.HEAD_H = 16
 -- accommodate make sure they are centered"): the word keeps its size; its box grows round it, the strip taller.
 -- FIVE BOXES AT THE DECK'S OWN WIDTH (16 Nov 2026): loss of control and the Riptide bar joined; the three word boxes a
 -- little narrower, so all five fit the deck's own width without shrinking (a narrower window still scales them, EN.Heads)
-EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 62 }, { key = "over", x = 116, w = 66 },
-                 { key = "cc", x = 186, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
-                 { key = "rip", x = 272, w = 90 } }  -- the Riptide bar (EN.RipPaint)
+-- THREE LETTERS EACH (Arn, 16 Nov: "some of those boxes are bigger than the actual things it prints LOS RNG OVH maybe we
+-- can save space too"): the word boxes sized to their three letters
+EN.HEAD_DECK = { { key = "los", x = 0, w = 36 }, { key = "range", x = 40, w = 36 }, { key = "over", x = 80, w = 38 },
+                 { key = "cc", x = 122, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
+                 { key = "rip", x = 208, w = 90 } }  -- the Riptide bar (EN.RipPaint)
 EN.HEAD_DECK_H = 22
 --- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
 function EN.Heads()

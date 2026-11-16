@@ -52,11 +52,11 @@ OV.HELP_LONG = "OVER/H shows under a teammate on the radar (under their box in t
     .. "What they miss = the game's own number, minus heals already on their way. Heals over time are not judged. any - "
     .. "any overheal at all. half - more than half the heal wasted. 75% - three quarters or more. off - never."
 OV.SPAN = 10000         -- the hidden bar: 1% short of full moves the word 100 px - wholly out of its window, never half
-OV.W, OV.H = 68, 14     -- the window under the pip the word shows in (OVER/H and its outline, with room)
+OV.W, OV.H = 42, 14     -- the window under the pip the word shows in (OVER/H and its outline, with room)
 OV.FLASH_FOR = 1.2      -- the click's flash, the grid's own length (FG.FLASH_FOR)
 OV.MATCH_FOR = 0.6      -- a cast that starts this long after the click is the click's
 OV.COLOUR = { 1.00, 0.24, 0.92 }    -- the cockpit's magenta, as your target's crosshair (Arn, 12 Nov: "magenta")
-OV.WORD = "OVER/H"                   -- Arn, 12 Nov: "Over/H" - overheal, short
+OV.WORD = "OVH"                      -- Arn, 12 Nov: "Over/H"; 16 Nov: "LOS RNG OVH ... save space"
 OV.SLOT = { LeftButton = "left", RightButton = "right", MiddleButton = "middle", Button4 = "button4", Button5 = "button5" }
 
 local function secret(v) return NS.Secret and NS.Secret(v) or false end
