@@ -6603,15 +6603,15 @@ do
                 local CH = "Chain Heal(Rank 2)"
                 ok(rc.__attrs["*type2"] == "macro"
                    and rt == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-                          .. "/castsequence [@mouseover] reset=15 Riptide, " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH,
-                   "a click: the guard, then one cast sequence - Riptide, five Chain Heals, Riptide again", rt)
+                          .. "/castsequence [@mouseover] reset=15 Riptide, " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH .. ", " .. CH,
+                   "a click: the guard, then one cast sequence - Riptide, six Chain Heals (Arn: \"add one more\"), Riptide again", rt)
                 ok(not rt:find("/cast [@mouseover,help,nodead] Riptide", 1, true), "never the plain Riptide line that stalls the macro")
                 ok(#rt <= FM.MACRO_MAX, "the macro fits", #rt)
                 local keepInfo = C_Spell.GetSpellInfo
                 C_Spell.GetSpellInfo = function() return { castTime = 1500 } end
-                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 7, "a 1.5 s heal: seven of them cover Riptide's cooldown")
+                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 8, "a 1.5 s heal: eight (seven cover the cooldown, one more)")
                 C_Spell.GetSpellInfo = function() return { castTime = 3000 } end
-                ok(FM.SeqCount("Healing Wave(Rank 1)") == 4, "a 3 s heal: four")
+                ok(FM.SeqCount("Healing Wave(Rank 1)") == 5, "a 3 s heal: five")
                 C_Spell.GetSpellInfo = keepInfo
                 local short = FM.HealLines("Riptide+" .. CH, "", CH, 120)
                 ok(#short <= 120 and select(2, short:gsub("Chain Heal", "")) == 3, "too long for the macro: fewer heals, never past it", short)

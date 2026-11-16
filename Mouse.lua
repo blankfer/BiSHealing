@@ -687,6 +687,7 @@ end
   15 s pause starts it over at Riptide. ]]
 FM.RIPTIDE_CD = 12
 FM.SEQ_RESET = 15
+FM.SEQ_EXTRA = 1           -- one heal more than the cooldown needs (Arn, 16 Nov: "add one more chain heal") - six Chain Heals
 function FM.SeqCount(heal)
     local name = type(heal) == "string" and (heal:match("^(.-)%(") or heal) or nil
     local ct
@@ -696,7 +697,7 @@ function FM.SeqCount(heal)
     end
     local secs = (ct and ct > 0) and (ct / 1000) or 2.5
     secs = math.max(1.5, secs)
-    return math.max(3, math.min(8, math.ceil((FM.RIPTIDE_CD - 1.5) / secs)))
+    return math.max(3, math.min(8, math.ceil((FM.RIPTIDE_CD - 1.5) / secs) + FM.SEQ_EXTRA))
 end
 --- The lines that cast a bind's heal, after the guard: what goes first, then the heal - or, with an aimed booster
 --- (Riptide), the trinkets and then ONE cast sequence. `room` = characters left in the macro (a sequence shortens to fit).
