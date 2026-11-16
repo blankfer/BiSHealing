@@ -15567,6 +15567,30 @@ do
                 if me then me.tideTag:Hide() end
                 RD.readyAt.groundTest, RD.tideChatAt = nil, nil
             end
+            -- THE RIPTIDE TRACKER (Arn: "a riptide marker on who i riptided and on top in los row a riptide duration")
+            do
+                local keepRanks, keepRips = NS.FM.Ranks, RD.rips
+                NS.FM.Ranks = function(n) if n == "Riptide" then return { { rank = "Rank 1", spell = 408521 } } end return keepRanks(n) end
+                RD.Arm()
+                local rq = EN.heads and EN.heads.rip
+                ok(rq and rq:IsShown(), "a shaman who knows Riptide: the Riptide bar on top")
+                local tsp
+                for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
+                RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
+                RD.ripLast.untilAt = GetTime() + 1.5
+                EN.RipPaint()
+                ok(rq.rip.icon:GetAlpha() == 1 and rq.rip.late.TOP:IsShown(), "under one Chain Heal left: the icon lit, red edged - too late")
+                RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
+                ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
+                ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
+                RD.lastClick, RD.over = nil, nil
+                ok(RD.RipCast(GetTime()) == nil, "nobody clicked or under the mouse, no name: no guess")
+                NS.FM.Ranks, RD.rips, RD.ripLast = keepRanks, keepRips, nil
+                RD.Arm()
+                ok(not (EN.heads.rip and EN.heads.rip:IsShown()), "no Riptide known: no bar")
+            end
             -- RESET (Arn: "resets to everything on and the size i had it")
             RD.SwPreset("bare") RD.SetBoxHeight(160) RD.SetDeckWidth(300) d.radar.scale = 1.5
             RD.swPanel.reset:GetScript("OnClick")(RD.swPanel.reset)

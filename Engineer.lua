@@ -53,8 +53,11 @@ EN.HEAD_H = 16
 
 -- THE DECK'S BOXES, BIGGER (Arn, 15 Nov: "the los is a bit big if we have to go a little taller we can do that to
 -- accommodate make sure they are centered"): the word keeps its size; its box grows round it, the strip taller.
-EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 74 }, { key = "over", x = 128, w = 78 },
-                 { key = "cc", x = 210, w = 96 } }   -- 16 Nov: the fourth box, loss of control (EN.LossPaint)
+-- FIVE BOXES AT THE DECK'S OWN WIDTH (16 Nov 2026): loss of control and the Riptide bar joined; the three word boxes a
+-- little narrower, so all five fit the deck's own width without shrinking (a narrower window still scales them, EN.Heads)
+EN.HEAD_DECK = { { key = "los", x = 0, w = 46 }, { key = "range", x = 50, w = 62 }, { key = "over", x = 116, w = 66 },
+                 { key = "cc", x = 186, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
+                 { key = "rip", x = 272, w = 90 } }  -- the Riptide bar (EN.RipPaint)
 EN.HEAD_DECK_H = 22
 --- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
 function EN.Heads()
@@ -134,8 +137,9 @@ function EN.HeadBoxes()
     local set = EN[key]
     local deck = con and RD.Deck and RD.Deck() and RD.Sw
     local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
-        if not deck then return key ~= "cc" end
+        if not deck then return key ~= "cc" and key ~= "rip" end
         if key == "cc" then return RD.Sw("cc") end
+        if key == "rip" then return RD.Sw("rip") and RD.RipKnown and RD.RipKnown() end
         return RD.Sw("alerts")
     end
     local f, x0, y = EN.Where()
@@ -169,6 +173,7 @@ function EN.HeadBoxes()
         if not listed then q:Hide() end
     end
     if set.cc and set.cc:IsShown() then EN.LossPaint() end
+    if set.rip and set.rip:IsShown() then EN.RipPaint() end
     if not con then
         EN.TintRadarHeads()
         -- the black box's screen may be up (a code being typed): the boxes wait under it
@@ -476,6 +481,105 @@ function EN.LossStatus()
         tostring(EN.heads and EN.heads.cc and EN.heads.cc:IsShown() or false))
     if NS.Print then NS.Print(line) end
     return line
+end
+
+-- THE RIPTIDE BAR (16 Nov 2026; Radar.lua RD.RipCast keeps the clock). Six segments, one Chain Heal each; the bar drains
+-- from the right; the LAST segment (the left end) holds the Riptide icon - dim while there is time for another Chain Heal,
+-- lit with a red edge once there is not. Ticks only while a Riptide of yours stands.
+EN.RIP_COL = { 0.30, 0.75, 1.00, 0.90 }
+EN.RIP_EVERY = 0.1
+function EN.RipBuild(q)
+    if q.rip then return q.rip end
+    local B = {}
+    B.bar = CreateFrame("StatusBar", nil, q)
+    B.bar:SetPoint("TOPLEFT", q, "TOPLEFT", 1, -1)
+    B.bar:SetPoint("BOTTOMRIGHT", q, "BOTTOMRIGHT", -1, 1)
+    B.bar:SetStatusBarTexture(EN.TEX)
+    local c = EN.RIP_COL
+    B.bar:SetStatusBarColor(c[1], c[2], c[3], c[4])
+    B.bar:SetMinMaxValues(0, 1)
+    B.bar:SetValue(0)
+    B.ticks = {}
+    local RD = NS.RD
+    local segs = (RD and RD.RIP_SEGS) or 6
+    for k = 1, segs - 1 do
+        local t = q:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(0, 0, 0, 0.8)
+        t:SetWidth(1)
+        B.ticks[k] = t
+    end
+    B.icon = q:CreateTexture(nil, "OVERLAY", nil, 2)
+    if B.icon.SetTexCoord then B.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, (RD and RD.RIPTIDE) or "Riptide")
+        if ok then pcall(B.icon.SetTexture, B.icon, t) end
+    end
+    B.late = {}
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+        local t = q:CreateTexture(nil, "OVERLAY", nil, 3)
+        t:SetColorTexture(1, 0.2, 0.2, 1)
+        B.late[side] = t
+    end
+    q.rip = B
+    return B
+end
+--- Lay the segments out on the box's size (called with every paint - the box can be narrowed).
+local function ripShape(q, B)
+    local RD = NS.RD
+    local segs = (RD and RD.RIP_SEGS) or 6
+    local w, h = q:GetWidth(), q:GetHeight()
+    if type(w) ~= "number" or type(h) ~= "number" or w <= 0 then return end
+    local sw = (w - 2) / segs
+    for k, t in ipairs(B.ticks) do
+        t:ClearAllPoints()
+        t:SetPoint("TOPLEFT", q, "TOPLEFT", 1 + k * sw, -1)
+        t:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", 1 + k * sw, 1)
+    end
+    local is = math.min(sw, h - 2) - 2
+    B.icon:SetSize(is, is)
+    B.icon:ClearAllPoints()
+    B.icon:SetPoint("CENTER", q, "LEFT", 1 + sw / 2, 0)
+    local L = B.late
+    local x0, x1 = 1, 1 + sw
+    L.TOP:ClearAllPoints() L.TOP:SetPoint("TOPLEFT", q, "TOPLEFT", x0, -1) L.TOP:SetSize(sw, 2)
+    L.BOTTOM:ClearAllPoints() L.BOTTOM:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", x0, 1) L.BOTTOM:SetSize(sw, 2)
+    L.LEFT:ClearAllPoints() L.LEFT:SetPoint("TOPLEFT", q, "TOPLEFT", x0, -1) L.LEFT:SetSize(2, h - 2)
+    L.RIGHT:ClearAllPoints() L.RIGHT:SetPoint("TOPLEFT", q, "TOPLEFT", x1 - 2, -1) L.RIGHT:SetSize(2, h - 2)
+end
+local function ripLate(B, on) for _, t in pairs(B.late) do t:SetShown(on) end end
+function EN.RipPaint()
+    local q = EN.heads and EN.heads.rip
+    local RD = NS.RD
+    if not (q and q:IsShown() and RD) then return false end
+    local B = EN.RipBuild(q)
+    ripShape(q, B)
+    local l = RD.ripLast
+    local now = GetTime()
+    local left = l and (l.untilAt - now) or 0
+    if left <= 0 then
+        B.bar:SetValue(0)
+        B.icon:SetAlpha(0.25)
+        ripLate(B, false)
+        q:SetScript("OnUpdate", nil)
+        if RD.RipMarks then RD.RipMarks() end
+        return false
+    end
+    local len = RD.RipLength and RD.RipLength() or 15
+    B.bar:SetMinMaxValues(0, len)
+    B.bar:SetValue(left)
+    local late = left < (len / ((RD.RIP_SEGS) or 6))     -- under one Chain Heal: it would be gone before it lands
+    B.icon:SetAlpha(late and 1 or 0.45)
+    ripLate(B, late)
+    if not q.ripTicking then
+        q.ripTicking, q.ripAcc = true, 0
+        q:SetScript("OnUpdate", function(self, e)
+            self.ripAcc = (self.ripAcc or 0) + (tonumber(e) or 0)
+            if self.ripAcc < EN.RIP_EVERY then return end
+            self.ripAcc = 0
+            if not EN.RipPaint() then self.ripTicking = nil end
+        end)
+    end
+    return true
 end
 
 --- `/bish alpha radar box`: the target box's own numbers - how bright each layer is, its bar's colour, what the enemy

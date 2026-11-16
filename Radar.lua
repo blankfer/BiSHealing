@@ -732,7 +732,10 @@ local function buildSpoke(f, i)
         if NS.OV then NS.OV.Leave(sp) end
     end)
     -- THE OVER WORD (Overheal.lua, 12 Nov 2026): the click is measured here, before the cast starts
-    b:HookScript("PostClick", function(_, button) if NS.OV then NS.OV.Click(sp, button) end end)
+    b:HookScript("PostClick", function(_, button)
+        RD.lastClick, RD.lastClickAt = sp, GetTime()            -- the Riptide tracker: whose box the cast went to
+        if NS.OV then NS.OV.Click(sp, button) end
+    end)
     sp.heal = b
     -- BOGEY: their target, a red triangle only while it casts; a click is your interrupt (enemies only)
     local k = CreateFrame("Button", "BiSHealingRadarBogey" .. i, f, "SecureActionButtonTemplate")
@@ -1731,11 +1734,12 @@ RD.SW = {
     { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
     { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
+    { key = "rip",    group = "SHAMAN",    name = "Riptide tracker",          tip = "A Riptide mark on whoever has yours, and a bar on top: six Chain Heals long, the last one the Riptide icon - too late for another Chain Heal." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
-             fuel = true, tools = true, totems = true, timers = true, bb = true },
+             fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
@@ -1826,7 +1830,7 @@ function RD.DeckSized(M)
 end
 --- The strip on top: the alert boxes' height, or just room for the switches button.
 RD.DECK_HEAD_BARE = 16
-function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc")) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc") or (RD.Sw("rip") and RD.RipKnown())) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
 
 --- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
 function RD.TotemWideW()
@@ -5134,6 +5138,83 @@ function RD.TideTestCast(name, now)
     return true
 end
 
+--[[ THE RIPTIDE TRACKER (16 Nov 2026, Arn: "for sham healer rip tide is crucial need a riptide marker on who i riptided and
+  on top in los row a riptide duration, the riptide icon will serve as not enough time left to cast another chain heal
+  mark ... the bar size should be 6 icons long and when its the last icon that means if i cast a chain the buff will be
+  gone by the time it lands"). OUR clock, never the aura (auras go secret in a fight): your Riptide cast (OnCast) starts
+  it, on the box you clicked (RD.lastClick within RD.RIP_CLICK s), else the one under the mouse (a wheel turn), else the
+  name the game said you aimed at (UNIT_SPELLCAST_SENT, when plain). It lasts RD.RIP_LEN (read off the spell's own words
+  out of a fight, else 15 s). The bar: RD.RIP_SEGS segments of one Chain Heal each; it drains, and the last segment holds
+  the Riptide icon, lit once the time left is under one Chain Heal (EN.RipPaint). ]]
+RD.RIPTIDE = "Riptide"
+RD.RIP_LEN = 15
+RD.RIP_SEGS = 6
+RD.RIP_CLICK = 1.5
+RD.rips = {}                                         -- unit -> until (GetTime), at most a couple standing at once
+function RD.RipKnown()
+    local FM = NS.FM
+    return (FM and FM.Ranks and #FM.Ranks(RD.RIPTIDE) > 0) and true or false
+end
+--- Riptide's length, off its own words out of a fight ("... over 15 sec"); kept.
+function RD.RipLength()
+    if RD.ripLenRead then return RD.RIP_LEN end
+    if combat() then return RD.RIP_LEN end
+    if C_Spell and C_Spell.GetSpellDescription then
+        local ok, d = pcall(C_Spell.GetSpellDescription, RD.RIPTIDE)
+        d = ok and plain(d) or nil
+        local n = type(d) == "string" and tonumber(d:match("over ([%d%.]+) sec")) or nil
+        if n and n > 3 and n < 60 then RD.RIP_LEN = n RD.ripLenRead = true end
+    end
+    return RD.RIP_LEN
+end
+--- The game's word on whom your last spell went to (UNIT_SPELLCAST_SENT), when it is plain.
+function RD.RipSent(target)
+    if type(target) == "string" and not (NS.Secret and NS.Secret(target)) and target ~= "" then
+        RD.sentTarget, RD.sentAt = target, GetTime()
+    end
+end
+--- Your Riptide went out: whose box, and its clock.
+function RD.RipCast(now)
+    now = now or GetTime()
+    local sp
+    if RD.lastClick and RD.lastClickAt and now - RD.lastClickAt <= RD.RIP_CLICK then sp = RD.lastClick end
+    sp = sp or RD.over
+    if not (sp and sp.unit) and RD.sentTarget and RD.sentAt and now - RD.sentAt <= RD.RIP_CLICK then
+        for _, i in ipairs(RD.conOrder or {}) do
+            local s = RD.spokes and RD.spokes[i]
+            if s and s.unit and RD.BoxIsNamed(s.unit, RD.sentTarget) then sp = s break end
+        end
+    end
+    local unit = sp and sp.unit
+    if not unit then return nil end
+    RD.rips[unit] = now + RD.RipLength()
+    RD.ripLast = { unit = unit, at = now, untilAt = RD.rips[unit] }
+    RD.RipMarks()
+    if NS.EN and NS.EN.RipPaint then NS.EN.RipPaint() end
+    return unit
+end
+--- The marks on the boxes: a Riptide icon top-right on whoever has one of yours standing.
+function RD.RipMarks()
+    local now = GetTime()
+    for u, t in pairs(RD.rips) do if t <= now then RD.rips[u] = nil end end
+    local on = RD.Deck() and RD.Sw("rip")
+    for _, sp in ipairs(RD.spokes or {}) do
+        local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
+        if has and not sp.ripMark then
+            local m = sp.deckPlate:CreateTexture(nil, "OVERLAY", nil, 6)
+            m:SetSize(14, 14)
+            m:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
+            if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+            if C_Spell and C_Spell.GetSpellTexture then
+                local ok, t = pcall(C_Spell.GetSpellTexture, RD.RIPTIDE)
+                if ok then pcall(m.SetTexture, m, t) end
+            end
+            sp.ripMark = m
+        end
+        if sp.ripMark then sp.ripMark:SetShown(has and true or false) end
+    end
+end
+
 function RD.TideHook()
     local lib = _G.LibBiSComm
     if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
@@ -5758,6 +5839,7 @@ function RD.OnCast(unit, spellID)
     if getName then ok, name = pcall(getName, spellID) end
     name = ok and plain(name) or nil
     RD.TideTestCast(name, now)                       -- the Grounding test button (Mana Tide's stand-in), when it shows
+    if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end
     if name == RD.TIDE then
@@ -6602,6 +6684,13 @@ function RD.Command(rest)
     if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
     if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
     if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
+    if word == "rip" then
+        local l = RD.ripLast
+        local line = string.format("riptide: known %s, length %ss, last on %s, %s left", tostring(RD.RipKnown()), tostring(RD.RipLength()),
+            tostring(l and l.unit or "nobody yet"), l and string.format("%.1f", math.max(0, l.untilAt - GetTime())) or "-")
+        P(line)
+        return line
+    end
     if word == "over" and NS.OV and NS.OV.Status then return NS.OV.Status() end
     if word == "tidetest" then
         local on = RD.ToggleTideTest()
@@ -6690,6 +6779,10 @@ for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENAB
 end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
 if ev.RegisterUnitEvent then pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player") end
+-- whom your spell went to (the Riptide tracker's last way to tell, when no deck box was clicked): yours only
+local sentEv = CreateFrame("Frame")
+if sentEv.RegisterUnitEvent then pcall(sentEv.RegisterUnitEvent, sentEv, "UNIT_SPELLCAST_SENT", "player") end
+sentEv:SetScript("OnEvent", function(_, _, _, target) RD.RipSent(target) end)
 ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     if event == "PLAYER_LOGIN" then RD.TideHook() RD.Apply() return end
     -- THE LOADING WINDOW (11 Nov 2026): a /reload in a fight lets secure frames be armed while the loading events are
