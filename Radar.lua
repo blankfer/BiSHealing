@@ -1906,16 +1906,45 @@ end
 
 -- the tools row: every tool from both rails, centred across `W`, at `y`
 local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.rations, RD.chaff, RD.res } end
-local function toolsRow(W, y)
+-- THE DECK'S TOOLS: NO SQUARE ROUND EACH, ONE BLUE BOX ROUND THE MANA (Arn, 15 Nov: "im not liking the blue outline, lets
+-- just go with dim and very bright when needed if we are going to outline we outline the box mana stuff blue"): the
+-- icons alone, dim or bright; Mana Tide, the potion, Mana Spring and the drink inside one blue outline.
+RD.MANA_BOX_COL = { 0.30, 0.62, 1.00, 0.9 }
+local function toolsRow(W, y, deck)
     local tools = CON_TOOLS()
     local n, gap = #tools, RD.CON.toolGap
     local w = n * RD.SYS_PX + (n - 1) * gap
     local x0 = (W - w) / 2 + RD.SYS_PX / 2
+    local xs = {}
     for k, b in ipairs(tools) do
         local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        at(square("tool" .. k, RD.SYS_PX), x, y)
+        xs[b] = x
+        if not deck then at(square("tool" .. k, RD.SYS_PX), x, y) end
         at(b, x, y)
     end
+    local mb = RD.manaBox
+    if deck and xs[RD.tide] and xs[RD.fuel] then
+        if not mb then
+            mb = CreateFrame("Frame", nil, RD.conLayer)
+            mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
+            RD.manaBox = mb
+        end
+        local l, r = xs[RD.tide] - RD.SYS_PX / 2 - 2, xs[RD.fuel] + RD.SYS_PX / 2 + 2
+        mb:SetSize(r - l, RD.SYS_PX + 4)
+        mb:ClearAllPoints()
+        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -y)
+        mb:Show()
+    elseif mb then
+        mb:Hide()
+    end
+end
+
+--- A deck button's light: very bright when needed, dim otherwise (Arn: "dim and very bright when needed") - while it wears
+--- a real icon in the deck; anywhere else, as before: shown or not.
+function RD.LitAlpha(b, lit)
+    if lit then return 1 end
+    if RD.Deck and RD.Deck() and b and b.iconTex then return RD.ICON_FADED end
+    return 0
 end
 
 -- THE TOTEMS' LINE under the tools (11 Nov): only the ones you know (RD.ArmTotems), centred; answers the height it took
@@ -2085,6 +2114,7 @@ end
 --- to its drawn triangle.
 function RD.DeckClear()
     for _, t in ipairs(RD.timers or {}) do t:Hide() end   -- the totem timers are the deck's alone
+    if RD.manaBox then RD.manaBox:Hide() end              -- and the mana group's outline
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.deckPlate then sp.deckPlate:Hide() end
         if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
@@ -2270,7 +2300,7 @@ function RD.DeckLayout(T, order)
     put(T.n + 2, place.tot, false)
     -- the deck of buttons under the crew: the tools row, then the totems with their four timers
     local yt = y0 + place.h + C.gap + RD.SYS_PX / 2
-    toolsRow(W, yt)
+    toolsRow(W, yt, true)
     local H = yt + RD.SYS_PX / 2 + C.pad
     H = H + RD.DeckTotemRow(W, yt)
     f:SetSize(W, H)
@@ -2921,7 +2951,7 @@ function RD.ApplyShip(ship)
         plate(sh.plate)
         for _, t in ipairs(sh.cover or {}) do plate(t) end
     end
-    plate(RD.washHole)
+    -- (the last-charge stencil is the buff's own icon now, never painted the plate's dark)
     -- the scope: rings, cross and ticks at the ship's line, dimmed; the brackets; you in the middle in its accent
     local L, k = ship.line, RD.SCOPE_DIM
     for _, l in ipairs(RD.scopeLines or {}) do l:SetVertexColor(L[1] * k, L[2] * k, L[3] * k, 0.85) end
@@ -3586,6 +3616,8 @@ end
 --- With no orange under it the stencil is plate on plate - nothing to see.
 RD.ART = "Interface\\AddOns\\" .. (ADDON or "BiSHealing") .. "\\Art\\"
 RD.WASH_OVER = 3
+RD.SHIELD_RING = 3                                  -- the last charge's orange outline, px round the icon
+RD.SHIELD_UP_DIM = 0.4                              -- the buff's icon while it is up: quiet
 function RD.WashText(px, rgb)
     return ("|TInterface\\Buttons\\WHITE8X8:%d:%d:0:0:8:8:0:8:0:8:%d:%d:%d|t"):format(px, px, rgb[1], rgb[2], rgb[3])
 end
@@ -3618,10 +3650,17 @@ function RD.ShieldWash(button)
         local lvl = clip:GetFrameLevel()
         if type(lvl) == "number" then hole:SetFrameLevel(lvl + 2) end
     end
+    -- THE STENCIL IS THE ICON NOW (15 Nov 2026): the buff's own icon, dim, inset a few pixels - so while it is up the button
+    -- is that icon, quiet on the dark cover (nothing asking for a click); on the last charge the orange square under it
+    -- shows only in the ring round it - an orange outline. (It was the symbol cut out of the plate: an orange symbol.)
     local t = hole:CreateTexture(nil, "ARTWORK")
-    t:SetAllPoints(hole)
-    t:SetTexture(RD.ART .. "gyrohole")
-    t:SetVertexColor(RD.PLATE[1], RD.PLATE[2], RD.PLATE[3], 1)
+    local inset = RD.SHIELD_RING
+    t:SetPoint("TOPLEFT", hole, "TOPLEFT", inset, -inset)
+    t:SetPoint("BOTTOMRIGHT", hole, "BOTTOMRIGHT", -inset, inset)
+    if t.SetTexCoord then t:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    local sb = RD.shield
+    t:SetTexture((sb and sb.shieldTex) or nil)
+    t:SetVertexColor(1, 1, 1, RD.SHIELD_UP_DIM)
     RD.washHole = t
     return pcall(button.SetApplicationCount, button, fs, { formatter = RD.washFmt })
 end
@@ -3672,7 +3711,23 @@ local function armShield()
     -- same for every class)
     b.icon:Hide()
     for _, l in ipairs(b.ring or {}) do l:Hide() end        -- the gyro has its own ring
-    if not b.gyroRed then b.gyroRed = RD.Gyro(b.face, RD.SYS_PX, RD.COL.red, "ARTWORK") end
+    -- THE BUFF'S OWN ICON (15 Nov 2026, Arn: "the red water shield use the icon the classes use that use charges, water
+    -- shield priest inner fire"): under the client's cover, the spell's icon in a red rim - shown, breathing, exactly
+    -- while the buff is gone (the cover hides it whole while it is up). The drawn stabilizer symbol is retired.
+    if not b.shieldIcon then
+        b.shieldIcon = b.face:CreateTexture(nil, "ARTWORK")
+        b.shieldIcon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        b.shieldIcon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        if b.shieldIcon.SetTexCoord then b.shieldIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        b.shieldRim = edge(b.face, RD.COL.red, 1.5)
+    end
+    b.shieldTex = nil
+    if C_Spell and C_Spell.GetSpellTexture then
+        local okT, tx = pcall(C_Spell.GetSpellTexture, name)
+        if okT and tx ~= nil and not (NS.Secret and NS.Secret(tx)) then b.shieldTex = tx end
+    end
+    b.shieldIcon:SetTexture(b.shieldTex)
+    for _, t in ipairs(b.gyroRed or {}) do t:Hide() end      -- a copy built before: the old symbol stays away
     -- the plate: the dark the cover is painted in, so a covered pip looks like the plate alone
     if not b.plate then
         b.plate = b:CreateTexture(nil, "BACKGROUND")
@@ -3824,10 +3879,10 @@ function RD.RealIcon(b, tex)
     end
     if tex then b.food:SetTexture(tex) b.food:Show() else b.food:Hide() end
     for _, l in ipairs(b.fork or b.pieces or {}) do if tex then l:Hide() else l:Show() end end
-    if b.ringIcon then                                   -- a totem's or the res's ring and small icon
-        for _, l in ipairs(b.ring or {}) do if tex then l:Hide() else l:Show() end end
-        if b.icon then if tex then b.icon:Hide() else b.icon:Show() end end
-    end
+    -- no ring round a real icon (Arn: "im not liking the blue outline") - the rations' cyan ring was left round its food;
+    -- a totem's or the res's ring and small icon come back only when it has no icon
+    for _, l in ipairs(b.ring or {}) do if tex then l:Hide() elseif b.ringIcon then l:Show() end end
+    if b.icon and tex then b.icon:Hide() elseif b.icon and b.ringIcon then b.icon:Show() end
     b.iconTex = tex
     return tex ~= nil
 end
@@ -4236,9 +4291,9 @@ end
 function RD.PaintTotems(fight)
     if fight == nil then fight = RD.inFight or combat() end
     local c, t, r = RD.TotemLights(fight)
-    if RD.call then RD.call.face:SetAlpha(c and 1 or 0) end
-    if RD.tcall then RD.tcall.face:SetAlpha(t and 1 or 0) end
-    if RD.recall then RD.recall.face:SetAlpha(r and 1 or 0) end
+    if RD.call then RD.call.face:SetAlpha(RD.LitAlpha(RD.call, c)) end
+    if RD.tcall then RD.tcall.face:SetAlpha(RD.LitAlpha(RD.tcall, t)) end
+    if RD.recall then RD.recall.face:SetAlpha(RD.LitAlpha(RD.recall, r)) end
     RD.totemsWas = (c and 1 or 0) + (t and 2 or 0) + (r and 4 or 0)
     return c, t, r
 end
@@ -4307,7 +4362,7 @@ function RD.ArmRes()
     if unit ~= b.unit then b.losUntil = nil end
     b.unit = unit
     b:EnableMouse(unit and true or false)
-    b.face:SetAlpha(unit and 1 or 0)
+    b.face:SetAlpha(RD.LitAlpha(b, unit and true or false))
     local okN, name = pcall(GetUnitName, unit or "none", false)
     name = (unit and okN and plain(name)) or nil
     b.tip = unit and { "RES" .. (type(name) == "string" and (": " .. name) or ""),
@@ -4419,7 +4474,7 @@ function RD.PaintChaff(casting)
     local lit = RD.ChaffLit(RD.inFight or combat(), casting)
     local c = RD.CHAFF_COL
     for _, t in ipairs(b.pieces or {}) do t:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0) end
-    b.face:SetAlpha(lit and 1 or 0)
+    b.face:SetAlpha(RD.LitAlpha(b, lit))
     return lit
 end
 
@@ -4722,7 +4777,10 @@ function RD.PaintQuiet()
     if RD.dims then RD.dims:SetAlpha(0) end
     -- the faint seats instead (Arn, 11 Nov): out of a fight only
     if RD.seatFrame then RD.seatFrame:SetAlpha(fight and 0 or 1) end
-    if RD.rations then RD.rations.face:SetAlpha((not fight and RD.rations.item) and 1 or 0) end
+    if RD.rations then
+        local r = RD.rations
+        r.face:SetAlpha(RD.LitAlpha(r, (not fight and r.item) and true or false) * (r.item and 1 or 0))   -- no food: nothing
+    end
     RD.PaintTools(fight)
     RD.PaintTotems(fight)
 end

@@ -13149,8 +13149,13 @@ do
     local cov = RD.shield.cover
     -- THE STABILIZER (Arn 8 Nov: "i dont want a shield icon i want an icon that a jet pilot would see ... call it
     -- stabilizer"): one cockpit symbol, red under, a green copy over it piece for piece
-    local red = RD.shield.gyroRed
-    ok(red and #red == RD.GYRO_SEG + 4, "the red stabilizer symbol under the pip")
+    -- THE BUFF'S OWN ICON (Arn, 15 Nov: "the red water shield use the icon the classes use that use charges"): under the
+    -- cover, the spell's icon in a red rim (the drawn stabilizer symbol retired)
+    do
+        local si = RD.shield.shieldIcon
+        ok(si and si.__texture ~= nil and si.__texture == RD.shield.shieldTex and RD.shield.shieldRim and #RD.shield.shieldRim == 4,
+           "under the pip: the buff's own icon in a red rim", si and tostring(si.__texture))
+    end
     -- NOTHING TO CLICK WHILE IT IS UP (Arn 8 Nov: "this stabilizer is 3/3 it needs to go away or ill keep trying to click
     -- it"): the client's button is one plain square in the plate's dark, over a plate of the same dark
     local c1 = type(cov) == "table" and cov[1]
@@ -14269,13 +14274,13 @@ do
            "the last charge writes an orange SQUARE three pips big (any size it lands at still fills the pip)", one and one.format)
         local hole = RD.washHole
         local holeFrame = hole and rawget(hole, "__parent")
-        ok(hole and tostring(hole.__texture or hole.texture or ""):find("Art\\gyrohole", 1, true)
-           and holeFrame and holeFrame:GetParent() == auraBtn
+        ok(hole and hole.__texture == RD.shield.shieldTex and holeFrame and holeFrame:GetParent() == auraBtn
            and (holeFrame.__level or 0) > (RD.washClip.__level or 0),
-           "over it, inside the client's button: the stencil, the symbol cut out of the plate", hole and tostring(hole.__texture))
+           "over it, inside the client's button: the stencil is the buff's own icon", hole and tostring(hole.__texture))
         local hv = hole and (hole.__vertex or hole.vertex)
-        ok(hv and hv[1] == RD.PLATE[1] and hv[2] == RD.PLATE[2] and hv[3] == RD.PLATE[3],
-           "the stencil is the plate's own dark: with no orange under it, nothing shows")
+        local hp = hole and hole.points and hole.points[1]
+        ok(hv and hv[1] == 1 and hv[4] == RD.SHIELD_UP_DIM and hp and hp[4] == RD.SHIELD_RING,
+           "dim while the buff is up, inset: the last charge's orange shows as a ring round it", hv and hv[4])
         ok(not RD.washPulse or rawget(holeFrame, "__animGroups") == nil, "only the orange beats - the stencil holds still")
         local f0, f2 = RD.washFmt.points[1], RD.washFmt.points[3]
         ok(f0.format == "" and f2.format == "", "no charge, or more than one: nothing written")
@@ -14957,6 +14962,12 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- DIM OR VERY BRIGHT, ONE BLUE BOX ROUND THE MANA (Arn: "lets just go with dim and very bright when needed if we are
+    -- going to outline we outline the box mana stuff blue")
+    ok(RD.manaBox and RD.manaBox:IsShown() and not (RD.conSquares and RD.conSquares.tool1 and RD.conSquares.tool1:IsShown()),
+       "the deck's tools: no square round each, one outline round the mana group")
+    ok(RD.LitAlpha({ iconTex = 1 }, true) == 1 and RD.LitAlpha({ iconTex = 1 }, false) == RD.ICON_FADED
+       and RD.LitAlpha({}, false) == 0, "an icon is very bright when needed, dim when not (a drawn sign: shown or not)")
     -- THE TOTEM TIMERS (Arn: "4 boxes ... 5:00 timer ... grey air blue water brown earth and red fire") and A CLICK DROPS
     -- IT AGAIN ("will it remember what [totem icon timer] and i click it will it be able to drop it")
     do
@@ -15002,6 +15013,8 @@ do
         ok(RD.rations.food and RD.rations.food:IsShown() and RD.rations.food.__texture == 133970
            and (not fork[1] or not fork[1]:IsShown()), "the food being eaten shows its icon where the fork was",
            RD.rations.food and RD.rations.food.__texture)
+        local ring = RD.rations.ring or {}
+        ok(not ring[1] or not ring[1]:IsShown(), "no ring round the food's icon (Arn: \"im not liking the blue outline\")")
         RD.FoodIcon(nil)
         ok(not RD.rations.food:IsShown() and (not fork[1] or fork[1]:IsShown()), "no food picked: the fork again")
         -- THE DRINK AND THE POTION (Arn: "same with the drink put the actual drink i am about to drink")
