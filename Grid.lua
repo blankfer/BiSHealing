@@ -205,6 +205,89 @@ function FG.Pyramid(n)
     return out
 end
 
+--[[ THE FLIGHT DECK'S SHAPE (15 Nov 2026, step 2 of dev/FLIGHTDECK.md; Arn picked layout B: "if there is only one tank he
+  should take most of the space, if there is another tank mark they share equally plus the target and target of target
+  those always keep the same size of the other party memebers" ... "all tank are always on the same row tanks always same
+  size but they fill the whole row"). One fixed width - five ordinary cells - and it only grows DOWNWARD:
+    the TANK ROW    every tank, all one width, filling everything left of the TARGET BOX; the box (outlined) holds two
+                    ordinary-width cells, your target and its target
+    then ROWS OF FIVE, ordinary cells, in group order; in a party the first row holds five minus the tanks.
+  Pure - numbers in, rectangles out - so it is tested without a client. ]]
+FG.DECK_CELL = FRAME_W
+FG.DECK_W = 5 * FRAME_W + 4 * PAD                 -- the deck's one width
+FG.DECK_ROW_H = FRAME_H + NAME_BAND               -- an ordinary row, tall like the grid's
+FG.DECK_TANK_H = FRAME_H + NAME_BAND + 16         -- the tank row stands taller
+FG.DECK_BOX_IN, FG.DECK_BOX_TOP = 3, 11           -- the target box's inner gap, and the top room its label sits in
+function FG.DeckPlace(nTanks, nRest, party)
+    local W, cell = FG.DECK_W, FG.DECK_CELL
+    local box = { w = 2 * cell + PAD + 2 * FG.DECK_BOX_IN, h = FG.DECK_TANK_H }
+    box.x, box.y = W - box.w, 0
+    local tgtH = box.h - FG.DECK_BOX_TOP - FG.DECK_BOX_IN
+    local target = { x = box.x + FG.DECK_BOX_IN, y = FG.DECK_BOX_TOP, w = cell, h = tgtH }
+    local tot = { x = target.x + cell + PAD, y = FG.DECK_BOX_TOP, w = cell, h = tgtH }
+    local area = box.x - PAD                       -- what the tanks share
+    local tanks = {}
+    if nTanks > 0 then
+        local tw = math.floor((area - (nTanks - 1) * PAD) / nTanks)
+        for i = 1, nTanks do tanks[i] = { x = (i - 1) * (tw + PAD), y = 0, w = tw, h = FG.DECK_TANK_H } end
+    end
+    local rest, y, i, first = {}, FG.DECK_TANK_H + PAD, 1, true
+    while i <= nRest do
+        local per = (first and party) and math.max(1, 5 - nTanks) or 5
+        for c = 1, per do
+            if i > nRest then break end
+            rest[i] = { x = (c - 1) * (cell + PAD), y = y, w = cell, h = FG.DECK_ROW_H }
+            i = i + 1
+        end
+        y, first = y + FG.DECK_ROW_H + PAD, false
+    end
+    local height = (nRest > 0) and (y - PAD) or FG.DECK_TANK_H
+    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = height }
+end
+
+--- Is this unit a tank? The radar's answer (the game's role, BiS> now's tank mark, a main-tank assignment), so the two
+--- views never disagree. Out of a fight only, like every layout.
+function FG.IsTankUnit(u)
+    local RD = NS.RD
+    if RD and RD.LogicBand then
+        local ok, band = pcall(RD.LogicBand, u)
+        return ok and band == "tank"
+    end
+    return false
+end
+
+--- The deck's order: the tanks, then everyone else in group order. NOBODY NAMED (Forever's hand-made groups have no
+--- roles): one tank is guessed by class - a warrior, then a paladin, then a druid, never you - as the radar does.
+function FG.DeckOrder(roster)
+    local units = FG.ByGroup(roster)
+    local tanks, rest = {}, {}
+    for _, u in ipairs(units) do
+        if not FG.IsPetUnit(u) and FG.IsTankUnit(u) then tanks[#tanks + 1] = u else rest[#rest + 1] = u end
+    end
+    if #tanks == 0 then
+        local guess = (NS.RD and NS.RD.TANK_GUESS) or { WARRIOR = 1, PALADIN = 2, DRUID = 3 }
+        local best, bestRank
+        for i, u in ipairs(rest) do
+            local me = u == "player"
+            if not me and UnitIsUnit then
+                local ok, v = pcall(UnitIsUnit, u, "player")
+                me = ok and NS.Plain(v) == true
+            end
+            local okC, _, class = pcall(UnitClass, u)
+            local r = (not me) and okC and guess[NS.Plain(class) or ""] or nil
+            if r and not FG.IsPetUnit(u) and (not bestRank or r < bestRank) then best, bestRank = i, r end
+        end
+        if best then tanks[1] = table.remove(rest, best) end
+    end
+    return tanks, rest
+end
+
+--- The deck is on: the alpha's "deck" feature. It STARTS OFF (`startsOff`: a test feature is otherwise on with the alpha,
+--- and this one replaces the grid's whole shape) - `/bish alpha deck on` is the way in.
+function FG.DeckOn()
+    return (NS.AlphaOn and NS.AlphaOn("deck")) == true
+end
+
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid
 --- by group", and the old grid was not quite that - it filled columns of five in raid1, raid2
 --- order, and raid index is the order people JOINED, not their group. It only looked grouped when
@@ -500,7 +583,8 @@ function FG.Look()
     if v == "dashboard" then v = "radar" d.look = v end
     return FG.LOOKS[v or ""] and v or "classic"
 end
-function FG.Cockpit() return FG.Look() == "cockpit" end
+-- the flight deck wears the cockpit's cells (the tape, the class lamp, the radar's colours) whatever the look says
+function FG.Cockpit() return FG.Look() == "cockpit" or FG.DeckOn() end
 
 --- The colour that marks your target: magenta in the cockpit, red in the classic look.
 function FG.TargetColor() return FG.Cockpit() and FG.COCKPIT.target or FG.TARGET end
@@ -1057,7 +1141,8 @@ function FG.LayoutTarget(anchor)
     anchor = anchor or FG.anchor
     if not anchor then return false end
     local d = NS.DB and NS.DB()
-    local want = type(d) == "table" and d.target == true and not FG.Hidden(d)
+    -- the flight deck carries its own target and target-of-target, in its box (FG.LayoutDeckBox)
+    local want = type(d) == "table" and d.target == true and not FG.Hidden(d) and not FG.DeckOn()
     if not want then
         if FG.target then
             FG.Unwatch(FG.target)
@@ -1088,6 +1173,78 @@ function FG.LayoutTarget(anchor)
     if NS.FA and NS.FA.Attach then NS.FA.Attach(f, "target") end
     f:Show()
     FG.LayoutToT(f)
+    return true, true
+end
+
+--- THE DECK'S TARGET BOX (step 2): an outline with its job written on it - "TARGET · ITS TARGET" (Arn: "in its own little
+--- outline section with what the box is for") - holding two ordinary-width cells: your target ("target") and whoever it
+--- is hitting ("targettarget"). Both are real cells: your hostile binds work on an enemy target (the client's harm
+--- switch), your heal binds on its target - usually the tank being hit. The client's unit watch shows each while its
+--- token means somebody, in a fight too. `place` nil = the deck is off: both cells and the box go.
+FG.DECK_BOX_COL = { 0.25, 0.88, 1.00, 0.95 }       -- the radar's cyan
+function FG.LayoutDeckBox(anchor, place)
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local box = FG.deckBox
+    if not place then
+        for _, f in ipairs({ FG.deckTarget, FG.deckToT }) do
+            if f then FG.Unwatch(f); f.unit = nil; f:Hide() end
+        end
+        if box then box:Hide() end
+        return true, false
+    end
+    if not box then
+        box = CreateFrame("Frame", nil, anchor)
+        local c = FG.DECK_BOX_COL
+        box.edges = {}
+        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+            local t = box:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(c[1], c[2], c[3], c[4])
+            if side == "TOP" or side == "BOTTOM" then
+                t:SetPoint(side .. "LEFT", box, side .. "LEFT", 0, 0)
+                t:SetPoint(side .. "RIGHT", box, side .. "RIGHT", 0, 0)
+                t:SetHeight(1.5)
+            else
+                t:SetPoint("TOP" .. side, box, "TOP" .. side, 0, 0)
+                t:SetPoint("BOTTOM" .. side, box, "BOTTOM" .. side, 0, 0)
+                t:SetWidth(1.5)
+            end
+            box.edges[side] = t
+        end
+        box.wash = box:CreateTexture(nil, "BACKGROUND")
+        box.wash:SetAllPoints(box)
+        box.wash:SetColorTexture(c[1], c[2], c[3], 0.05)
+        box.label = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        box.label:SetPoint("TOPLEFT", box, "TOPLEFT", 4, -1)
+        box.label:SetTextColor(c[1], c[2], c[3], 1)
+        box.label:SetText("TARGET · ITS TARGET")
+        FG.deckBox = box
+    end
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", anchor, "TOPLEFT", place.box.x, -place.box.y)
+    box:SetSize(place.box.w, place.box.h)
+    box:Show()
+    local function cell(key, name, unit, r)
+        local f = FG[key]
+        if not f then
+            f = FG.Make(name, anchor)
+            f.mayBeHostile = true          -- whoever you have targeted, and whoever it targets, can be a mob
+            FG[key] = f
+        end
+        f:ClearAllPoints()
+        f.cellX, f.cellY = r.x, -r.y
+        f:SetPoint("TOPLEFT", anchor, "TOPLEFT", f.cellX, f.cellY)
+        f:SetSize(r.w, r.h)
+        f.cellW, f.cellH = r.w, r.h
+        FG.FitCell(f, r.w, true)
+        FG.SizeBands(f, r.w, r.h)
+        FG.Bind(f, unit)
+        if NS.FA and NS.FA.Attach then NS.FA.Attach(f, unit) end
+        if NS.FM and NS.FM.ApplyTo then NS.FM.ApplyTo(f) end
+        f:Show()
+        return f
+    end
+    cell("deckTarget", "DeckTarget", "target", place.target)
+    cell("deckToT", "DeckToT", "targettarget", place.tot)
     return true, true
 end
 
@@ -2117,13 +2274,24 @@ function FG.Layout(anchor)
     -- "a little confusing ... what happens when people select down or tank"). It only ADDS a target cell beside each
     -- person: every layout leaves `extra` room on each cell's right for it. "down" (the default) is columns of 5;
     -- across and tanks keep their shape. Off, `extra` is 0 and nothing below differs from before.
-    local pvp = FG.PvPActive()
+    -- THE FLIGHT DECK (alpha, step 2): its own shape - the tank row and the target box, then rows of five (FG.DeckPlace).
+    -- It takes the place of every other layout and of PvP mode's side cells (the kick comes to every cell in step 3).
+    local deck = FG.DeckOn()
+    local pvp = FG.PvPActive() and not deck
     local extra = pvp and (FG.PVP_W + PAD) or 0
     local colW = FRAME_W + PAD + extra
-    local pyramid = type(d) == "table" and d.layout == "pyramid"
+    local pyramid = type(d) == "table" and d.layout == "pyramid" and not deck
     local across = type(d) == "table" and d.layout == "rows"      -- groups across, not down
     local place, span, grid, groups = nil, 0, nil, 0
-    if not pyramid then
+    local deckPlace, deckTanks
+    if deck then
+        local tanks, rest = FG.DeckOrder(roster)
+        roster = {}
+        for _, u in ipairs(tanks) do roster[#roster + 1] = u end
+        for _, u in ipairs(rest) do roster[#roster + 1] = u end
+        deckTanks = #tanks
+        deckPlace = FG.DeckPlace(#tanks, #rest, not (IsInRaid and IsInRaid()))
+    elseif not pyramid then
         roster, grid, groups = FG.ByGroup(roster)
     end
     if pyramid then
@@ -2140,7 +2308,12 @@ function FG.Layout(anchor)
         local f = FG.frames[i] or FG.Make(i, anchor)
         f:ClearAllPoints()
         local w, h, tall = FRAME_W, FRAME_H, false
-        if pyramid then
+        if deckPlace then
+            local p = (i <= deckTanks) and deckPlace.tanks[i] or deckPlace.rest[i - deckTanks]
+            w, h, tall = p.w, p.h, true
+            f.cellX, f.cellY = p.x, -p.y
+            f:SetPoint("TOPLEFT", anchor, "TOPLEFT", f.cellX, f.cellY)
+        elseif pyramid then
             local p = place[i]
             w = p.w or (p.wide and FULL_W or HALF_W)
             h, tall = p.h or FRAME_H, p.tall or false
@@ -2192,6 +2365,7 @@ function FG.Layout(anchor)
     end
     -- the team's targets, one small cell on each member's right - or none at all
     if pvp then FG.LayoutPvP(anchor, roster, grid, colW) else FG.HidePvP() end
+    FG.LayoutDeckBox(anchor, deckPlace)    -- the deck's target box, or nothing when the deck is off
 
     FG.LayoutTarget(anchor)         -- the target's own cell, under the grid, when it is wanted
     FG.LayoutSelf(anchor)           -- and your own, out of the group, when it is wanted
@@ -2216,7 +2390,9 @@ function FG.Layout(anchor)
     local n = #roster
     if n > 0 then
         local w, rows, tallH
-        if pyramid then
+        if deckPlace then
+            w, rows, tallH = deckPlace.w, 1, deckPlace.h
+        elseif pyramid then
             -- the rows are not all one height any more: the last row's bottom is the grid's
             w, rows = span, place[n].row
             tallH = place[n].y and (place[n].y + place[n].h) or nil
@@ -4181,3 +4357,16 @@ end
 
 -- Booted by Core.lua at login. This file used to arm itself, because for two days it WAS the
 -- addon on this client and there was no core to do it.
+
+-- THE FLIGHT DECK, a test feature (dev/FLIGHTDECK.md, step 2): starts OFF (FG.DeckOn), `/bish alpha deck on` to try it.
+-- Moving the switch lets the radar step aside (RD.On asks FG.DeckOn), dresses the cells and lays the grid out again.
+if NS.AlphaFeature then
+    NS.AlphaFeature{ key = "deck", name = "the flight deck", startsOff = true,
+        desc = "the radar's replacement, being built: tank row + target box, then rows of five",
+        apply = function()
+            if InCombatLockdown and InCombatLockdown() then return end
+            if NS.RD and NS.RD.Apply then pcall(NS.RD.Apply) end
+            if FG.RedressAll then pcall(FG.RedressAll) end
+            if FG.anchor then FG.Layout(FG.anchor) end
+        end }
+end

@@ -2147,7 +2147,10 @@ function NS.AlphaFeature(spec)
     local key = spec.key:lower()
     if not NS.ALPHA[key] then NS.ALPHA_ORDER[#NS.ALPHA_ORDER + 1] = key end
     -- apply = run after the switch changes (on, off, this feature on/off); cmd = `/bish alpha <key> <words>`
-    NS.ALPHA[key] = { key = key, name = spec.name or key, desc = spec.desc, apply = spec.apply, cmd = spec.cmd }
+    -- startsOff = a feature the alpha does NOT switch on by itself (15 Nov 2026, the flight deck: it replaces the grid's
+    -- whole shape) - only `/bish alpha <key> on` does, kept in `alphaOn[key]`
+    NS.ALPHA[key] = { key = key, name = spec.name or key, desc = spec.desc, apply = spec.apply, cmd = spec.cmd,
+                      startsOff = spec.startsOff and true or nil }
     return NS.ALPHA[key]
 end
 
@@ -2156,8 +2159,11 @@ function NS.AlphaOn(key)
     local d = NS.DB()
     if d.alpha ~= true then return false end
     if key == nil then return true end
+    local f = NS.ALPHA[key]
+    if not f then return false end
+    if f.startsOff then return type(d.alphaOn) == "table" and d.alphaOn[key] == true end
     local off = type(d.alphaOff) == "table" and d.alphaOff or {}
-    return NS.ALPHA[key] ~= nil and off[key] ~= true
+    return off[key] ~= true
 end
 
 local function alphaList()
@@ -2202,8 +2208,13 @@ function NS.DO.alpha(raw)
         alphaApply()
     elseif word and (onoff == "on" or onoff == "off") then
         if not NS.ALPHA[word] then Print("alpha: no test feature called %s", word) alphaList() return NS.AlphaOn() end
-        d.alphaOff = type(d.alphaOff) == "table" and d.alphaOff or {}
-        d.alphaOff[word] = (onoff == "off") or nil
+        if NS.ALPHA[word].startsOff then
+            d.alphaOn = type(d.alphaOn) == "table" and d.alphaOn or {}
+            d.alphaOn[word] = (onoff == "on") or nil
+        else
+            d.alphaOff = type(d.alphaOff) == "table" and d.alphaOff or {}
+            d.alphaOff[word] = (onoff == "off") or nil
+        end
         Print("alpha: %s %s%s", NS.ALPHA[word].name, onoff, d.alpha and "" or " (the alpha itself is off: /bish alpha on)")
         alphaApply()
     else

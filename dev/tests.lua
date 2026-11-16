@@ -11834,7 +11834,15 @@ do
     SlashCmdList.BISHEALING("alpha on")
     ok(d.alpha == true and NS.AlphaOn() and NS.AlphaOn("probe") and said("thank you for testing"), "/bish alpha on: on, every feature with it")
     heard = {}
-    ok(NS.AlphaHello() and said("alpha testing is on") and said(#NS.ALPHA_ORDER .. " test feature"), "on: one line at login, so a tester never forgets")
+    local onNow = 0
+    for _, k in ipairs(NS.ALPHA_ORDER) do if NS.AlphaOn(k) then onNow = onNow + 1 end end
+    ok(NS.AlphaHello() and said("alpha testing is on") and said(onNow .. " test feature"), "on: one line at login, so a tester never forgets")
+    -- A FEATURE THAT STARTS OFF (15 Nov 2026, the flight deck replaces the grid's shape): the alpha alone never turns it on
+    ok(NS.ALPHA.deck and NS.ALPHA.deck.startsOff and not NS.AlphaOn("deck"), "the flight deck stays off when the alpha comes on")
+    SlashCmdList.BISHEALING("alpha deck on")
+    ok(NS.AlphaOn("deck") and d.alphaOn and d.alphaOn.deck == true, "/bish alpha deck on: on, kept in alphaOn")
+    SlashCmdList.BISHEALING("alpha deck off")
+    ok(not NS.AlphaOn("deck") and d.alphaOn.deck == nil, "/bish alpha deck off: off again")
     SlashCmdList.BISHEALING("alpha probe off")
     ok(NS.AlphaOn() and not NS.AlphaOn("probe") and d.alphaOff.probe == true, "/bish alpha probe off: that one back, the switch still on")
     SlashCmdList.BISHEALING("alpha probe on")
@@ -14778,6 +14786,59 @@ do
     STATE.classes.player = keep.classes
     bookSaid()
     FG.kickSpell, FG.backupSpell = nil, nil
+end
+
+-- THE FLIGHT DECK'S SHAPE (15 Nov 2026, step 2; Arn: "1 single tank will be long and only leave row for the target and tot,
+-- target and tot small like regular party boxes" ... "all tank are always on the same row tanks always same size")
+do
+    local W, cell, P = FG.DECK_W, FG.DECK_CELL, 3
+    local p = FG.DeckPlace(1, 4, true)
+    local area = p.box.x - P
+    ok(p.box.x + p.box.w == W and p.target.w == cell and p.tot.w == cell and p.tot.x == p.target.x + cell + P,
+       "the target box sits at the right end, two ordinary-width cells inside it")
+    ok(#p.tanks == 1 and p.tanks[1].x == 0 and p.tanks[1].w == area, "one tank: one long bar filling everything left of the box",
+       tostring(p.tanks[1] and p.tanks[1].w) .. " vs " .. area)
+    ok(#p.rest == 4 and p.rest[1].y == FG.DECK_TANK_H + P and p.rest[4].y == p.rest[1].y and p.rest[1].w == cell,
+       "a party: one row of four under it (five minus the tank), ordinary cells")
+    ok(p.h == FG.DECK_TANK_H + P + FG.DECK_ROW_H, "and the deck is exactly that tall", p.h)
+
+    local q = FG.DeckPlace(2, 8, false)
+    ok(q.tanks[1].w == q.tanks[2].w and q.tanks[2].x == q.tanks[1].w + P and q.tanks[2].x + q.tanks[2].w <= q.box.x - P,
+       "two tanks: equal halves of the same row")
+    ok(q.rest[5].y == q.rest[1].y and q.rest[6].y > q.rest[1].y and q.rest[6].x == 0, "a raid: rows of five, the sixth starts the next row")
+
+    local r = FG.DeckPlace(4, 36, false)
+    local same = true
+    for i = 2, 4 do if r.tanks[i].w ~= r.tanks[1].w or r.tanks[i].y ~= 0 then same = false end end
+    ok(same and r.tanks[4].x + r.tanks[4].w <= r.box.x - P, "four tanks: all on the one row, all one width")
+    ok(r.rest[36].y == FG.DECK_TANK_H + P + 7 * (FG.DECK_ROW_H + P) and r.w == W, "36 more: eight rows of five, and never wider",
+       r.rest[36].y)
+    local z = FG.DeckPlace(0, 5, true)
+    ok(#z.tanks == 0 and z.rest[5].y == z.rest[1].y, "nobody to call a tank: five in the first row")
+
+    -- laid out for real, the alpha's deck on: the warrior is the guessed tank, the box holds target and its target
+    local d = NS.DB()
+    local keep = { alpha = d.alpha, alphaOn = d.alphaOn, classes = STATE.classes.party1, shown = d.shown }
+    STATE.classes.party1 = "WARRIOR"
+    d.shown = true                                          -- an earlier block left the frames hidden
+    d.alpha = true
+    SlashCmdList.BISHEALING("alpha deck on")                -- the real door: it lets the radar step aside and lays out
+    ok(FG.DeckOn() and not (NS.RD and NS.RD.On()), "/bish alpha deck on: the deck is on and the radar steps aside")
+    FG.Layout(FG.anchor)
+    local t1 = FG.frames[1]
+    ok(t1 and t1.unit == "party1" and math.abs(t1.cellW - (FG.DECK_W - (2 * cell + P + 6) - P)) < 1,
+       "the warrior (no role named: the guess) takes the tank row's long bar", tostring(t1 and t1.unit))
+    ok(FG.deckBox and FG.deckBox:IsShown() and FG.deckBox.label and FG.deckBox.label:GetText() == "TARGET · ITS TARGET",
+       "the target box is up, its job written on it")
+    ok(FG.deckTarget and FG.deckTarget.unit == "target" and FG.deckToT and FG.deckToT.unit == "targettarget"
+       and FG.deckTarget.cellW == cell and FG.deckToT.cellW == cell, "its two cells: your target and its target, ordinary width")
+    local a = FG.anchor
+    ok(a.__w == FG.DECK_W or (a.GetWidth and a:GetWidth() == FG.DECK_W), "the deck is one fixed width")
+    SlashCmdList.BISHEALING("alpha deck off")
+    ok(not FG.deckBox:IsShown() and not FG.deckTarget:IsShown(), "deck off: the box and its cells go, the grid is back")
+    d.alpha, d.alphaOn, STATE.classes.party1, d.shown = keep.alpha, keep.alphaOn, keep.classes, keep.shown
+    if NS.AlphaApply then NS.AlphaApply() end
+    FG.Layout(FG.anchor)
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

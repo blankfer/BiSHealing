@@ -198,6 +198,8 @@ end
 -- camera is its own alpha feature.
 function RD.On()
     local FG = NS.FG
+    -- THE FLIGHT DECK STANDS IN FOR IT (15 Nov 2026, alpha "deck" - dev/FLIGHTDECK.md): while it is on, the radar steps aside
+    if FG and FG.DeckOn and FG.DeckOn() then return false end
     return (FG and FG.Look and FG.Look() == "radar") or false
 end
 --- Once: the alpha radar on = the radar look (written down, `dash1` on the account). Answers true when it moved one.
