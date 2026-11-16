@@ -15585,9 +15585,12 @@ do
                 ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
+                RD.ripLast.untilAt = GetTime() + 6
+                EN.RipPaint()
+                ok(barCol() == EN.RIP_AMBER[1], "between two and three Chain Heals left: amber", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 4
                 EN.RipPaint()
-                ok(barCol() == EN.RIP_AMBER[1], "two Chain Heals left: amber", tostring(barCol()))
+                ok(barCol() == EN.RIP_RED[1] and rq.rip.icon:GetAlpha() < 1, "the last two: red (the icon lights only on the last)", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 1.5
                 EN.RipPaint()
                 ok(rq.rip.icon:GetAlpha() == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],

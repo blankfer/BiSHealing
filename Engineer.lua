@@ -579,9 +579,9 @@ function EN.RipPaint()
     B.bar:SetValue(left)
     local seg = len / ((RD.RIP_SEGS) or 6)
     local late = left < seg                               -- under one Chain Heal: it would be gone before it lands
-    -- THE COLOUR (Arn, 16 Nov: "green half way amber 2 chain heals left red"): green while more than two Chain Heals fit,
-    -- amber with two left, red on the last one
-    local col = late and EN.RIP_RED or ((left < 2 * seg) and EN.RIP_AMBER or EN.RIP_GREEN)
+    -- THE COLOUR (Arn, 16 Nov: "green half way amber 2 chain heals left red", then "red on last 2"): green for the first
+    -- half (three Chain Heals or more left), amber with two to three left, red on the last two
+    local col = (left < 2 * seg) and EN.RIP_RED or ((left < 3 * seg) and EN.RIP_AMBER or EN.RIP_GREEN)
     B.bar:SetStatusBarColor(col[1], col[2], col[3], col[4])
     B.icon:SetAlpha(late and 1 or 0.45)
     ripLate(B, late)
