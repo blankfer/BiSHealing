@@ -15647,6 +15647,28 @@ do
                 ok(not b.attn:IsShown(), "switched off: never a box")
                 RD.SetSw("attn", true)
                 RD.LitAlpha(b, false)
+                -- a fight hides buff times: "can't see" is not "missing" (Arn: "red outline on watershield i have 3 charges")
+                local sh = RD.shield
+                if sh and sh.shieldName then
+                    local keepAU, wasC, wasF = _G.AuraUtil, STATE.inCombat, RD.inFight
+                    STATE.inCombat, RD.inFight = false, false
+                    _G.AuraUtil = { FindAuraByName = function() return secretString and secretString() or secret() end }
+                    ok(RD.BuffLeft(sh.shieldName) == nil, "right after a fight, a hidden aura name = unknown, not gone")
+                    RD.PaintBuffDims()
+                    ok(not (sh.attn and sh.attn:IsShown()), "so no red box on your shield (Arn: 3 charges and red)")
+                    _G.AuraUtil = { FindAuraByName = function() return nil end }
+                    ok(RD.BuffLeft(sh.shieldName) == 0, "a plain nothing = gone")
+                    RD.PaintBuffDims()
+                    ok(sh.attn and sh.attn:IsShown(), "gone, out of a fight: the red box")
+                    STATE.inCombat, RD.inFight = true, true
+                    local sid = 52127
+                    local keepName = C_Spell.GetSpellName
+                    C_Spell.GetSpellName = function(id) if id == sid then return sh.shieldName end return keepName(id) end
+                    RD.OnCast("player", sid)
+                    ok(not sh.attn:IsShown(), "you cast your shield (mid-fight too): the box goes")
+                    C_Spell.GetSpellName = keepName
+                    _G.AuraUtil, STATE.inCombat, RD.inFight = keepAU, wasC, wasF
+                end
             end
             -- THE BOUNCE PROBE (Arn: "see a chain heal line on the three targets it bounced to")
             do

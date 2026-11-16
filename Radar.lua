@@ -4906,7 +4906,10 @@ function RD.BuffLeft(name)
     if not find then return nil end
     local ok, n, _, _, _, dur, exp = pcall(find, name, "player", "HELPFUL")
     if not ok then return nil end
-    if plain(n) == nil then return 0 end                         -- gone
+    -- HIDDEN IS NOT GONE (Arn, 16 Nov: "red outline on watershield i have 3 charges"): right after a fight the game can
+    -- still hide aura names (the totem-name row in solved.md); a secret answer = unknown, never "missing"
+    if NS.Secret and NS.Secret(n) then return nil end
+    if n == nil then return 0 end                                -- gone
     dur, exp = plain(dur), plain(exp)
     if type(dur) ~= "number" or dur <= 0 or type(exp) ~= "number" then return 1 end   -- no timer: as fresh
     local now = (GetTime and GetTime()) or 0
@@ -4950,8 +4953,10 @@ function RD.PaintBuffDims()
     -- your shield: the red box when it is missing (or nearly out of time); its LAST CHARGE has its own amber ring (the
     -- client's square, RD.ShieldWash), so no time-based amber here on top of it
     if sh and sh.shieldName then
+        -- nil = the game will not say (a fight hides buff times), NOT missing: no box then (Arn, 16 Nov: "red outline on
+        -- watershield i have 3 charges"); 0 = gone, out of a fight, where the reminder matters (before the pull)
         local sl = RD.BuffLeft(sh.shieldName)
-        RD.AttnSet(sh, (sl == nil or sl <= RD.ATTN_RED_LEFT) and "red" or nil)
+        RD.AttnSet(sh, (sl ~= nil and sl <= RD.ATTN_RED_LEFT) and "red" or nil)
     end
     return true
 end
@@ -5994,6 +5999,8 @@ function RD.OnCast(unit, spellID)
     if getName then ok, name = pcall(getName, spellID) end
     name = ok and plain(name) or nil
     RD.TideTestCast(name, now)                       -- the Grounding test button (Mana Tide's stand-in), when it shows
+    local sh = RD.shield                             -- your shield back on: its red box goes, mid-fight too
+    if name and sh and sh.shieldName == name then RD.AttnSet(sh, nil) end
     if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
     if name == "Chain Heal" then                      -- the bounce probe's clock (and later the bounce lines)
         RD.chainAt = now
