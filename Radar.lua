@@ -2695,6 +2695,7 @@ function RD.DeckLayout(T, order)
             RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
         RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
+        RD.PlaceCastStrip(sp, ih > 0 and { left + 1, y0 + r.y + r.h - ih, right - 1, y0 + r.y + r.h - 1 } or nil)
         local x = right - 2
         local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
@@ -5891,6 +5892,27 @@ function RD.MakeCastStrip(sp)
     return b
 end
 
+--[[ THE CAST BAR FILLS THE ICON ROW (16 Nov 2026, Arn's screenshot: "enemy cast bar gets a little lost how about we use the
+  whole bottom interrupt cure bar for it"). Where a box has the kick / cure row under its bar, the cast bar is that whole
+  row, under the kick and the cures (which stay on top and clickable); without the row (kicks and cures switched off, a
+  raid's short boxes) it stays the thin line under the health bar. `row` = left, top, right, bottom in the window's own
+  pixels from its top-left; nil = the thin line. Out of a fight (RD.DeckLayout). ]]
+function RD.PlaceCastStrip(sp, row)
+    local b = sp and sp.castStrip
+    if not b then return false end
+    b:ClearAllPoints()
+    if row and RD.frame then
+        b:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", row[1], -row[2])
+        b:SetPoint("BOTTOMRIGHT", RD.frame, "TOPLEFT", row[3], -row[4])
+        sp.castRow = true
+    else
+        b:SetPoint("BOTTOMLEFT", sp.heal, "BOTTOMLEFT", 1, 1)
+        b:SetPoint("BOTTOMRIGHT", sp.heal, "BOTTOMRIGHT", -1, 1)
+        b:SetHeight(RD.CAST_STRIP_H)
+        sp.castRow = false
+    end
+    return sp.castRow
+end
 function RD.CastStrip(sp, lit)
     if not RD.Sw("cast") then
         if sp and sp.castStrip then sp.castStrip:SetAlpha(0) end
@@ -5899,9 +5921,10 @@ function RD.CastStrip(sp, lit)
     local b = sp and sp.castStrip
     if not b then return false end
     if not lit or not RD.Deck() then b:SetAlpha(0) return false end
-    -- over the box's health bar, whatever was built over the pip since (a plain frame: allowed in a fight)
+    -- the thin line: over the box's health bar, whatever was built over the pip since; the icon row: UNDER the kick and the
+    -- cures (pip + 3), so they stay on top and take the click (a plain frame: allowed in a fight)
     local pl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
-    if type(pl) == "number" then b:SetFrameLevel(pl + 8) end
+    if type(pl) == "number" then b:SetFrameLevel(pl + (sp.castRow and 2 or 8)) end
     if not b.SetTimerDuration or not Enum or not Enum.StatusBarTimerDirection then return false end
     local tok = sp.tok
     local dir, dur = Enum.StatusBarTimerDirection.RemainingTime, nil

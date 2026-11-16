@@ -15552,6 +15552,17 @@ do
             ok(RD.TimerSpot(t, RD.SYS_PX + 10) == true, "a narrow timer: the number sits on the icon")
             ok(RD.TimerSpot(t, RD.SYS_PX + 40) == false, "a long one: beside it")
             ok(RD.DECK_TAG.y <= -4 and RD.DECK_TAG.x >= 4, "the name clear of the box's top edge")
+            -- "use the whole bottom interrupt cure bar for it"
+            do
+                local csp = RD.spokes[RD.conOrder[1]]
+                ok(csp.castStrip and csp.castRow == true, "the cast bar fills the kick / cure row")
+                local keepSw = d.radar.sw
+                d.radar.sw = { kicks = false, cures = false }
+                RD.Arm()
+                ok(csp.castRow == false, "no icon row (kicks and cures off): the thin line under the bar")
+                d.radar.sw = keepSw
+                RD.Arm()
+            end
             ok(RD.TotemSpell("Mana Spring Totem II") == "Mana Spring Totem" and RD.TotemSpell("Strength of Earth Totem IV")
                == "Strength of Earth Totem" and RD.TotemSpell("Windfury Totem") == "Windfury Totem",
                "a standing totem's rank numeral off: the click casts the spell (Arn: water and earth would not drop)")
