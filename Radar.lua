@@ -2447,22 +2447,25 @@ function RD.DeckTotemRow(W, y)
     for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
     for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
     if #list == 0 then return 0 end
+    -- SPLIT DOWN THE MIDDLE (Arn, 15 Nov: "totem bar can we split totem down the middle and put the call recall and bring
+    -- in the center"): air and water on the left, CALL / BRING / RECALL in the middle, earth and fire on the right - each
+    -- pair of timers stretched over its half. No square round the buttons (the deck's icons are dim or bright alone).
     local C, gap = RD.CON, RD.CON.toolGap
     local y6 = y + RD.SYS_PX + C.gap
-    local x = C.pad + RD.SYS_PX / 2
+    local bw = #list * RD.SYS_PX + (#list - 1) * gap
+    local bl = (W - bw) / 2                              -- the buttons' left edge, centred
     for k, b in ipairs(list) do
-        at(square("totem" .. k, RD.SYS_PX), x, y6)
-        at(b, x, y6)
-        x = x + RD.SYS_PX + gap
+        at(b, bl + RD.SYS_PX / 2 + (k - 1) * (RD.SYS_PX + gap), y6)
     end
-    local left = x - RD.SYS_PX / 2 + 4                 -- where the timers start, after the buttons
-    local n = #RD.TOTEM_TIMERS
-    local tw = math.floor((W - C.pad - left - (n - 1) * gap) / n)
-    for k = 1, n do
+    local sideGap = 4
+    local leftW = bl - sideGap - C.pad                  -- each half's room for its two timers
+    local tw = math.floor((leftW - gap) / 2)
+    local starts = { C.pad, C.pad + tw + gap, bl + bw + sideGap, bl + bw + sideGap + tw + gap }   -- air, water | earth, fire
+    for k = 1, #RD.TOTEM_TIMERS do
         local t = RD.TotemTimer(k)
         t:SetSize(tw, RD.SYS_PX)
         t:ClearAllPoints()
-        t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", left + (k - 1) * (tw + gap), -(y6 - RD.SYS_PX / 2))
+        t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", starts[k], -(y6 - RD.SYS_PX / 2))
         t.icon:SetWidth(RD.SYS_PX - 4)
         t.base:SetWidth(RD.SYS_PX - 4)
         t:Show()

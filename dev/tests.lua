@@ -14976,6 +14976,22 @@ do
     ok(hp and hp[2] == RD.bbRail and ep and ep[2] == RD.bbRail,
        "the hull holds the black box, and other addons (BiS Tools' box) dock below it")
     ok(RD.PaintDeckBox(), "a target change repaints the box")
+    -- THE TOTEM ROW SPLIT (Arn: "split totem down the middle and put the call recall and bring in the center")
+    do
+        local keepM = {}
+        for i, b in ipairs(RD.TOTEMS) do keepM[i] = b.macro b.macro = "/cast X" end
+        local W = RD.frame.__w or 380
+        RD.DeckTotemRow(W, 100)
+        local function cx(b) local q = b.points and b.points[1] return q and q[4] end
+        local function tx(k) local q = RD.timers[k].points and RD.timers[k].points[1] return q and q[4] end
+        local callX, recallX = cx(RD.call), cx(RD.recall)
+        ok(callX and recallX and tx(1) < tx(2) and tx(2) + RD.timers[2].__w <= callX - RD.SYS_PX / 2
+           and tx(3) >= recallX + RD.SYS_PX / 2 and tx(4) > tx(3),
+           "air and water on the left, CALL / BRING / RECALL in the middle, earth and fire on the right")
+        ok(math.abs((callX + recallX) / 2 - W / 2) < 1, "the buttons centred")
+        for i, b in ipairs(RD.TOTEMS) do b.macro = keepM[i] end
+        for k = 1, 4 do RD.timers[k]:Hide() end
+    end
     -- THE ALERT STRIP, ROOMIER (Arn: "the los is a bit big if we have to go a little taller ... make sure they are centered")
     do
         local list, H = NS.EN.Heads()
