@@ -277,6 +277,45 @@ function EN.Size(sp)
     end
 end
 
+--[[ ITS TARGET'S CLASS (16 Nov 2026, Arn's screenshot: Ztep in the ITS TARGET box drawn green, the colour for "class
+  unknown" - in a fight the game hides the class of a unit seen through somebody's target). The group's own classes are
+  plain, so ask the game who it is: UnitIsUnit against each member, tanks first, at most EN.FOLD_MAX. A plain yes takes
+  that class; a SECRET answer is folded in channel by channel with EvaluateColorValueFromBoolean (the client picks; read
+  off EllesmereUI_Colors, learn only - solved.md 14 Oct). Nothing found: the fallback colour as before. ]]
+EN.FOLD_MAX = 10
+function EN.FoldUnits()
+    local RD, out = NS.RD, {}
+    for _, i in ipairs((RD and RD.conOrder) or {}) do
+        local u = RD.units and RD.units[i]
+        if type(u) == "string" then out[#out + 1] = u end
+        if #out >= EN.FOLD_MAX then break end
+    end
+    return out
+end
+function EN.FoldClass(unit, c)
+    local FG = NS.FG
+    local r, g, b = c[1], c[2], c[3]
+    if not (UnitIsUnit and UnitClass and FG and FG.CLASS_COLOR) then return r, g, b end
+    local curve = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+    for _, u in ipairs(EN.FoldUnits()) do
+        local okC, _, tok = pcall(UnitClass, u)
+        local cc = okC and FG.CLASS_COLOR[plain(tok) or ""]
+        local ok, same
+        if cc then ok, same = pcall(UnitIsUnit, unit, u) end
+        if ok and secret(same) then
+            if curve then
+                local o1, nr = pcall(curve, same, cc[1], r)
+                local o2, ng = pcall(curve, same, cc[2], g)
+                local o3, nb = pcall(curve, same, cc[3], b)
+                if o1 and o2 and o3 then r, g, b = nr, ng, nb end
+            end
+        elseif ok and same == true then
+            return cc[1], cc[2], cc[3]
+        end
+    end
+    return r, g, b
+end
+
 --- Their health into the bar, untouched, in their class colour. Answers true when painted.
 function EN.Paint(sp)
     if not console() or not (sp and sp.unit) then
@@ -305,7 +344,13 @@ function EN.Paint(sp)
         local okD, dead = pcall(UnitIsDeadOrGhost, unit)
         if okD and plain(dead) == true then c = (FG and FG.DEAD_COLOR) or { 0.35, 0.10, 0.10 } end
     end
-    e.bar:SetStatusBarColor(c[1], c[2], c[3], 1)
+    if not cls and unit == "targettarget" then
+        local r, g, b = EN.FoldClass(unit, c)              -- the game hid its class: find it among the group
+        pcall(e.bar.SetStatusBarColor, e.bar, r, g, b, 1)
+        c = { r, g, b }                                    -- and the enemy check's "friendly" colour is that one
+    else
+        e.bar:SetStatusBarColor(c[1], c[2], c[3], 1)
+    end
     -- AN ENEMY IS RED (Arn: "enemies in target and target of target showing up with green health bars"): only the
     -- target box's two units can be a foe; the grid's own road, a secret answer goes through the client's curve
     if (unit == "target" or unit == "targettarget") and FG and FG.PaintHostile then FG.PaintHostile(e, unit, c) end

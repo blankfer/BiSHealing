@@ -2178,7 +2178,7 @@ function RD.BoxName(unit)
     return cs
 end
 RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
-RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 } }   -- the callsign on each box
+RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 }, x = 4, y = -4 }   -- the callsign on each box
 
 --- A box's plate: the whole box - its two sides and the middle - drawn dark with a thin edge, under the pip and the icons.
 function RD.DeckPlate(sp)
@@ -2217,7 +2217,7 @@ function RD.DeckTag(sp, w)
         t:SetAllPoints(plate)
         t.text = t:CreateFontString(nil, "OVERLAY")
         t.text:SetFont(RD.DECK_TAG.font, RD.DECK_TAG.size, "OUTLINE")
-        t.text:SetPoint("TOPLEFT", t, "TOPLEFT", 3, -2)
+        t.text:SetPoint("TOPLEFT", t, "TOPLEFT", RD.DECK_TAG.x, RD.DECK_TAG.y)   -- clear of the edge (Arn's shot, 16 Nov)
         t.text:SetJustifyH("LEFT")
         local c = RD.DECK_TAG.col
         t.text:SetTextColor(c[1], c[2], c[3], c[4])
@@ -2656,6 +2656,43 @@ function RD.PaintTimers()
     for _, t in ipairs(RD.timers or {}) do RD.PaintTimer(t) end
 end
 
+--[[ WHERE THE NUMBER GOES (16 Nov 2026, Arn's screenshots: "3m" drawn over the totem's icon in a narrow window). The
+  client centres its countdown in the Cooldown frame and writes it at its own size, so a strip narrower than the number
+  spills over the icon. With room (RD.TIMER_ROOM) the number stays beside the icon; without, it sits ON the icon, small
+  and outlined, the way an action button shows its cooldown. ]]
+RD.TIMER_ROOM = 22                                  -- px beside the icon a "4:59" / "3m" needs
+RD.TIMER_FONT = 10                                  -- the number's size when it sits on the icon
+function RD.TimerSpot(t, tw)
+    local cd = t and t.cd
+    if not cd then return nil end
+    local room = (tonumber(tw) or 0) - (RD.SYS_PX - 4) - 6
+    local on = room < RD.TIMER_ROOM
+    cd:ClearAllPoints()
+    if on then
+        cd:SetPoint("TOPLEFT", t.icon, "TOPLEFT", 0, 0)
+        cd:SetPoint("BOTTOMRIGHT", t.icon, "BOTTOMRIGHT", 0, 0)
+    else
+        cd:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 2, 0)
+        cd:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2)
+    end
+    -- the client's own number: a smaller font on the icon, its own beside it
+    if cd.GetRegions then
+        for _, reg in ipairs({ cd:GetRegions() }) do
+            if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" and reg.SetFont then
+                if not t.numFont and reg.GetFont then t.numFont = { reg:GetFont() } end
+                local f = t.numFont or {}
+                if on then
+                    pcall(reg.SetFont, reg, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", RD.TIMER_FONT, "OUTLINE")
+                elseif f[1] then
+                    pcall(reg.SetFont, reg, f[1], f[2], f[3])
+                end
+            end
+        end
+    end
+    t.numOnIcon = on
+    return on
+end
+
 --- The deck's totem row: the totem buttons you know at its left, then the four timers to its right edge. Answers the height
 --- it took (0 = no totems: nothing shown).
 function RD.DeckTotemRow(W, y)
@@ -2685,6 +2722,7 @@ function RD.DeckTotemRow(W, y)
         t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", starts[k], -(y6 - RD.SYS_PX / 2))
         t.icon:SetWidth(RD.SYS_PX - 4)
         t.base:SetWidth(RD.SYS_PX - 4)
+        RD.TimerSpot(t, tw)
         -- the engineer's view: "5m", then seconds (Arn: "no 0:00 timer just 5m or 00"); the deck: 4:59 the whole way
         local cd = t.cd
         if cd and cd.SetCountdownAbbrevThreshold then

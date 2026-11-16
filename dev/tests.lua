@@ -15418,6 +15418,36 @@ do
             RD.Arm()
             ok(not RD.deckBox.label:IsShown() and not RD.deckBox.line:IsShown(), "the header line and its words are gone")
         end
+        -- 16 NOV, ARN'S SCREENSHOTS: ITS TARGET in its class colour, the totem number on its icon, names off the edge
+        do
+            local EN = NS.EN
+            local keepCO, keepU, keepUIU, keepUC = RD.conOrder, RD.units, _G.UnitIsUnit, _G.UnitClass
+            RD.conOrder, RD.units = { 1, 2 }, { "party1", "party2" }
+            _G.UnitClass = function(u)
+                if u == "party1" then return "Warrior", "WARRIOR" end
+                if u == "party2" then return "Paladin", "PALADIN" end
+                return "?", secretString()
+            end
+            _G.UnitIsUnit = function(a, b) return b == "party2" end
+            local pal = NS.FG.CLASS_COLOR.PALADIN
+            local r, g, b = EN.FoldClass("targettarget", EN.FALLBACK)
+            ok(r == pal[1] and g == pal[2] and b == pal[3], "its target's class hidden: found among the group (a plain yes)")
+            _G.UnitIsUnit = function() return false end
+            r = EN.FoldClass("targettarget", EN.FALLBACK)
+            ok(r == EN.FALLBACK[1], "nobody of ours: the fallback colour as before")
+            _G.UnitIsUnit = function() return secret() end
+            r, g, b = EN.FoldClass("targettarget", EN.FALLBACK)
+            ok(getmetatable(r) == getmetatable(secret()), "a secret yes/no: folded by the client's curve, never tested")
+            STATE.curveRefuses = true
+            r = EN.FoldClass("targettarget", EN.FALLBACK)
+            ok(r == EN.FALLBACK[1], "the curve refuses: the fallback, no error")
+            STATE.curveRefuses = nil
+            RD.conOrder, RD.units, _G.UnitIsUnit, _G.UnitClass = keepCO, keepU, keepUIU, keepUC
+            local t = RD.TotemTimer(1)
+            ok(RD.TimerSpot(t, RD.SYS_PX + 10) == true, "a narrow timer: the number sits on the icon")
+            ok(RD.TimerSpot(t, RD.SYS_PX + 40) == false, "a long one: beside it")
+            ok(RD.DECK_TAG.y <= -4 and RD.DECK_TAG.x >= 4, "the name clear of the box's top edge")
+        end
         local keepTier = d.radar.tier
         d.radar.tier = 4
         local T = RD.ConsoleTier({ "player", "party1" })
