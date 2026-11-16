@@ -59,7 +59,10 @@ EN.HEAD_H = 16
 -- can save space too"): the word boxes sized to their three letters
 EN.HEAD_DECK = { { key = "los", x = 0, w = 36 }, { key = "range", x = 40, w = 36 }, { key = "over", x = 80, w = 38 },
                  { key = "cc", x = 122, w = 82 },    -- the fourth box, loss of control (EN.LossPaint)
-                 { key = "rip", x = 208, w = 90 } }  -- the Riptide bar (EN.RipPaint)
+                 { key = "rip", x = 208, w = 134 } } -- the Riptide bar: six squares the size of the deck's icons (EN.RipPaint)
+-- ONE ICON SIZE (Arn, 16 Nov: "whatever size we use on the interrupts and bottom shelf lets use that for the riptide box
+-- up top ... make them fit that icon tallness"): the strip is the icons' 22 px tall, and the Riptide bar is six 22 px
+-- squares (6 x 22 + its 2 px edge), its Riptide icon as big as the kick and the tools
 EN.HEAD_DECK_H = 22
 --- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
 function EN.Heads()
@@ -537,7 +540,7 @@ local function ripShape(q, B)
         t:SetPoint("TOPLEFT", q, "TOPLEFT", 1 + k * sw, -1)
         t:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", 1 + k * sw, 1)
     end
-    local is = math.min(sw, h - 2) - 2
+    local is = math.min(sw, h) - 2                         -- as big as the kick and the tools (the strip is their height)
     B.icon:SetSize(is, is)
     B.icon:ClearAllPoints()
     B.icon:SetPoint("CENTER", q, "LEFT", 1 + sw / 2, 0)

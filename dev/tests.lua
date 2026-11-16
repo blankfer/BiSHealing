@@ -15574,6 +15574,10 @@ do
                 RD.Arm()
                 local rq = EN.heads and EN.heads.rip
                 ok(rq and rq:IsShown(), "a shaman who knows Riptide: the Riptide bar on top")
+                EN.RipPaint()
+                ok(rq.__h == RD.SYS_PX and math.abs(rq.__w - (6 * RD.SYS_PX + 2)) <= 1 and rq.rip.icon.__w >= RD.SYS_PX - 3,
+                   "the Riptide bar: six icon-sized squares, the strip the icons' height (Arn: \"keep the icons consistent\")",
+                   tostring(rq.__w) .. " x " .. tostring(rq.__h) .. ", icon " .. tostring(rq.rip.icon.__w))
                 local tsp
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
