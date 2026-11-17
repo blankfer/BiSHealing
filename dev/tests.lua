@@ -15780,6 +15780,12 @@ do
                     STATE.guids[twin.unit] = keepG
                     RD.RipMarks()
                     ok(not (twin.ripMark and twin.ripMark:IsShown()), "someone else in that box: no mark")
+                    -- TARGETED AFTER THE RIPTIDE (Arn: "if I target later they dont show up"): the target change repaints them
+                    STATE.guids[twin.unit] = UnitGUID(tsp.unit)
+                    fire(RD.events, "PLAYER_TARGET_CHANGED")
+                    ok(twin.ripMark and twin.ripMark:IsShown(), "you target them after the Riptide: the mark comes up on the TARGET box too")
+                    STATE.guids[twin.unit] = keepG
+                    RD.RipMarks()
                 end
                 ok(tsp.ripHold and tsp.ripHold:GetFrameLevel() > tsp.heal:GetFrameLevel() + 1,
                    "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
@@ -15824,6 +15830,50 @@ do
                     ok(not tsp.ripMark:IsShown() and other.ripMark:IsShown() and rq.rip.bar:GetValue() > 10,
                        "A's ran out: A's mark gone at once, B's mark and B's bar carry on")
                     RD.rips, RD.ripLast, RD.ripNext = {}, nil, nil
+                    RD.RipMarks()
+                end
+                -- THE CLASS HEAL CUES (Arn: "build all three"): Oath of Light, Light's Vigil, Swiftmend - our own clock of our casts
+                do
+                    local keepTex, keepRanks2 = _G.C_Spell.GetSpellTexture, NS.FM.Ranks
+                    _G.C_Spell.GetSpellTexture = function(n) return "tex:" .. tostring(n) end
+                    RD.cueTex = {}
+                    RD.rips, RD.ripLast = {}, nil
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Holy Light",
+                       "Oath of Light on a box: Holy Light in its middle (heal them there)")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Light's Vigil", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Holy Shock", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
+                    if other then
+                        RD.lastClick, RD.lastClickAt = other, GetTime()
+                        RD.CueCast("Oath of Light", GetTime())
+                        ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
+                    end
+                    RD.cueMarks = {}
+                    RD.RipMarks()
+                    -- the druid
+                    NS.FM.Ranks = function(n) if n == "Swiftmend" then return { { rank = "", spell = 18562 } } end return keepRanks2(n) end
+                    RD.swiftAt = nil
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Rejuvenation", GetTime())
+                    ok(tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
+                    RD.CueCast("Swiftmend", GetTime())
+                    ok(not tsp.cue.icon:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
+                    RD.swiftAt = GetTime() - 1
+                    RD.RipMarks()
+                    ok(tsp.cue.icon:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
+                    RD.SetSw("swift", false)
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "the Swiftmend switch off: no cue")
+                    RD.SetSw("swift", true)
+                    NS.FM.Ranks = function(n) return keepRanks2(n) end
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    RD.cueMarks, RD.swiftAt, RD.cueTex = {}, nil, {}
+                    NS.FM.Ranks, _G.C_Spell.GetSpellTexture = keepRanks2, keepTex
                     RD.RipMarks()
                 end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
