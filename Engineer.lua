@@ -525,6 +525,10 @@ function EN.RipBuild(q)
         t:SetWidth(1)
         B.ticks[k] = t
     end
+    -- a solid back under the icon (Arn's shot: "looks like it has an overlay on it" - the dim icon was see-through, the
+    -- bar's green showed through it): the icon dims by greying, never by fading
+    B.iconBack = top:CreateTexture(nil, "OVERLAY", nil, 1)
+    B.iconBack:SetColorTexture(0.04, 0.04, 0.06, 1)
     B.icon = top:CreateTexture(nil, "OVERLAY", nil, 2)
     if B.icon.SetTexCoord then B.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     if C_Spell and C_Spell.GetSpellTexture then
@@ -539,6 +543,14 @@ function EN.RipBuild(q)
     end
     q.rip = B
     return B
+end
+--- The icon's light: 1 = full colour (the last stretch), less = greyed and darker - opaque either way.
+function EN.RipIcon(B, k)
+    if B.iconK == k then return end
+    B.iconK = k
+    B.icon:SetAlpha(1)
+    if B.icon.SetDesaturated then pcall(B.icon.SetDesaturated, B.icon, k < 1) end
+    B.icon:SetVertexColor(k, k, k, 1)
 end
 --- Lay the segments out on the box's size (called with every paint - the box can be narrowed).
 local function ripShape(q, B)
@@ -556,6 +568,7 @@ local function ripShape(q, B)
     B.icon:SetSize(is, is)
     B.icon:ClearAllPoints()
     B.icon:SetPoint("CENTER", q, "LEFT", 1 + sw / 2, 0)
+    if B.iconBack then B.iconBack:ClearAllPoints() B.iconBack:SetAllPoints(B.icon) end
     local L = B.late
     local x0, x1 = 1, 1 + sw
     L.TOP:ClearAllPoints() L.TOP:SetPoint("TOPLEFT", q, "TOPLEFT", x0, -1) L.TOP:SetSize(sw, 2)
@@ -575,7 +588,7 @@ function EN.RipPaint()
     local left = l and (l.untilAt - now) or 0
     if left <= 0 then
         B.bar:SetValue(0)
-        B.icon:SetAlpha(0.25)
+        EN.RipIcon(B, 0.3)
         ripLate(B, false)
         q:SetScript("OnUpdate", nil)
         q.ripTicking = nil                                 -- (so the next Riptide starts the ticker again, however this ended)
@@ -591,7 +604,7 @@ function EN.RipPaint()
     -- half (three Chain Heals or more left), amber with two to three left, red on the last two
     local col = (left < 2 * seg) and EN.RIP_RED or ((left < 3 * seg) and EN.RIP_AMBER or EN.RIP_GREEN)
     B.bar:SetStatusBarColor(col[1], col[2], col[3], col[4])
-    B.icon:SetAlpha(late and 1 or 0.45)
+    EN.RipIcon(B, late and 1 or 0.55)
     ripLate(B, late)
     if not q.ripTicking then
         q.ripTicking, q.ripAcc = true, 0

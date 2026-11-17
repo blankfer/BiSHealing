@@ -15756,9 +15756,11 @@ do
                 ok(tsp.ripHold and tsp.ripHold:GetFrameLevel() > tsp.heal:GetFrameLevel() + 1,
                    "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
                    tsp.ripHold and tsp.ripHold:GetFrameLevel(), tsp.heal:GetFrameLevel())
-                ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
+                ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.iconK < 1 and rq.rip.icon:GetAlpha() == 1, "the bar full, the Riptide icon greyed (never see-through): time for Chain Heals")
                 ok(rq.rip.over and rq.rip.over:GetFrameLevel() > rq.rip.bar:GetFrameLevel(),
                    "the Riptide icon and the lines on a layer OVER the bar's fill (Arn: \"keep riptide on top of the duration bar\")")
+                ok(rq.rip.iconBack and rq.rip.iconBack.__color and rq.rip.iconBack.__color[4] == 1,
+                   "a solid back under the icon: the bar's colour never shows through it (Arn: \"looks like it has an overlay on it\")")
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 6
@@ -15766,10 +15768,10 @@ do
                 ok(barCol() == EN.RIP_AMBER[1], "between two and three Chain Heals left: amber", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 4
                 EN.RipPaint()
-                ok(barCol() == EN.RIP_RED[1] and rq.rip.icon:GetAlpha() < 1, "the last two: red (the icon lights only on the last)", tostring(barCol()))
+                ok(barCol() == EN.RIP_RED[1] and rq.rip.iconK < 1, "the last two: red (the icon lights only on the last)", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 1.5
                 EN.RipPaint()
-                ok(rq.rip.icon:GetAlpha() == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],
+                ok(rq.rip.iconK == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],
                    "under one Chain Heal left: red, the icon lit, red edged - too late")
                 RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
                 ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
