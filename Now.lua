@@ -1076,7 +1076,7 @@ function FN.SetTank()
     FN.ApplyTank()
     FN.MarkTankPlates()
     if NS.Announce then NS.Announce("BiSHealing_TankChanged", name) end   -- API.lua
-    -- the radar puts the tank you chose due north (RD.TanksNorth); in a fight RD.Arm waits for its end
+    -- the deck puts the tank you chose in its tank row (RD.DeckOrder); in a fight RD.Arm waits for its end
     local RD = NS.RD
     if RD and RD.Active and RD.Active() and RD.Arm then pcall(RD.Arm) end
     return name

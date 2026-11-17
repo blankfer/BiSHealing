@@ -46,11 +46,8 @@ NS.RD = RD
 
 RD.KEY = "radar"
 RD.SIZE = 300                 -- the square, before its scale
-RD.FADE_PX = 380              -- the dark disc's art at party size: solid to r 148 (past the outer ring), gone by r 190
-RD.SPOKES = 5                 -- a party's spokes; a raid has 40 fixed slots (RD.Geometry)
+RD.SPOKES = 5                 -- a party: you and four (RD.Roster); a raid has 40 places by group
 RD.SYS_PX = 22                 -- a system pip (Arn, 8 Nov: five in the mana column - 26 reached a raid cure ring)
-RD.RINGS = { 40, 80, 120, 142 }
-RD.RING_SEG = 40
 RD.GREEN, RD.AMBER, RD.RED = 0.90, 0.80, 0.35    -- below: green / amber (when the heal size is unknown) / red
 RD.FUEL_LOW = 0.30
 -- THE FUEL GAUGE (8 Nov 2026, Arn: "a quasi mana/heal efficiency gauge ... my mana to track the boss health bar ... the
@@ -68,32 +65,31 @@ RD.RAIL_GAP = 3                                    -- between the rails, and bet
 RD.TOOL_RAIL_W = 22 + 8                            -- a system pip and a margin
 RD.GAUGE_RAIL_H = 44                               -- the readout box, the tape, the scale's ticks and numbers under it
 -- THE SHIPS (9 Nov 2026, Arn: "lean to the ryan gosling in the spirit of star wars imperial purple and white accents like
--- a fighter and the more the group gets we change the color to finally ending in star destroyer theam"). The radar's
+-- a fighter and the more the group gets we change the color to finally ending in star destroyer theam"). The deck's
 -- chrome takes the look of a bigger ship as the group grows: night-drive neon on a small fighter, cooling through a
 -- gunship and a cruiser to a capital ship's grey hull with white lines. OUR OWN looks and names - the feeling is
 -- borrowed, never a film's ship shapes, emblem, names or lettering. Only the chrome changes: the hull (RD.PLATE - the
--- disc, the rails, the stabilizer's cover), the scope's lines, its corner brackets, the centre mark, the fuel tape and its
--- scale. WARNINGS KEEP THEIR COLOURS in every ship (the health pips, the boss's red, BINGO, LOS / RANGE, amber, cyan), so
--- a warning reads the same everywhere. Picked by the group's size in RD.Arm - out of a fight only, never mid-fight.
+-- hull and its soft edge, the rails, the stabilizer's cover), the fuel tape and its scale. WARNINGS KEEP THEIR COLOURS in
+-- every ship (the health boxes, the boss's red, BINGO, LOS / RANGE, amber, cyan), so a warning reads the same everywhere.
+-- Picked by the group's size in RD.Arm - out of a fight only, never mid-fight.
 --   upTo     the biggest group this ship flies with
---   plate    the hull: the disc, the rails, the covers          line     the scope's rings, cross and ticks; the scale
---   bracket  the corner brackets (`be` long, `bw` thick)        accent   the centre mark, the readout, the ship's name
---   fuel     your mana on the tape                              track    the tape's empty groove
+--   plate    the hull, the rails, the covers                   line     the tape's ticks and scale
+--   accent   the readout's edge                                fuel     your mana on the tape
+--   track    the tape's empty groove
 RD.SHIPS = {
     { key = "fighter", name = "PARTY", upTo = 5,
-      plate = { 0.035, 0.015, 0.060 }, line = { 0.82, 0.38, 1.00 }, bracket = { 0.97, 0.93, 1.00 }, be = 18, bw = 2,
+      plate = { 0.035, 0.015, 0.060 }, line = { 0.82, 0.38, 1.00 },
       accent = { 1.00, 0.45, 0.92 }, fuel = { 0.88, 0.56, 1.00, 0.95 }, track = { 0.10, 0.04, 0.16, 0.9 } },
     { key = "gunship", name = "RAID 10", upTo = 10,
-      plate = { 0.035, 0.025, 0.070 }, line = { 0.64, 0.52, 1.00 }, bracket = { 1.00, 1.00, 1.00 }, be = 22, bw = 2,
+      plate = { 0.035, 0.025, 0.070 }, line = { 0.64, 0.52, 1.00 },
       accent = { 0.82, 0.64, 1.00 }, fuel = { 0.80, 0.72, 1.00, 0.95 }, track = { 0.08, 0.06, 0.17, 0.9 } },
     { key = "cruiser", name = "RAID 20", upTo = 20,
-      plate = { 0.045, 0.045, 0.060 }, line = { 0.60, 0.64, 0.75 }, bracket = { 1.00, 1.00, 1.00 }, be = 28, bw = 2,
+      plate = { 0.045, 0.045, 0.060 }, line = { 0.60, 0.64, 0.75 },
       accent = { 0.70, 0.44, 1.00 }, fuel = { 0.88, 0.90, 0.97, 0.95 }, track = { 0.10, 0.10, 0.14, 0.9 } },
     { key = "capital", name = "RAID 40", upTo = 40,
-      plate = { 0.060, 0.062, 0.072 }, line = { 0.84, 0.86, 0.91 }, bracket = { 1.00, 1.00, 1.00 }, be = 34, bw = 3,
+      plate = { 0.060, 0.062, 0.072 }, line = { 0.84, 0.86, 0.91 },
       accent = { 0.64, 0.40, 0.96 }, fuel = { 0.96, 0.96, 0.99, 0.95 }, track = { 0.13, 0.13, 0.16, 0.9 } },
 }
-RD.SCOPE_DIM = 0.55                                -- the rings, cross and ticks: the ship's line at this strength
 -- THE HUD TAPE (Arn, 8 Nov, a fighter HUD's speed tape: "the picture is an idea of how the guage should look not just a
 -- line"): a spine with a tick every 10%, longer ticks and numbers at 0/25/50/75/100, and a BOXED READOUT riding at the top
 -- of your fuel with your mana % in it - the client writes the number (SetFormattedText, UnitPowerPercent ScaleTo100; a
@@ -135,11 +131,8 @@ RD.KICK_SHARED = { ["Earth Shock"] = { "Flame Shock", "Frost Shock" } }   -- cas
 RD.CHAFF_COL = { 1.00, 0.70, 0.25 }                -- amber: answer this now (a missile on its way)
 -- THE PILOT'S KNOBS (Arn, 9 Nov: "these are our knobs can be turned on and off, some fights we need a specific totem all
 -- the time so we can't afford for it to be lighting up ... we can turn off from the rail without having to go into the
--- setting"): a small switch on each rail tool's corner, a PLAIN button (never part of the secure cast button), so a click
--- works in a fight - it only changes what we light, and alpha is allowed in combat. Saved in `radar.off[kind]`.
-RD.KNOB_PX = 9
-RD.KNOB_ON = { 0.22, 1.00, 0.53, 0.35 }            -- lit when it needs you: a faint phosphor dot
-RD.KNOB_OFF = { 1.00, 0.23, 0.30, 1 }              -- switched off: red, plain to see
+-- setting"): a switch per tool - it only changes what we light, so it works in a fight. Saved in `radar.off[kind]`;
+-- `/bish alpha radar knob <name> on|off` (the buttons on the old disc's rails went with the disc, 16 Nov 2026).
 RD.WATER = { tide = 12, spring = 300 }             -- how long each water totem stands
 RD.readyAt = {}                                    -- kind -> GetTime() when it is ready again
 RD.coolStart = {}                                  -- kind -> GetTime() its cooldown started (the cooling disc's start)
@@ -477,68 +470,10 @@ function RD.Halo(owner, px)
     return h
 end
 
---[[ WHERE EVERY SLOT SITS (the geometry). A slot = { b = bearing (radians, 0 up, clockwise), rh / rc / rb = the heal,
-  cure and bogey radii (rb nil: no bogey), ph / pc / pb = their sizes, own = your group }.
-  PARTY / SOLO (v1): five spokes, 72 degrees apart, the first straight up.
-  RAID (Arn, 8 Nov: "raid sectors next"): 8 groups x 5 = 40 FIXED slots, so each person's pip has its place by their
-  group and their place in it. Your own group is the top sector, nearer the centre and bigger (the shortest moves);
-  the other seven go round clockwise in group order on the outer ring. Bogeys in a raid: your own group only (40
-  cast checks twice a second is a second grid's cost for a picture nobody can watch) - the cures are on everyone. ]]
-RD.PARTY = { size = 300, rim = 146, rh = 58, rc = 92, rb = 124, ph = 26, pc = 14, pb = 22 }
--- YOU ARE THE MIDDLE (Arn, 8 Nov: "if we want to heal ourselves we are in the middle and stuff build out from us"): your
--- heal pip sits on the centre, your cure just above it, your target's bogey straight up; everyone else builds out from
--- you - a party's four on the diagonals, a raid's on their sectors (your own slot there moves to the centre).
-RD.SELF = { b = 0, rh = 0, rc = 30, rb = 124, ph = 28, pc = 14, pb = 22 }
+-- A slot = the deck's place for one spoke (RD.DeckSlots): ph / pc / pb = the heal pip's, a cure's and the kick's sizes
+-- (rb nil: no kick). The old disc's bearings and radii are gone with it (16 Nov 2026).
 RD.GLYPH = 1.5                -- no box round a pip any more: its role glyph is drawn this much bigger to read alone
--- THE PETS (9 Nov 2026, Arn: "lets add pets small too to rader"): a small paw pip beside its owner, lit like a person (the
--- pet's health through the same curve), a left-click the radar heal. The CLIENT shows and hides it as the pet comes and
--- goes (RegisterUnitWatch), so a pet called mid-fight appears. A party: each pet `turn` clockwise of its owner on the
--- owner's ring; your own just below you (`selfB`, `selfR`). A raid: your own group's pets only, `inward` nearer the centre
--- on their owner's bearing (35 more would crowd the scope and cost a second grid). `px` / `raidPx` their sizes.
-RD.PET = { px = 14, raidPx = 10, turn = math.rad(26), selfB = math.pi, selfR = 30, inward = 20 }
 RD.PET_UNIT = { player = "pet" }                       -- the owner's token -> the pet's (party/raid by pattern, RD.PetOf)
-RD.RAID = { size = 440, rim = 212, span = math.rad(72), gap = math.rad(6),
-            own = { rh = 100, rc = 126, rb = 150, ph = 22, pc = 12, pb = 18 },
-            other = { rh = 172, rc = 196, ph = 16, pc = 10 } }
-function RD.Geometry(raid, ownGroup)
-    local out = {}
-    if not raid then
-        local P, S = RD.PARTY, RD.SELF
-        -- slot 1 is you (RD.Roster puts "player" first): the centre
-        out[1] = { b = S.b, rh = S.rh, rc = S.rc, rb = S.rb, ph = S.ph, pc = S.pc, pb = S.pb, own = true, self = true,
-                   group = 1, pos = 1 }
-        for i = 2, RD.SPOKES do
-            out[i] = { b = math.pi / 4 + (i - 2) * math.pi / 2, rh = P.rh, rc = P.rc, rb = P.rb, ph = P.ph, pc = P.pc,
-                       pb = P.pb, own = true, group = 1, pos = i }
-        end
-        return out, P.size, P.rim
-    end
-    local R = RD.RAID
-    ownGroup = ownGroup or 1
-    local rest = 2 * math.pi - R.span - 2 * R.gap
-    local k = 0
-    for g = 1, 8 do
-        for p = 1, 5 do
-            local s
-            if g == ownGroup then
-                local o = R.own
-                s = { b = -R.span / 2 + (p - 0.5) * R.span / 5, rh = o.rh, rc = o.rc, rb = o.rb, ph = o.ph, pc = o.pc, pb = o.pb, own = true }
-            else
-                local o = R.other
-                local order = (g - ownGroup) % 8             -- 1..7: clockwise from your own group
-                local idx = (order - 1) * 5 + p              -- 1..35
-                s = { b = R.span / 2 + R.gap + (idx - 0.5) * rest / 35, rh = o.rh, rc = o.rc, ph = o.ph, pc = o.pc, own = false }
-            end
-            s.group, s.pos = g, p
-            k = k + 1
-            out[k] = s
-        end
-    end
-    return out, R.size, R.rim
-end
-
---- A point on a slot's bearing, `r` out from the middle.
-function RD.Point(s, r) return math.sin(s.b) * r, math.cos(s.b) * r end
 
 --- A square edge of four strips on a frame, tinted `col`; answers the list.
 local function edge(f, col, w)
@@ -616,90 +551,8 @@ function RD.Place()
     f:SetScale(math.max(0.5, math.min(2, tonumber(d.scale) or 1)))
 end
 
---- The scope is drawn at the party size and scaled up for a raid (RD.Arm), so its rings sit where the slots do.
-local function buildScope(f)
-    local s = CreateFrame("Frame", nil, f)
-    s:SetSize(RD.PARTY.size, RD.PARTY.size)
-    s:SetPoint("CENTER", f, "CENTER", 0, 0)
-    RD.scope = s
-    local g = { RD.PHOS[1] * 0.45, RD.PHOS[2] * 0.45, RD.PHOS[3] * 0.45, 0.85 }
-    -- A DARK DISC WITH A SOFT EDGE (Arn, 9 Nov: "we dont use the corners of the radar what about if we give it a dark
-    -- background instead of see through so things pop more like the rail. and we apply the edge fade instead on the edges
-    -- like the screen shot" - a map that fades into the world). The see-through square is gone: the rail's own plate,
-    -- solid out past the outer ring, fading to nothing (Art\scopefade.tga), the corners left clear. On the radar's OWN
-    -- lowest layer, not the scope's: the fade reaches past the square, and the rails beside it must draw over it.
-    -- Sized with the scope (RD.Arm), so a raid's bigger scope gets a bigger disc.
-    local fade = f:CreateTexture(nil, "BACKGROUND", nil, -8)
-    fade:SetTexture(RD.ART .. "scopefade")
-    fade:SetVertexColor(RD.PLATE[1], RD.PLATE[2], RD.PLATE[3], 1)
-    fade:SetSize(RD.FADE_PX, RD.FADE_PX)
-    fade:SetPoint("CENTER", s, "CENTER", 0, 0)
-    RD.fade = fade
-    -- every line kept, so a ship can repaint them (RD.ApplyShip): the rings, cross and ticks; the brackets; the centre
-    RD.scopeLines, RD.brackets = {}, {}
-    local function keep(l) RD.scopeLines[#RD.scopeLines + 1] = l return l end
-    RD.innerRings = {}                               -- the party's inner rings (not the rim): a fleet draws its own instead
-    for ri, r in ipairs(RD.RINGS) do
-        for k = 1, RD.RING_SEG do
-            local a0, a1 = (k - 1) * 2 * math.pi / RD.RING_SEG, k * 2 * math.pi / RD.RING_SEG
-            local l = keep(line(s, "BORDER", math.sin(a0) * r, math.cos(a0) * r, math.sin(a1) * r, math.cos(a1) * r, g, 1))
-            if ri < #RD.RINGS then RD.innerRings[#RD.innerRings + 1] = l end
-        end
-    end
-    local h = RD.SIZE / 2 - 6
-    keep(line(s, "BORDER", -h, 0, h, 0, g, 1))
-    keep(line(s, "BORDER", 0, -h, 0, h, g, 1))
-    for k = 0, 35 do
-        local a = k * math.pi / 18
-        local r2 = (k % 3 == 0) and 134 or 138
-        keep(line(s, "BORDER", math.sin(a) * 142, math.cos(a) * 142, math.sin(a) * r2, math.cos(a) * r2, g, 1))
-    end
-    -- the square's corner brackets: two arms a corner, `sx`/`sy` kept so a ship can lengthen them (RD.ShapeBrackets)
-    local b, e = RD.SIZE / 2 - 4, 22
-    local bc = { RD.PHOS[1] * 0.6, RD.PHOS[2] * 0.6, RD.PHOS[3] * 0.6, 1 }
-    for _, sx in ipairs({ -1, 1 }) do
-        for _, sy in ipairs({ -1, 1 }) do
-            local a1 = line(s, "BORDER", sx * b, sy * b, sx * (b - e), sy * b, bc, 2)
-            local a2 = line(s, "BORDER", sx * b, sy * b, sx * b, sy * (b - e), bc, 2)
-            a1.sx, a1.sy, a1.across = sx, sy, true
-            a2.sx, a2.sy, a2.across = sx, sy, false
-            RD.brackets[#RD.brackets + 1] = a1
-            RD.brackets[#RD.brackets + 1] = a2
-        end
-    end
-    -- you, in the middle: your role icon alone. The chevron that drew over it is gone (Arn, 10 Nov, on a DPS: "get rid
-    -- of the chevron, and keep the role icon" - as a healer the healing icon hid it). The icon itself: RD.PaintMe
-    RD.meLines, RD.meRole = {}, nil
-    -- the dim places of every slot live on their own layer, unscaled, and go with the scope (RD.PaintQuiet)
-    local dims = CreateFrame("Frame", nil, f)
-    dims:SetAllPoints(f)
-    RD.dims = dims
-    return s
-end
-
---- YOU, IN THE MIDDLE, ALWAYS (Arn, 10 Nov, after the chevron went: "my icon is gone"). Your heal pip lights only below
---- 90%, so at full health the middle was empty. Your role's sign now stays on the scope in the ship's accent, dimmed
---- (RD.ME_ALPHA); your heal pip lights over it, and it goes dark with the scope in a fight (RD.PaintQuiet). Rebuilt only
---- when your role changes.
---- HIDDEN AGAIN the same night (Arn: "you can hide my center icon and only light up when it needs to light up for a
---- heal, now i just want to click it because its on there"): alpha 0 - the middle is your heal pip alone, lit only when
---- you need one. The sign stays built, so one number brings it back.
-RD.ME_ALPHA = 0
-function RD.PaintMe()
-    local s = RD.scope
-    if not s then return end
-    local role = RD.Role("player")
-    if RD.meRole ~= role then
-        for _, t in ipairs(RD.meLines or {}) do t:Hide() end
-        RD.meLines = glyph(s, role, RD.SELF.ph * RD.GLYPH)
-        RD.meRole = role
-    end
-    local A = (RD.ship and RD.ship.accent) or RD.PHOS
-    for _, t in ipairs(RD.meLines) do t:SetVertexColor(A[1], A[2], A[3], RD.ME_ALPHA) end
-end
-
 --- One spoke's pieces: the heal pip (secure), its cure pips (client markers + secure boxes), its bogey, its alert
---- arcs and its dim places. Made once (a pool of 40 at most) and PLACED by RD.PlaceSpoke, out of a fight.
+--- word. Made once (a pool of 40 at most) and given its slot by RD.PlaceSpoke, out of a fight.
 local function buildSpoke(f, i)
     local sp = { i = i }
     -- HEAL: a secure unit button; its face is ours
@@ -777,13 +630,6 @@ local function buildSpoke(f, i)
     local red = (NS.FG and NS.FG.FLASH_RED) or { 1.00, 0.25, 0.30 }
     los.word:SetTextColor(red[1], red[2], red[3], 1)
     los:SetAlpha(0)
-    -- the dim places, out of a fight
-    sp.dims = {}
-    for d = 1, 3 do
-        local fr = CreateFrame("Frame", nil, RD.dims)
-        edge(fr, RD.DIM, 1)
-        sp.dims[d] = fr
-    end
     if los.CreateAnimationGroup then
         local ok, g = pcall(los.CreateAnimationGroup, los)
         if ok and g then
@@ -795,16 +641,6 @@ local function buildSpoke(f, i)
     end
     sp.los = los
     sp.cures = {}
-    -- THE PET: a small secure pip of its own, the client's unit watch showing it only while the pet is there
-    local p = CreateFrame("Button", "BiSHealingRadarPet" .. i, f, "SecureUnitButtonTemplate")
-    if p.RegisterForClicks then p:RegisterForClicks("AnyDown") end
-    p.beat = CreateFrame("Frame", nil, p)
-    p.beat:SetAllPoints(p)
-    p.pulse = RD.Pulse(p.beat, RD.PULSE_SOFT)
-    p.face = CreateFrame("Frame", nil, p.beat)
-    p.face:SetAllPoints(p)
-    p:Hide()
-    sp.pet = p
     -- CROSSHAIRS ON YOUR TARGET (Arn, 8 Nov: "need a target pip indicated by crosshairs like on our regular frames"): the
     -- grid's own reticle (FG.Crosshair), magenta like the cockpit's target, round the heal pip when that person is your
     -- target and round the bogey when THEIR target is yours. Plain frames on the radar (not on the secure pips), so only
@@ -820,15 +656,15 @@ local function buildSpoke(f, i)
     return sp
 end
 
---- Put a spoke where its slot is: sizes, places, the bogey's triangle, the arcs, the dim places. Out of a fight only
---- (the heal pip and the bogey are secure). A slot with no bogey (a raid's other groups) leaves it off.
-function RD.PlaceSpoke(sp, s, rim)
+--- Give a spoke its slot: sizes and the bogey's triangle, parked in the middle until the deck places it (RD.DeckLayout).
+--- Out of a fight only (the heal pip and the bogey are secure). A slot with no bogey leaves it off.
+function RD.PlaceSpoke(sp, s)
     local f = RD.frame
     sp.slot = s
     local b = sp.heal
     b:SetSize(s.ph, s.ph)
     b:ClearAllPoints()
-    b:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rh))
+    b:SetPoint("CENTER", f, "CENTER", 0, 0)
     RD.Halo(b, s.ph)
     if sp.glyphPx ~= s.ph then
         for _, t in ipairs(sp.glyph or {}) do t:Hide() end
@@ -839,7 +675,7 @@ function RD.PlaceSpoke(sp, s, rim)
         k:SetSize(s.pb, s.pb)
         RD.Halo(k, s.pb)
         k:ClearAllPoints()
-        k:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rb))
+        k:SetPoint("CENTER", f, "CENTER", 0, 0)
         if not k.lines or k.linesPx ~= s.pb then
             for _, l in ipairs(k.lines or {}) do l:Hide() end
             local h = s.pb * 0.42
@@ -852,28 +688,11 @@ function RD.PlaceSpoke(sp, s, rim)
     end
     -- the crosshairs sit on the pips they frame
     sp.cross:SetSize(s.ph + RD.CROSS_PAD, s.ph + RD.CROSS_PAD)
-    sp.cross:ClearAllPoints()
-    sp.cross:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rh))
     sp.totCross:SetSize(s.ph + RD.TOT_PAD, s.ph + RD.TOT_PAD)
-    sp.totCross:ClearAllPoints()
-    sp.totCross:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rh))
-    if s.rb then
-        sp.bogeyCross:SetSize(s.pb + RD.CROSS_PAD, s.pb + RD.CROSS_PAD)
-        sp.bogeyCross:ClearAllPoints()
-        sp.bogeyCross:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rb))
-    end
-    local spots = { { s.rh, s.ph }, { s.rc, s.pc }, { s.rb, s.pb } }
-    for d, fr in ipairs(sp.dims) do
-        local r, px = spots[d][1], spots[d][2]
-        if r then
-            fr:SetSize(px, px)
-            fr:ClearAllPoints()
-            fr:SetPoint("CENTER", f, "CENTER", RD.Point(s, r))
-            fr:Show()
-        else
-            fr:Hide()
-        end
-    end
+    if s.rb then sp.bogeyCross:SetSize(s.pb + RD.CROSS_PAD, s.pb + RD.CROSS_PAD) end
+    for _, cr in ipairs({ sp.cross, sp.totCross }) do cr:ClearAllPoints() cr:SetPoint("CENTER", b, "CENTER") end
+    sp.bogeyCross:ClearAllPoints()
+    sp.bogeyCross:SetPoint("CENTER", k, "CENTER")
 end
 
 --- Spoke i, made the first time it is needed (a party needs 5, a raid 40).
@@ -1017,7 +836,6 @@ local function buildSystem(f, name, point, x, y, rel)
     local b = CreateFrame("Button", "BiSHealingRadar" .. name, f, "SecureActionButtonTemplate")
     b:SetSize(RD.SYS_PX, RD.SYS_PX)
     b:SetPoint(point, rel or f, point, x, y)
-    b.home = { point, rel or f, point, x, y }       -- where the radar keeps it (the console moves it: RD.RadarLayout)
     b.rail = rel
     if b.RegisterForClicks then b:RegisterForClicks("AnyDown") end
     b.beat = CreateFrame("Frame", nil, b)
@@ -1177,25 +995,7 @@ local function buildGauge(f)
     end
     tipOn(g)
     if RD.gaugeRail then tipOn(RD.gaugeRail) end
-    -- THE PLACARD at the tape's left end, a pilot's seat plate: your ROLE (Arn, 9 Nov: "lets add our role here Healer,
-    -- DPS, Tank" - RD.PaintRole), the ship you are flying (RD.ApplyShip), then the word FUEL (Arn: "lets not do rpm" - a
-    -- bar across the top reads as an engine gauge without it). The rail's only words; the scope has none.
-    local P = RD.gaugeRail or f
-    local function word(text)
-        local fs = P:CreateFontString(nil, "OVERLAY")
-        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 9, "")
-        fs:SetText(text)
-        return fs
-    end
-    -- each line at its own fixed spot, so an empty role (the game said none) leaves the ship and FUEL where they are
-    g.role = word("")
-    g.role:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -5)
-    g.role:SetTextColor(1, 1, 1)
-    g.ship = word(RD.SHIPS[1].name)
-    g.ship:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -17)
-    g.fuelWord = word("MANA")
-    g.fuelWord:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -29)
-    RD.SizeGauge(RD.SIZE)
+    RD.ShapeTape(RD.SIZE)             -- a length until the deck puts it on its strip (Engineer.lua, EN.Gauge)
     return g
 end
 
@@ -1219,7 +1019,7 @@ function RD.BuildRails(f)
     t:SetPoint("TOPRIGHT", f, "TOPLEFT", -gap, 0)
     t:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", -gap, 0)
     -- THE GAUGE'S RAIL ON TOP (Arn, 9 Nov: "put it on top side ways that way only one rail per side"): from the tool
-    -- rail's left edge to the square's right edge; its width follows the square (RD.SizeGauge)
+    -- rail's left edge to the square's right edge
     local g = rail(f)
     g:SetHeight(RD.GAUGE_RAIL_H)
     g:SetPoint("BOTTOMLEFT", t, "TOPLEFT", 0, gap)
@@ -1494,225 +1294,32 @@ function RD.BuildHull(f)
     return RD.hull
 end
 
---[[ THE ENGINEER'S CONSOLE (10 Nov 2026). Arn's cousin found the radar too big; Arn: "lets say we are an engineer on the
-  death star, we open the radar console and it shows us the behind the scene. we just show empty squares top row party.
-  next row dispels, next row interrupts, next row pets, next row everything else water water shield exp food all left
-  and right rails bare bones empty squares all they do is the smart light up. 10 20 40 we dont just make bigger we just
-  reimaging to acoomodate a bigger raid".
-  THE SAME BUTTONS, PLACED ON A GRID. Nothing new lights anything: every pip, cure box, bogey, pet and tool is the very
-  secure button the radar uses, with its own curve or boolean; the console only moves them (RD.ConsoleLayout, out of a
-  fight, inside RD.Arm) and draws an empty square where each one lives (RD.conSquares, dim, always there - the
-  behind-the-scenes look). The scope, the dark disc, the rails, the fuel tape and the black box step aside.
-      row 1   party: the heal pips, you first
-      row 2   dispels: each person's cure boxes, under them
-      row 3   interrupts: the kick on each person's target (their bogey)
-      row 4   pets
-      row 5   everything else: stabilizer, Mana Tide, potion, Mana Spring, drink, rations, chaff, res
-  THE VIEW BUTTON (Arn: "button ... on right rail"): at the right rail's foot on the radar, at the console's top-right
-  corner in the console; one click switches, out of a fight (`radar.view` on the account). A party only for now: in a
-  raid the radar stays (the 10 / 20 / 40 console is its own design, to come). ]]
+--[[ THE CONSOLE (10 Nov 2026, the engineer's console; the deck since 15 Nov). THE SAME BUTTONS, PLACED IN THE DECK'S
+  PLACES: every pip, cure box, kick and tool is the radar's own secure button with its own curve or boolean; the deck only
+  moves them (RD.ConsoleLayout -> RD.DeckLayout, out of a fight, inside RD.Arm). The old radar disc, its fleet of rings
+  and the engineer's grid are gone (16 Nov 2026, Arn: "its one unified deck"). The rails stay as the tools' parents,
+  hidden; the black box hangs under the deck. ]]
 -- a unit that is never a friend: an empty place and the radar's background name it, so the mouseover is nobody there
 -- (an arena enemy, which does not exist outside an arena - and inside one the wheel's [nohelp] stops it all the same)
 RD.EMPTY_UNIT = "arena5"
--- FROM THE CENTRE OUT (Arn, 11 Nov): place in a group of five -> its column, the first (you, in a party) in the middle
-RD.CENTER_OUT = { 3, 2, 4, 1, 5 }
-RD.CON = { pad = 8, colW = 39, ph = 18, sq = 26, cure = 12, pb = 18, pet = 18, gap = 6, toolGap = 2,
-           head = 14 }                         -- a strip on top for the class and view buttons (Arn, 11 Nov: "clean it up")
+RD.CON = { pad = 8, gap = 6, toolGap = 2, head = 14 }   -- the deck's margin, its row gap, the tools' gap, the top strip
 
---[[ THE CONSOLE'S SHIPS (11 Nov 2026, Arn: "start to reimagine the next step up in groups we are upgrading ships to the next
-  class ending a spirit of star destroyer. let me click them even if i am not in that size party or raid, only go bigger
-  5-10%" ... "build from the center out" ... "dont ahve to keep them in the same groups the companion is going to tell us
-  who the best targets to keep in the center top 5 with me in the center, they can be in any group as long as they are
-  the best target according to the brains, outer edges people that arent really taking any damage").
-  Not a bigger copy: each class packs twice the crew into a hull only a little bigger, laid out IN RINGS - an odd grid,
-  every place sorted by its distance from the middle (RD.ConsoleCells), the n nearest kept, so the hull fills from the
-  centre out. WHO GOES WHERE IS A RANK, NOT A GROUP (RD.ConsoleOrder): you in the very middle, the top five round you,
-  the quiet ones on the edge. The rank comes from THE BRAINS - the companion's reading of the combat log, written as
-  `BiSBrains = { order = { "Name Surname", ... } }` into the private key addon on Arn's PC and read at a reload; until
-  then you, the tanks, the healers, then everyone else. Interrupts and pets: the top five's, in a row each under the
-  crew. Dispels: chips in each person's top corners. The tools row is the same in every ship; colours from RD.SHIPS.
-      FIGHTER   5   one row: you in the middle, then dispels / interrupts / pets / tools rows (the first console)
-      GUNSHIP  10   5 x 3 grid, the 10 nearest the middle
-      CRUISER  20   7 x 3 grid, the 20 nearest
-      CAPITAL  40   9 x 5 grid, the 40 nearest - the star destroyer
-  The view button steps radar -> fighter -> gunship -> cruiser -> capital -> radar, in any group (a preview: the empty
-  places are empty squares, on the edge); a group too big for a class skips it. ]]
+--- The group's class by size (Arn, 15 Nov: "5 man 10 man 20man 40 man rules to apply automatically"): how many places
+--- the deck lays out, and the ship whose colours it wears (RD.SHIPS).
 RD.CON_TIERS = {
     { n = 5,  ship = 1, name = "PARTY" },
-    -- TIDY (Arn, 11 Nov, three screenshots: "lets clean it up at least"): a full rectangle, one square size a class,
-    -- the rank from the centre out within it; the bands told by brightness, not size
-    { n = 10, ship = 2, name = "RAID 10", cols = 5, rows = 2, sq = 26, ph = 17, colW = 41, rowGap = 6, chip = 9, kick = 22, pet = 18 },
-    { n = 20, ship = 3, name = "RAID 20", cols = 5, rows = 4, sq = 24, ph = 16, colW = 44, rowGap = 5, chip = 8, kick = 22, pet = 18 },
-    { n = 40, ship = 4, name = "RAID 40", cols = 8, rows = 5, sq = 22, ph = 14, colW = 30, rowGap = 5, chip = 8, kick = 22, pet = 18 },
+    { n = 10, ship = 2, name = "RAID 10" },
+    { n = 20, ship = 3, name = "RAID 20" },
+    { n = 40, ship = 4, name = "RAID 40" },
 }
-
---[[ THE RADAR'S SHIPS (11 Nov 2026, Arn: "i want you to reimage the radar screen, for 10 20 40 we already have the 5 version
-  very nice" - the console above is the engineer's view of the same classes). The fighter keeps the party radar. A bigger
-  class is a FLEET round you, by rank (RD.ConsoleOrder - you, then the brains' order), drawn in rings:
-      you      the star destroyer, in the middle (your cure above you, your target's bogey straight up at the rim)
-      core     the next four on the inner ring, on the diagonals, full size, with cures and interrupts (bogeys at the
-               rim, on the diagonals - the outer rings leave the diagonals clear for them)
-      escorts  the middle ring, smaller, a cure beside each, no bogey
-      screen   the outer ring, the smallest ("the ones that will have to be sacrificed to protect the carriers")
-  The scope only grows 7-8% a class (300 / 320 / 345 / 370 - the old one-size raid radar was 440). Pets: the core's. ]]
-RD.FLEET = {
-    [10] = { size = 320, core = { rh = 56, rc = 86, rb = 140, ph = 24, pc = 13, pb = 20 },
-             rings = { { n = 5, rh = 114, ph = 20, pc = 10, off = 36 } } },     -- due north left free for the main tank
-    [20] = { size = 345, core = { rh = 56, rc = 84, rb = 158, ph = 24, pc = 13, pb = 20 },
-             rings = { { n = 7, rh = 106, ph = 18, pc = 9, off = 360 / 14 }, { n = 8, rh = 142, ph = 15, pc = 8, off = 22.5 } } },
-    [40] = { size = 370, core = { rh = 56, rc = 82, rb = 172, ph = 22, pc = 12, pb = 18 },
-             rings = { { n = 11, rh = 104, ph = 17, pc = 9, off = 360 / 22 }, { n = 24, rh = 146, ph = 13, pc = 7, off = 7.5 } } },
-}
-
---- Every place of a fleet, in rank order: you, the core four, then each ring from the top clockwise.
-function RD.FleetPlaces(T)
-    local F = RD.FLEET[T.n]
-    if not F then return nil end
-    local C, S = F.core, RD.SELF
-    local P = { { b = 0, rh = 0, rc = S.rc, rb = C.rb, ph = C.ph + 4, pc = C.pc, pb = C.pb, own = true, self = true, band = "you" } }
-    for j = 1, 4 do
-        P[#P + 1] = { b = math.pi / 4 + (j - 1) * math.pi / 2, rh = C.rh, rc = C.rc, rb = C.rb, ph = C.ph, pc = C.pc,
-                      pb = C.pb, own = true, band = "core" }
-    end
-    for r, R in ipairs(F.rings) do
-        for j = 1, R.n do
-            P[#P + 1] = { b = math.rad(R.off) + (j - 1) * 2 * math.pi / R.n, rh = R.rh, rc = R.rh + R.ph / 2 + R.pc / 2 + 3,
-                          ph = R.ph, pc = R.pc, own = false, band = (r == #F.rings and #F.rings > 1) and "screen" or "escort" }
-        end
-    end
-    return P
-end
-
---- The fleet's slots for these units: slot i (unit i) gets the place of its rank. Answers slots, the scope's size, rim.
-function RD.FleetGeometry(T, order)
-    local P = RD.FleetPlaces(T)
-    local F = RD.FLEET[T.n]
-    local slots = {}
-    for k, i in ipairs(order) do
-        local p = P[k]
-        if p then
-            local s = {}
-            for key, v in pairs(p) do s[key] = v end
-            s.group, s.pos, s.rank = math.ceil(i / 5), (i - 1) % 5 + 1, k
-            slots[i] = s
-        end
-    end
-    return slots, F.size, F.size / 2 - 4
-end
-
---[[ THE FLEET MADE VISIBLE (11 Nov 2026, Arn: "yes do both", to: faint seats out of a fight, and rings where the ships sit).
-  RINGS: a class bigger than the fighter hides the party's inner rings and draws its own - the core's ring and each of
-  its rings, at the radius its ships sit on (RD.DrawRings), in the ship's line like the rest of the scope; the rim, cross
-  and ticks stay. They stay in a fight, like the scope. SEATS: every place a faint dot out of a fight (RD.PaintSeats),
-  so the fleet's shape shows on a quiet radar; gone in a fight (RD.PaintQuiet), gone in the engineer's view. ]]
-RD.SEAT_ALPHA = 0.45
-function RD.DrawRings(T)
-    local f = RD.frame
-    if not f then return end
-    local F = T and RD.FLEET[T.n]
-    local fleet = F and not RD.Console()
-    for _, l in ipairs(RD.innerRings or {}) do if fleet then l:Hide() else l:Show() end end
-    RD.ringFrame = RD.ringFrame or CreateFrame("Frame", nil, f)
-    local rf = RD.ringFrame
-    rf:SetAllPoints(f)
-    rf:SetFrameLevel(math.max(0, f:GetFrameLevel()))
-    RD.fleetLines = RD.fleetLines or {}
-    for _, l in ipairs(RD.fleetLines) do l:Hide() end
-    if not fleet then rf:Hide() return end
-    rf:Show()
-    local radii = { F.core.rh }
-    for _, R in ipairs(F.rings) do radii[#radii + 1] = R.rh end
-    local L, k = (RD.ship and RD.ship.line) or RD.PHOS, RD.SCOPE_DIM
-    local col = { L[1] * k, L[2] * k, L[3] * k, 0.85 }
-    local n = 0
-    for _, r in ipairs(radii) do
-        for j = 1, RD.RING_SEG do
-            n = n + 1
-            local a0, a1 = (j - 1) * 2 * math.pi / RD.RING_SEG, j * 2 * math.pi / RD.RING_SEG
-            local l = RD.fleetLines[n]
-            if not l then
-                l = line(rf, "BORDER", 0, 0, 0, 0, col, 1)
-                RD.fleetLines[n] = l
-            end
-            l:SetStartPoint("CENTER", rf, math.sin(a0) * r, math.cos(a0) * r)
-            l:SetEndPoint("CENTER", rf, math.sin(a1) * r, math.cos(a1) * r)
-            l:SetVertexColor(col[1], col[2], col[3], col[4])
-            l:Show()
-        end
-    end
-    RD.fleetRadii = radii
-end
-
---- A faint dot at every place, out of a fight: the fleet's shape on a quiet radar.
-function RD.PaintSeats(slots)
-    local f = RD.frame
-    if not f then return end
-    RD.seatFrame = RD.seatFrame or CreateFrame("Frame", nil, f)
-    local sf = RD.seatFrame
-    sf:SetAllPoints(f)
-    sf:SetFrameLevel(math.max(0, f:GetFrameLevel()))
-    RD.seats = RD.seats or {}
-    local L = (RD.ship and RD.ship.line) or RD.PHOS
-    local n = 0
-    if not RD.Console() then
-        for _, s in ipairs(slots or {}) do
-            n = n + 1
-            local t = RD.seats[n]
-            if not t then
-                t = sf:CreateTexture(nil, "BORDER")
-                t:SetTexture(RD.ART .. "disc")
-                RD.seats[n] = t
-            end
-            local px = math.max(4, math.floor((s.ph or 20) * 0.3 + 0.5))
-            t:SetSize(px, px)
-            t:ClearAllPoints()
-            t:SetPoint("CENTER", f, "CENTER", RD.Point(s, s.rh))
-            t:SetVertexColor(L[1], L[2], L[3], RD.SEAT_ALPHA)
-            t:Show()
-        end
-    end
-    for j = n + 1, #RD.seats do RD.seats[j]:Hide() end
-    -- THE TANK'S SEAT (Arn, 11 Nov: "the faint dots should reflect that" - the tank always straight above you): with no
-    -- tank in the group, a faint dot of its own due north on the inner ring, where one will sit. A main tank there has
-    -- its own dot, so this one steps aside.
-    local inner
-    for _, s in ipairs(slots or {}) do
-        if not s.self and (s.rh or 0) > 0 and (not inner or s.rh < inner.rh) then inner = s end
-    end
-    local ts = RD.tankSeat
-    if not ts then
-        ts = sf:CreateTexture(nil, "BORDER")
-        ts:SetTexture(RD.ART .. "disc")
-        RD.tankSeat = ts
-    end
-    if inner and not RD.mainTank and not RD.Console() then
-        local px = math.max(4, math.floor((inner.ph or 20) * 0.3 + 0.5))
-        ts:SetSize(px, px)
-        ts:ClearAllPoints()
-        ts:SetPoint("CENTER", f, "CENTER", 0, inner.rh)
-        ts:SetVertexColor(L[1], L[2], L[3], RD.SEAT_ALPHA)
-        ts:Show()
-    else
-        ts:Hide()
-    end
-    sf:SetAlpha((RD.inFight or combat()) and 0 or 1)
-end
 
 --- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier). THE FLIGHT DECK is a console
 --- too (15 Nov 2026, Arn: "this is going to replace radar and engineer is going to be this new deck but barebones"): the
 --- engineer's boxes - health bars, kick squares, cure chips, the fuel strip, the tools and totems - laid out as the deck.
+--- The engineer's view and the old radar disc are gone (16 Nov 2026, Arn: "its one unified deck"): the console is the
+--- deck, and the deck is the radar look.
 function RD.Deck() return (NS.FG and NS.FG.DeckOn and NS.FG.DeckOn()) == true end
-function RD.Console() return db().view == "console" or RD.Deck() end
---- The view button picked the engineer's view (the deck is the radar look's own view otherwise).
-function RD.EngineerView() return db().view == "console" end
---- The retired radar disc, reachable only by the suite (`RD.FORCE_DISC`, never set in the game), so its code stays tested
---- until it is deleted.
-RD.FORCE_DISC = false
-function RD.DiscView() return RD.FORCE_DISC == true end
---- The engineer's view: the deck, condensed (RD.DECK_SMALL) - narrower, taller boxes, short totem timers.
-function RD.Compact() return RD.EngineerView() and RD.Deck() end
---- The deck's sizes for the view on screen.
-function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
+function RD.Console() return RD.Deck() end
 
 --[[ THE SWITCHES (16 Nov 2026, Arn: "maybe we just do toggles with everything off its the quasi engineer look and deck would
   be with everything on names flavor etc" - "that unifies them, no more deck and engineer, just deck now"; sketch
@@ -1849,27 +1456,24 @@ function RD.FloorInner() return RD.NARROW_INNER end
 --- The width the player dragged this view to (Shift + the corner grip), never under the floor; nil = the view's own.
 function RD.DeckWidth()
     local t = db().deckW
-    local w = type(t) == "table" and tonumber(t[RD.Compact() and "eng" or "deck"]) or nil
+    local w = type(t) == "table" and tonumber(t.deck) or nil
     if not w then return nil end
     return math.max(RD.FloorInner(), math.floor(w + 0.5))
 end
 function RD.SetDeckWidth(w)
     local d = db()
     d.deckW = type(d.deckW) == "table" and d.deckW or {}
-    d.deckW[RD.Compact() and "eng" or "deck"] = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
+    d.deckW.deck = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
 end
 
---- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
---- place, so the highest slot says how many must fit). Answers the class and its number.
+--- The deck's class: the smallest that holds everyone in `units` (a raid's slot is its group and place, so the highest
+--- slot says how many must fit). THE GROUP DECIDES (Arn, 15 Nov: "5 man 10 man 20man 40 man rules to apply automatically
+--- ... we can get rid of the button"). Answers the class and its number.
 function RD.ConsoleTier(units)
     local hi = 0
     for i in pairs(units or RD.units or {}) do if type(i) == "number" and i > hi then hi = i end end
-    local need = #RD.CON_TIERS
-    for k, t in ipairs(RD.CON_TIERS) do if hi <= t.n then need = k break end end
-    -- THE GROUP DECIDES (Arn, 15 Nov: "5 man 10 man 20man 40 man rules to apply automatically ... we can get rid of the
-    -- button"): a picked size counts only behind the retired disc's suite door
-    local picked = RD.FORCE_DISC and tonumber(db().tier) or 1
-    local k = math.min(#RD.CON_TIERS, math.max(picked, need))
+    local k = #RD.CON_TIERS
+    for j, t in ipairs(RD.CON_TIERS) do if hi <= t.n then k = j break end end
     return RD.CON_TIERS[k], k
 end
 
@@ -1890,7 +1494,6 @@ end
                supports it" - the brains bring a healer in when the log says they are taking it)
   You are always the middle. Empty places last (the edge). ]]
 RD.MELEE = { WARRIOR = true, ROGUE = true, PALADIN = true }
-RD.BAND_ORDER = { tank = 1, melee = 2, ranged = 3, heal = 4 }
 
 --- "Holy-Haven-PvP-US" (the log's) -> "Holy Haven" (GetUnitName's on Forever): the forename and surname.
 function RD.BrainsName(s)
@@ -1934,41 +1537,8 @@ local function brainsOf(brains, u)
     return type(name) == "string" and brains[name] or nil
 end
 
---- Who goes where: the slot numbers (into `units` and RD.spokes) in rank order - you first, then the brains' order, then
---- anyone it does not know by logic (tank, heal, melee, ranged), the empty slots last (the edge). Out of a fight.
-function RD.ConsoleOrder(units, n)
-    local present, empty, rank = {}, {}, {}
-    local brains = RD.BrainsRank()
-    for i = 1, n do
-        local u = units and units[i]
-        if u then present[#present + 1] = i else empty[#empty + 1] = i end
-    end
-    for _, i in ipairs(present) do
-        local u = units[i]
-        local okMe, me = false, nil
-        if u == "player" then okMe, me = true, true
-        elseif UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end   -- a raid names you "raidN"
-        if okMe and plain(me) == true then
-            rank[i] = 0
-        else
-            local b = brains and brainsOf(brains, u)
-            local logic = (RD.BAND_ORDER[RD.LogicBand(u)] or 4) * 100 + i
-            rank[i] = b and b or (1000 + logic)
-        end
-    end
-    table.sort(present, function(a, b) return rank[a] < rank[b] end)
-    for _, i in ipairs(empty) do present[#present + 1] = i end
-    return present
-end
-
---[[ TANKS NORTH (11 Nov 2026, Arn - a standing rule: "only things I want to be consistent is keep tank north of us, can be
-  spread but in the top half of the quadrant"). On the radar, every class: a tank whose place is not in the top half
-  (north of you: cos(bearing) > 0) trades places with the nearest top-half place that holds no tank - an empty one, or
-  the closest to the middle. The rank still decides everyone else; only the tanks are pinned north. ]]
-local function north(s) return s and not s.self and (s.rh or 0) > 0 and math.cos(s.b or 0) > 0.01 end
-
 --[[ NOBODY NAMED THE TANK (11 Nov 2026, Arn: "the tank is not north of me"). On Forever a group made by hand has no
-  roles: the game names no tank, so the rule above had nobody to move. When neither the game, BiS> now's tank nor a main
+  roles: the game names no tank, so the deck's tank row had nobody (RD.DeckOrder asks the most health first). When neither the game, BiS> now's tank nor a main
   tank assignment names one, ONE is guessed from the classes that can tank: the one the brains say takes the most, else
   a warrior, then a paladin, then a druid (the first in the group). You are never the guess. Answers the slot or nil. ]]
 RD.TANK_GUESS = { WARRIOR = 1, PALADIN = 2, DRUID = 3 }
@@ -1993,69 +1563,6 @@ function RD.GuessTank(slots, units)
     return best
 end
 
-function RD.TanksNorth(slots, units)
-    if type(slots) ~= "table" or type(units) ~= "table" then return 0 end
-    local isTank = {}
-    for i in pairs(slots) do
-        local u = units[i]
-        if u and u ~= "player" then
-            local okMe, me = false, nil
-            if UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
-            if not (okMe and plain(me) == true) and RD.LogicBand(u) == "tank" then isTank[i] = true end
-        end
-    end
-    RD.tankGuessed = nil
-    if not next(isTank) then
-        local g = RD.GuessTank(slots, units)
-        if g then isTank[g], RD.tankGuessed = true, g end
-    end
-    local moved = 0
-    for i, s in pairs(slots) do
-        if isTank[i] and not north(s) then
-            local best
-            for j, t in pairs(slots) do
-                if not isTank[j] and north(t) then
-                    -- the nearest to the middle; then an empty place over someone's; then the lowest rank
-                    local key = { t.rh, units[j] and 1 or 0, t.rank or j }
-                    if not best or key[1] < best[2][1] or (key[1] == best[2][1] and (key[2] < best[2][2]
-                       or (key[2] == best[2][2] and key[3] < best[2][3]))) then
-                        best = { j, key }
-                    end
-                end
-            end
-            if best then
-                local j = best[1]
-                slots[i], slots[j] = slots[j], slots[i]
-                moved = moved + 1
-            end
-        end
-    end
-    -- THE MAIN TANK DIRECTLY ON TOP (Arn, 11 Nov: "Main tank taking the most damage always directly on top of us"): the
-    -- first tank in the fleet's order - the brains' (who takes the most) when online, else the game's main tank / BiS> now's
-    -- tank / the first tank - sits due north on its own ring. Your own target's bogey (which sat due north at the rim)
-    -- steps to your left with your cure, so the two never sit on each other.
-    local order = RD.ConsoleOrder(units, #slots)
-    local mt
-    for _, i in ipairs(order) do if isTank[i] then mt = i break end end
-    RD.mainTank = mt
-    if mt and slots[mt] then
-        local s = {}
-        for k, v in pairs(slots[mt]) do s[k] = v end
-        s.b = 0
-        slots[mt] = s
-        for i, t in pairs(slots) do
-            if t.self then
-                local me = {}
-                for k, v in pairs(t) do me[k] = v end
-                me.b, me.rc, me.rb = RD.SELF_ASIDE.b, RD.SELF_ASIDE.rc, RD.SELF_ASIDE.rb
-                slots[i] = me
-            end
-        end
-    end
-    return moved
-end
-RD.SELF_ASIDE = { b = -math.pi / 2, rc = 26, rb = 50 }    -- your cure and your target's bogey, to your left
-
 --- `/bish alpha radar brains`: what the fleet is ordered by now.
 function RD.BrainsSay(P)
     local b = _G.BiSBrains
@@ -2073,108 +1580,6 @@ function RD.BrainsSay(P)
     end
 end
 
---- Every slot of a class: the fighter's own (RD.ConsoleSlot), else small ones. `top` = the slots that carry an interrupt
---- and a pet (the top five of the rank).
-function RD.ConsoleSlots(T, top, rankOf)
-    local out = {}
-    top, rankOf = top or {}, rankOf or {}
-    for i = 1, T.n do
-        if T.n == 5 then
-            out[i] = RD.ConsoleSlot(i)
-        else
-            local mine = top[i] == true
-            local z = 1                              -- one size a class (the bands are told by brightness)
-            out[i] = { b = 0, rh = 0, rc = 0, rb = mine and 0 or nil, ph = math.floor(T.ph * z + 0.5), pc = math.max(2, T.chip - 4),
-                       pb = T.kick * 0.8, own = mine, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, console = true,
-                       scale = z }
-        end
-    end
-    return out
-end
-
---- THE FLEET'S SHAPE (Arn, 11 Nov: "we are the star destroyer, our best ships are around us ... like how herds keep the
---- vulnerable in the middle, out in the outer edges are the screen ships smaller ships that dont take much damage"):
---- the size of the k-th in rank - the core five full size, the escorts a little smaller, the outer screen the smallest.
-RD.SHIP_SIZES = { core = 1, escort = 0.85, screen = 0.72 }
-function RD.ShipScale(k, n)
-    if k <= 5 then return RD.SHIP_SIZES.core end
-    if k <= math.ceil(n * 2 / 3) then return RD.SHIP_SIZES.escort end
-    return RD.SHIP_SIZES.screen
-end
-
---- The slot a spoke gets in the fighter: drawn small (its glyph fits its square), placed by RD.ConsoleLayout.
-function RD.ConsoleSlot(i)
-    local C = RD.CON
-    return { b = 0, rh = 0, rc = 0, rb = 0, ph = C.ph, pc = C.cure, pb = C.pb, own = true, group = 1, pos = i,
-             self = (i == 1) or nil, console = true }
-end
-
---- The fighter's grid: column centres, row centres, the size. Every place is (x, -y) from the radar frame's top-left.
-function RD.ConsoleGrid()
-    local C = RD.CON
-    local W = C.pad * 2 + C.colW * RD.SPOKES
-    local y1 = C.pad + C.head + C.sq / 2
-    local y2 = y1 + C.sq / 2 + C.gap + (C.cure + 4) / 2
-    local y3 = y2 + (C.cure + 4) / 2 + C.gap + C.sq / 2
-    local y4 = y3 + C.sq / 2 + C.gap + C.sq / 2
-    local y5 = y4 + C.sq / 2 + C.gap + RD.SYS_PX / 2
-    local H = y5 + RD.SYS_PX / 2 + C.pad
-    local cols = {}
-    for i = 1, RD.SPOKES do cols[i] = C.pad + C.colW * (i - 0.5) end
-    return { W = W, H = H, cols = cols, rows = { y1, y2, y3, y4, y5 } }
-end
-
---- A bigger class's places: an odd grid, sorted nearest the middle first (in pixels), the n nearest kept. Answers the
---- places {x, y}, the crew block's size.
-function RD.ConsoleCells(T, x0)
-    local C = RD.CON
-    local pitch = T.sq + T.rowGap
-    local midC, midR = (T.cols + 1) / 2, (T.rows + 1) / 2
-    local cells = {}
-    for r = 1, T.rows do
-        for c = 1, T.cols do
-            local dx, dy = (c - midC) * T.colW, (r - midR) * pitch
-            cells[#cells + 1] = { x = x0 + T.colW * (c - 0.5), y = C.pad + C.head + T.sq / 2 + (r - 1) * pitch, d = dx * dx + dy * dy,
-                                  r = r, c = c }
-        end
-    end
-    table.sort(cells, function(a, b)
-        if a.d ~= b.d then return a.d < b.d end
-        if a.r ~= b.r then return a.r < b.r end
-        return a.c < b.c
-    end)
-    local out = {}
-    for k = 1, T.n do out[k] = cells[k] end
-    return out, T.cols * T.colW, T.rows * T.sq + (T.rows - 1) * T.rowGap
-end
-
--- an empty square: four thin edges in the dim phosphor, on the console's own layer
-local function square(key, px, col)
-    RD.conSquares = RD.conSquares or {}
-    local q = RD.conSquares[key]
-    if not q then
-        q = CreateFrame("Frame", nil, RD.conLayer)
-        q.edges = edge(q, RD.DIM, 1)
-        RD.conSquares[key] = q
-    end
-    col = col or RD.DIM
-    if q.col ~= col then
-        for _, e in ipairs(q.edges) do e:SetVertexColor(col[1], col[2], col[3], col[4] or 1) end
-        q.col = col
-    end
-    q:SetSize(px, px)
-    q:Show()
-    return q
-end
-
--- THE BANDS BY BRIGHTNESS: the core five bright, the escorts the usual dim, the outer screen fainter
-RD.BAND_COL = { core = { 0.22, 1.00, 0.53, 0.75 }, escort = RD.DIM, screen = { 0.11, 0.36, 0.22, 0.5 } }
-local function bandCol(k, n)
-    if k <= 5 then return RD.BAND_COL.core end
-    if k <= math.ceil(n * 2 / 3) then return RD.BAND_COL.escort end
-    return RD.BAND_COL.screen
-end
-
 local function at(fr, x, y)
     fr:ClearAllPoints()
     fr:SetPoint("CENTER", RD.frame, "TOPLEFT", x, -y)
@@ -2186,35 +1591,6 @@ local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve,
 -- just go with dim and very bright when needed if we are going to outline we outline the box mana stuff blue"): the
 -- icons alone, dim or bright; Mana Tide, the potion, Mana Spring and the drink inside one blue outline.
 RD.MANA_BOX_COL = { 0.30, 0.62, 1.00, 0.9 }
-local function toolsRow(W, y, deck)
-    local tools = CON_TOOLS()
-    local n, gap = #tools, RD.CON.toolGap
-    local w = n * RD.SYS_PX + (n - 1) * gap
-    local x0 = (W - w) / 2 + RD.SYS_PX / 2
-    local xs = {}
-    for k, b in ipairs(tools) do
-        local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        xs[b] = x
-        if not deck then at(square("tool" .. k, RD.SYS_PX), x, y) end
-        at(b, x, y)
-    end
-    local mb = RD.manaBox
-    if deck and xs[RD.tide] and xs[RD.fuel] then
-        if not mb then
-            mb = CreateFrame("Frame", nil, RD.conLayer)
-            mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
-            RD.manaBox = mb
-        end
-        local l, r = xs[RD.tide] - RD.SYS_PX / 2 - 2, xs[RD.fuel] + RD.SYS_PX / 2 + 2
-        mb:SetSize(r - l, RD.SYS_PX + 4)
-        mb:ClearAllPoints()
-        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -y)
-        mb:Show()
-    elseif mb then
-        mb:Hide()
-    end
-end
-
 --- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
 --- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
 --- the gap under it.
@@ -2363,82 +1739,11 @@ function RD.LitAlpha(b, lit)
     return 0
 end
 
--- THE TOTEMS' LINE under the tools (11 Nov): only the ones you know (RD.ArmTotems), centred; answers the height it took
-local function totemRow(W, y)
-    local list = {}
-    for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
-    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
-    if #list == 0 then return 0 end
-    local gap = RD.CON.toolGap
-    local y6 = y + RD.SYS_PX + RD.CON.gap
-    local x0 = (W - (#list * RD.SYS_PX + (#list - 1) * gap)) / 2 + RD.SYS_PX / 2
-    for k, b in ipairs(list) do
-        local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        at(square("totem" .. k, RD.SYS_PX), x, y6)
-        at(b, x, y6)
-    end
-    return RD.SYS_PX + RD.CON.gap
-end
-
 -- a spoke's crosshairs and dims, in the console: on its pip, the dims away
 local function settle(sp)
-    for _, fr in ipairs(sp.dims or {}) do fr:Hide() end
     for _, cr in ipairs({ sp.cross, sp.totCross, sp.bogeyCross }) do
         if cr then cr:ClearAllPoints() cr:SetPoint("CENTER", sp.heal, "CENTER") end
     end
-end
-
---- A bigger class (gunship, cruiser, capital): the crew in rings by rank, each person's dispels as chips in their top
---- corners; the top five's interrupts and pets in a row each under them, the middle first; the tools row.
-function RD.ConsoleLayoutWide(T, order)
-    local f, C = RD.frame, RD.CON
-    local blockW = T.cols * T.colW
-    local W = math.max(C.pad * 2 + blockW, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
-    local cells, _, blockH = RD.ConsoleCells(T, (W - blockW) / 2)
-    local yk = C.pad + C.head + blockH + C.gap + T.kick / 2
-    local yp = yk + T.kick / 2 + C.gap + T.pet / 2
-    local yt = yp + T.pet / 2 + C.gap + RD.SYS_PX / 2
-    local H = yt + RD.SYS_PX / 2 + C.pad
-    f:SetSize(W, H)
-    local kw = T.colW                                -- under the crew's own columns
-    local function topX(j) return W / 2 + (RD.CENTER_OUT[j] - 3) * kw end
-    for j = 1, 5 do
-        at(square("kick" .. j, T.kick), topX(j), yk)
-        at(square("pet" .. j, T.pet), topX(j), yp)
-    end
-    local placed = {}
-    for k, i in ipairs(order) do
-        local cell = cells[k]
-        if not cell then break end
-        local sq = T.sq
-        at(square("heal" .. k, sq, bandCol(k, T.n)), cell.x, cell.y)
-        local sp = RD.spokes[i]
-        if sp then
-            placed[i] = cell
-            cell.sq = sq
-            sp.heal:SetSize(sq, sq)
-            at(sp.heal, cell.x, cell.y)
-            settle(sp)
-            -- the dispels: chips in the person's top corners, over the heal square (they take their own click)
-            local lvl = sp.heal:GetFrameLevel()
-            for n, c in ipairs(sp.cures or {}) do
-                local side = (n % 2 == 1) and -1 or 1
-                c.box:SetSize(T.chip, T.chip)
-                at(c.box, cell.x + side * (sq / 2 - T.chip / 2), cell.y - (sq / 2 - T.chip / 2))
-                c.box:SetFrameLevel(lvl + 3)
-                if c.holder then c.holder:SetFrameLevel(lvl + 4) end
-                if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            end
-            if k <= 5 then
-                if sp.bogey then sp.bogey:SetSize(T.kick, T.kick) at(sp.bogey, topX(k), yk) end
-                if sp.pet then sp.pet:SetSize(T.pet, T.pet) at(sp.pet, topX(k), yp) end
-            end
-        end
-    end
-    toolsRow(W, yt)
-    H = H + totemRow(W, yt)
-    f:SetSize(W, H)
-    return { W = W, H = H, tier = T, cells = cells, placed = placed, rows = { kick = yk, pet = yp, tools = yt } }
 end
 
 --[[ THE FLIGHT DECK (15 Nov 2026, dev/FLIGHTDECK.md, Arn's layout B; "its own contained box" like the radar and the
@@ -2459,12 +1764,6 @@ end
 -- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
 -- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
--- THE ENGINEER'S VIEW (Arn, 15 Nov: his cousin "already thought it took too much space" - "we dont go wider we can go
--- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
-RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22,
-                  -- the 9:16 engineer (FG.EngPlace): one narrow width; a party's rows, then a raid's short ones
-                  w = 218, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10,
-                  pw = 100, rw = 39 }                -- the box widths a wider drag keeps (party, raid)
 -- THE FLOOR (Arn, 15 Nov: "the minimum is that bottom row ... the four totems and the call recall"): the totem row -
 -- CALL / BRING / RECALL in the middle, two timers each side at least RD.TIMER_MIN wide (an icon and "5m") - is the
 -- narrowest the window goes; the mockup showed the timers overlapping below it
@@ -2647,11 +1946,11 @@ end
 --- look is 344 calls with all 40 kicks, 274 with five - the engineer's range on 40 boxes is most of it (its view pays that
 --- today); a kick is about two calls.
 function RD.DeckSlots(T, nPets)
-    local M, out = RD.DeckM(), {}
+    local M, out = RD.DECK, {}
     for i = 1, T.n + 2 + (nPets or 0) do
         local crew = i <= T.n
         out[i] = { b = 0, rh = 0, rc = 0, rb = crew and 0 or nil, ph = M.row - 8, pc = M.chip, pb = M.kick, own = false,
-                   nopet = true, console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
+                   console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
                    box = (not crew and i <= T.n + 2) or nil, petBox = (i > T.n + 2) or nil }
         if i > T.n + 2 then out[i].rb = nil end              -- a pet box: no kick of its own
         if not RD.Sw("kicks") then out[i].rb = nil end       -- kicks switched off: no kick button anywhere
@@ -2711,7 +2010,7 @@ function RD.DeckUnits(units, n, pets)
 end
 
 function RD.DeckLayout(T, order)
-    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DeckM())
+    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DECK)
     local SW = RD.Sw
     local nT = math.min(RD.deckTanks or 0, T.n)
     local crew = {}
@@ -2721,13 +2020,7 @@ function RD.DeckLayout(T, order)
     end
     local firstPet = #crew + 1
     for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
-    local place
-    local dw = RD.DeckWidth()
-    if RD.Compact() then
-        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
-    else
-        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"))
-    end
+    local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, RD.DeckWidth(), not SW("target"))
     local W = C.pad * 2 + place.w                    -- the tools wrap and the totems stack to fit (RD.DeckTools / DeckTotemRow)
     RD.deckInnerW = place.w
     -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
@@ -2749,34 +2042,28 @@ function RD.DeckLayout(T, order)
         at(plate, left + r.w / 2, cy)
         plate:Show()
         placed[i] = r
-        -- A SHORT BOX (the engineer's raid rows): the bar takes the box's whole height, the icons a thin column at its
-        -- right end - kick at the foot, cures above it - never over the bar (a secure icon keeps its click unseen)
-        local is = r.short and (M.short or 10) or nil
-        local ih = is and 0 or M.icons
-        local ph = is and (r.h - 2) or (r.h - ih - 1)            -- the pip: the bar's height
-        local pw = is and (r.w - 3 - is) or (r.w - 2)            -- and its width
-        local ks = is or math.min(M.kick, ih - 2)
-        local cs = is or math.min(M.chip, ih - 2)
+        local ih = M.icons
+        local ph = r.h - ih - 1                                   -- the pip: the bar's height
+        local pw = r.w - 2                                        -- and its width
+        local ks = math.min(M.kick, ih - 2)
+        local cs = math.min(M.chip, ih - 2)
         local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         sp.heal:SetSize(pw, ph)
         at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
         sp.heal:Show()
         settle(sp)
         local lvl = sp.heal:GetFrameLevel()
-        local colX = right - 1 - (is or 0) / 2                    -- a short box's icon column
-        local footY = y0 + r.y + r.h - 1 - (is or 0) / 2
         kick = kick and SW("kicks")
         if sp.bogey and not SW("kicks") then sp.bogey:Hide() end     -- switched off: disarmed in RD.DeckSlots, out of sight
         if kick and sp.bogey then
             sp.bogey:SetSize(ks, ks)
-            if is then at(sp.bogey, colX, footY) else at(sp.bogey, left + 2 + ks / 2, icy) end
+            at(sp.bogey, left + 2 + ks / 2, icy)
             sp.bogey:SetFrameLevel(lvl + 3)
             RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
         RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
         RD.PlaceCastStrip(sp, ih > 0 and { left + 1, y0 + r.y + r.h - ih, right - 1, y0 + r.y + r.h - 1 } or nil)
         local x = right - 2
-        local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
             if not SW("cures") then
                 if c.box:IsShown() then c.swHidden = true c.box:Hide() end
@@ -2787,13 +2074,8 @@ function RD.DeckLayout(T, order)
                 if c.container and c.container.Show then c.container:Show() end
             end
             c.box:SetSize(cs, cs)
-            if is then
-                at(c.box, colX, cyCol)
-                cyCol = cyCol - is - 1
-            else
-                at(c.box, x - cs / 2, icy)
-                x = x - cs - 2
-            end
+            at(c.box, x - cs / 2, icy)
+            x = x - cs - 2
             c.box:SetFrameLevel(lvl + 3)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
@@ -2888,7 +2170,7 @@ RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 
   names are secret in one). ]]
 RD.TIMER_DIM = 0.45
 RD.TIMER_FULL = 600                                 -- seconds under which the timer shows minutes:seconds (a totem lasts 300)
-RD.TIMER_SHORT = 60                                 -- the engineer's view: "5m", then plain seconds (Arn: "just 5m or 00")
+RD.TIMER_SHORT = 60                                 -- a narrow timer: "5m", then plain seconds (Arn: "just 5m or 00")
 function RD.TotemTimer(k)
     RD.timers = RD.timers or {}
     local t = RD.timers[k]
@@ -3041,7 +2323,6 @@ end
 function RD.DeckTotemRow(W, top)
     local list = {}
     for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
-    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
     for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
     if #list == 0 then return 0 end
     local wantB, wantT = RD.Sw("totems"), RD.Sw("timers")
@@ -3073,11 +2354,9 @@ function RD.DeckTotemRow(W, top)
         t.icon:SetWidth(RD.SYS_PX - 4)
         t.base:SetWidth(RD.SYS_PX - 4)
         RD.TimerSpot(t, tw)
-        -- the engineer's view: "5m", then seconds (Arn: "no 0:00 timer just 5m or 00"); the deck: 4:59 the whole way
+        -- the deck: 4:59 the whole way
         local cd = t.cd
-        if cd and cd.SetCountdownAbbrevThreshold then
-            pcall(cd.SetCountdownAbbrevThreshold, cd, RD.Compact() and RD.TIMER_SHORT or RD.TIMER_FULL)
-        end
+        if cd and cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TIMER_FULL) end
         t:Show()
     end
     RD.LearnTimers()                                   -- each box's remembered totem, and its click
@@ -3121,204 +2400,54 @@ function RD.DeckTotemStack(W, top, list, wantB, wantT)
     return y - top
 end
 
---- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
+--- Put everything in the deck's places. Out of a fight only (RD.Arm calls it). Answers the layout.
 function RD.ConsoleLayout()
     local f = RD.frame
     if not f or combat() then return nil end
-    local C, G = RD.CON, RD.ConsoleGrid()
     if not RD.conLayer then
         RD.conLayer = CreateFrame("Frame", nil, f)
         RD.conLayer:SetAllPoints(f)
         RD.conLayer:SetFrameLevel(math.max(0, f:GetFrameLevel()))
     end
     RD.conLayer:Show()
-    for _, q in pairs(RD.conSquares or {}) do q:Hide() end
     if RD.deckBox then RD.deckBox:Hide() end
     RD.DeckClear()                                   -- the deck puts back the ones it places
-    local T = RD.ConsoleTier()
-    local order = RD.conOrder or {}
-    if RD.Deck() then
-        RD.conGrid = RD.DeckLayout(T, order)
-        return RD.conGrid
-    end
-    if T.n > 5 then
-        RD.conGrid = RD.ConsoleLayoutWide(T, order)
-        return RD.conGrid
-    end
-    f:SetSize(G.W, G.H)
-    -- THE FIGHTER: one row, the first in rank (you) in the middle, the rest outward (Arn: "from the center out")
-    for k = 1, RD.SPOKES do
-        local i = order[k] or k
-        local x = G.cols[RD.CENTER_OUT[k]]
-        local sp = RD.spokes[i]
-        at(square("heal" .. k, C.sq, RD.BAND_COL.core), x, G.rows[1])   -- the fighter: all five are the core
-        at(square("kick" .. k, C.sq), x, G.rows[3])
-        at(square("pet" .. k, C.sq), x, G.rows[4])
-        if sp then
-            sp.heal:SetSize(C.sq, C.sq)
-            at(sp.heal, x, G.rows[1])
-            if sp.bogey then sp.bogey:SetSize(C.sq, C.sq) at(sp.bogey, x, G.rows[3]) end
-            settle(sp)
-            -- the cures side by side under the person
-            local n = #(sp.cures or {})
-            for j, c in ipairs(sp.cures or {}) do
-                local off = (j - (n + 1) / 2) * (C.cure + 6)
-                at(square("cure" .. k .. "-" .. j, C.cure + 4), x + off, G.rows[2])
-                if not c.cure then RD.conSquares["cure" .. k .. "-" .. j]:Hide() end
-                at(c.box, x + off, G.rows[2])
-                if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            end
-            if sp.pet then sp.pet:SetSize(C.pet, C.pet) at(sp.pet, x, G.rows[4]) end
-        end
-    end
-    -- row 5: every tool from both rails, centred
-    toolsRow(G.W, G.rows[5])
-    local extra = totemRow(G.W, G.rows[5])
-    if extra > 0 then
-        G.H = G.H + extra
-        f:SetSize(G.W, G.H)
-    end
-    G.tier = T
-    RD.conGrid = G
-    return G
+    RD.conGrid = RD.DeckLayout(RD.ConsoleTier(), RD.conOrder or {})
+    return RD.conGrid
 end
 
---- The radar's own places back: the tools to their rails (where RD.Build put them), the console's squares away.
-function RD.RadarLayout()
-    if combat() then return false end
-    for _, b in ipairs({ RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.rations, RD.chaff, RD.res,
-                         RD.call, RD.tcall, RD.recall }) do
-        local h = b and b.home
-        if h then b:ClearAllPoints() b:SetPoint(h[1], h[2], h[3], h[4], h[5]) end
-    end
-    if RD.conLayer then RD.conLayer:Hide() end
-    if RD.deckBox then RD.deckBox:Hide() end          -- the deck's target box goes with the console's layer
-    RD.DeckClear()
-    return true
-end
-
---- What steps aside in the console (the scope, the disc, the rails, the tape, the black box) comes back on the radar.
+--- The rails stay out of sight (they only hold the tools, which the deck places); the black box hangs under the deck
+--- unless switched off; the fuel tape moves to its own strip on top (Engineer.lua wraps this: EN.Gauge).
 function RD.ApplyView()
-    local con = RD.Console()
     local function vis(fr, on) if fr then if on then fr:Show() else fr:Hide() end end end
-    vis(RD.scope, not con)
-    vis(RD.fade, not con)
-    vis(RD.dims, not con)
-    vis(RD.toolRail, not con)
-    vis(RD.gaugeRail, not con)
-    vis(RD.defRail, not con)
-    vis(RD.bbRail, not con or (RD.Deck() and RD.Sw("bb")))   -- the deck keeps the black box (Arn: "dont forget my black box"), unless switched off
-    vis(RD.gauge, not con)
+    vis(RD.toolRail, false)
+    vis(RD.gaugeRail, false)
+    vis(RD.defRail, false)
+    vis(RD.bbRail, RD.Deck() and RD.Sw("bb"))   -- the deck keeps the black box (Arn: "dont forget my black box"), unless switched off
+    vis(RD.gauge, false)
     -- the tape's pieces that hang on the radar frame itself: the regen readout, its chevron, the ramjet
     local g = RD.gauge
-    if g then vis(g.regen, not con) vis(g.chev, not con) vis(g.fsr, not con) end
+    if g then vis(g.regen, false) vis(g.chev, false) vis(g.fsr, false) end
     RD.PlaceViewButton()
     RD.ClampRails()
 end
 
---- The two buttons: the CLASS (5 / 10 / 20 / 40) over the VIEW (radar / engineer) at the right rail's foot on the radar;
---- side by side in the console's top-right corner.
+--- The switches button, in the deck's top-right corner.
 function RD.PlaceViewButton()
-    local b, c, f = RD.viewBtn, RD.classBtn, RD.frame
+    local b, f = RD.viewBtn, RD.frame
     if not (b and f) then return end
     b:ClearAllPoints()
-    if c then c:ClearAllPoints() end
-    if RD.Console() then
-        b:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
-        b:SetSize(12, 12)
-        if c then c:SetPoint("TOPRIGHT", b, "TOPLEFT", -3, 0) c:SetSize(12, 12) end
-    else
-        b:SetPoint("BOTTOM", RD.defRail or f, "BOTTOM", 0, 8)
-        b:SetSize(RD.SYS_PX, RD.SYS_PX)
-        if c then c:SetPoint("BOTTOM", b, "TOP", 0, 4) c:SetSize(RD.SYS_PX, RD.SYS_PX) end
-    end
-    if c then c:SetShown(not RD.Deck()) end                -- the deck and the engineer size themselves: no size button
+    b:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+    b:SetSize(12, 12)
     RD.PaintViewButton()
 end
 
 function RD.PaintViewButton()
     local b = RD.viewBtn
     if not b then return end
-    -- since 15 Nov the two sides are the DECK and the engineer's view (the radar disc retired): a drawn sign of where the
-    -- click goes - four small squares (the engineer's view), a ring (back to the deck)
-    local con = RD.EngineerView() == true
-    for _, t in ipairs(b.grid) do t:SetAlpha(con and 0 or 1) end
-    for _, l in ipairs(b.ring) do l:SetAlpha(con and 1 or 0) end
-    b.tip = con and { "ENGINEER VIEW", "Click: back to the deck.  Out of a fight." }
-            or { "DECK", "Click: the engineer's view - the same buttons on a plain grid.  Out of a fight." }
-    if RD.Deck() and not con then                     -- one window since 16 Nov: the button opens its switches
-        b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
-    end
-    local c = RD.classBtn
-    if c then
-        local T, k = RD.ConsoleTier()
-        for j, t in ipairs(c.dots) do t:SetAlpha(j <= k and 1 or 0.18) end
-        local nk = k % #RD.CON_TIERS + 1
-        local nT = RD.CON_TIERS[nk]
-        c.tip = { T.name, "Click: " .. nT.name .. " - the next group size, in any group (a preview; a size too small "
-                  .. "for your group is skipped).  Out of a fight." }
-    end
-end
-
---- One click on the view button: radar <-> the engineer's view, the class kept. Refused in a fight (the radar holds
---- secure buttons). Answers "radar" or "console".
-function RD.ToggleView()
-    if combat() or RD.inFight then return nil end
-    local d = db()
-    d.view = (d.view ~= "console") and "console" or nil
-    RD.Arm()
-    return d.view and "console" or "radar"
-end
-
---- One click on the class button: the next class - fighter, gunship, cruiser, capital, round again (Arn: "let me click
---- them even if i am not in that size party or raid"); a class too small for the group is skipped. Answers its name.
-function RD.NextClass()
-    if combat() or RD.inFight then return nil end
-    local _, k = RD.ConsoleTier()
-    db().tier = k % #RD.CON_TIERS + 1
-    RD.Arm()
-    return RD.ConsoleTier().name
-end
-
--- a small square button with the hover pop, a drawn sign and a tooltip
-local function smallButton(f, onClick)
-    local b = CreateFrame("Button", nil, f)
-    b:SetFrameLevel(f:GetFrameLevel() + 14)
-    local c = RD.PHOS
-    b.edges = edge(b, { c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 1 }, 1)
-    b.hl = b:CreateTexture(nil, "HIGHLIGHT")
-    b.hl:SetAllPoints(b)
-    b.hl:SetTexture(RD.WHITE)
-    b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
-    b:SetScript("OnClick", onClick)
-    b:SetScript("OnEnter", function(self)
-        local tip = self.tip
-        if not (tip and GameTooltip) then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(tip[1])
-        GameTooltip:AddLine(tip[2], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    return b
-end
-
---- The class button: four dots in a row, as many lit as the class (1 fighter .. 4 capital).
-function RD.BuildClassButton(f)
-    if RD.classBtn or not f then return RD.classBtn end
-    local b = smallButton(f, function() RD.NextClass() end)
-    local c = RD.PHOS
-    b.dots = {}
-    for j = 1, 4 do
-        local t = b:CreateTexture(nil, "OVERLAY")
-        t:SetTexture(RD.WHITE)
-        t:SetVertexColor(c[1], c[2], c[3], 1)
-        t:SetSize(2, 2)
-        t:SetPoint("CENTER", b, "CENTER", (j - 2.5) * 3, 0)
-        b.dots[j] = t
-    end
-    RD.classBtn = b
-    return b
+    -- one window since 16 Nov (the engineer's view is gone): the button opens the deck's switches - four small squares
+    for _, t in ipairs(b.grid) do t:SetAlpha(1) end
+    b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
 end
 
 function RD.BuildViewButton(f)
@@ -3336,24 +2465,12 @@ function RD.BuildViewButton(f)
         t:SetPoint("CENTER", b, "CENTER", o[1], o[2])
         b.grid[#b.grid + 1] = t
     end
-    b.ring = {}
-    for k = 1, 12 do
-        local a0, a1 = (k - 1) * math.pi / 6, k * math.pi / 6
-        b.ring[k] = line(b, "OVERLAY", math.sin(a0) * 4, math.cos(a0) * 4, math.sin(a1) * 4, math.cos(a1) * 4, c, 1)
-    end
     -- it pops on hover (every clickable thing does)
     b.hl = b:CreateTexture(nil, "HIGHLIGHT")
     b.hl:SetAllPoints(b)
     b.hl:SetTexture(RD.WHITE)
     b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
-    b:SetScript("OnClick", function(self)
-        if RD.Deck() and not RD.EngineerView() then RD.ToggleSwitches() return end
-        RD.ToggleView()
-        -- the tooltip says where the NEXT click goes: written again at once (Arn's screenshot, 15 Nov: still "DECK - click:
-        -- the engineer's view" while the engineer's view showed)
-        local onEnter = self.GetScript and self:GetScript("OnEnter")
-        if onEnter and GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then onEnter(self) end
-    end)
+    b:SetScript("OnClick", function() if RD.Deck() then RD.ToggleSwitches() end end)
     b:SetScript("OnEnter", function(self)
         local tip = self.tip
         if not (tip and GameTooltip) then return end
@@ -3615,59 +2732,31 @@ function RD.ToggleSwitches()
     return true
 end
 
---- Where the hull reaches: the top-left of the gauge rail, the bottom-right of the bottom rail (or of the tool rail
---- without one), out over the right rail's column while it shows. The rings follow it.
---- How much wider the top and bottom rails run while the right rail shows (its column and the gap before it).
-function RD.RightW()
-    return (RD.defRail and RD.defRail:IsShown()) and (RD.RAIL_GAP + RD.TOOL_RAIL_W) or 0
-end
-
---- THE SQUARE CLOSED (Arn, 10 Nov: "recenter all the stuff since we got extra space"): the gauge rail and the black
---- box's rail run over the right rail's column while it shows, and what they hold re-centres in the new width (the
---- tape between its placard and its ramjet, the black box's keypad at the right end). Out of it, back to the square.
+--- THE DECK'S FRAME: the fuel tape on its own small strip on top (Engineer.lua, EN.Gauge, shaped there), and the black
+--- box straight under the deck, as wide as it (Arn's screenshot, 15 Nov: it sat on the radar's old left rail, off to the
+--- side, under BiS Tools' box).
 function RD.FitWide()
     local f = RD.frame
     if not f then return end
-    local w = f.GetWidth and f:GetWidth()
-    -- the console: the tape lives on the engineer's own small strip (Engineer.lua, EN.Gauge), shaped there
-    if RD.Console and RD.Console() and NS.EN and NS.EN.Gauge then NS.EN.Gauge(true)
-    elseif RD.gauge and type(w) == "number" and w > 0 then RD.SizeGauge(w) end
+    if NS.EN and NS.EN.Gauge then NS.EN.Gauge() end
     local b = RD.bbRail
-    if b and RD.Deck and RD.Deck() then
-        -- THE FLIGHT DECK: the black box hangs straight under the deck, as wide as it (Arn's screenshot, 15 Nov: it sat on
-        -- the radar's old left rail, off to the side, under BiS Tools' box)
+    if b then
         local gap = RD.RAIL_GAP
         b:ClearAllPoints()
         b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, -gap)
         b:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, -gap)
-    elseif b and RD.toolRail then
-        local gap = RD.RAIL_GAP
-        b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", RD.toolRail, "BOTTOMLEFT", 0, -gap)
-        b:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", RD.RightW(), -gap)
     end
 end
 
+--- The hull: the deck's own box, its black box too (one contained box), and other addons dock below it.
 function RD.FitHull()
     local h, f = RD.hull, RD.frame
     if not (h and f) then return end
-    if RD.Console and RD.Console() then             -- the console: the hull is its own small square
-        -- the flight deck's hull holds its black box too (one contained box), and other addons dock below it
-        local bottom = (RD.Deck and RD.Deck() and RD.BBRail()) or f
-        h:ClearAllPoints()
-        h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-        h:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 0, 0)
-        RD.FitEdgeFrame(f, bottom)
-        RD.FitEdges(h)
-        return
-    end
-    local top = RD.gaugeRail or f
-    -- the bottom rail spans the whole width already (RD.FitWide); without one, the square's corner or the right rail's
-    local corner = RD.BBRail() or ((RD.defRail and RD.defRail:IsShown()) and RD.defRail) or f
+    local bottom = (RD.Deck and RD.Deck() and RD.BBRail()) or f
     h:ClearAllPoints()
-    h:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
-    h:SetPoint("BOTTOMRIGHT", corner, "BOTTOMRIGHT", 0, 0)
-    RD.FitEdgeFrame(top, corner)
+    h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    h:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 0, 0)
+    RD.FitEdgeFrame(f, bottom)
     RD.FitEdges(h)
 end
 
@@ -3709,22 +2798,14 @@ function RD.PaintHull()
     end
 end
 
---- The radar's clamp: the tool rail, the gauge's rail and the black box's always, the right one while it shows.
+--- The deck's clamp: its small fuel strip on top (Engineer.lua) stays on the screen too.
 function RD.ClampRails()
-    RD.FitWide()                                     -- the top and bottom rails run over the right rail while it shows
+    RD.FitWide()
     RD.FitHull()                                     -- and the hull follows them
     local f = RD.frame
     if not (f and f.SetClampRectInsets) then return end
-    if RD.Console and RD.Console() then
-        -- the engineer's small fuel strip on top (Engineer.lua) stays on the screen too
-        local top = NS.EN and NS.EN.GaugeTop and NS.EN.GaugeTop() or 0
-        pcall(f.SetClampRectInsets, f, 0, 0, top, 0)
-        return
-    end
-    local gap = RD.RAIL_GAP
-    local right = (RD.defRail and RD.defRail:IsShown()) and (RD.TOOL_RAIL_W + gap) or 0
-    local bottom = (RD.BBRail() and NS.BB) and -(NS.BB.RAIL_H + gap) or 0
-    pcall(f.SetClampRectInsets, f, -(RD.TOOL_RAIL_W + gap), right, RD.GAUGE_RAIL_H + gap, bottom)
+    local top = NS.EN and NS.EN.GaugeTop and NS.EN.GaugeTop() or 0
+    pcall(f.SetClampRectInsets, f, 0, 0, top, 0)
 end
 
 --- The HUD scale UNDER the tape: the spine, the ticks hanging from it, the numbers under them, and the readout box
@@ -3795,23 +2876,8 @@ function RD.SizeHUD(w)
     end
 end
 
---- The tape's size for a square `size` across: the rail's width (the tool rail + the square), the tape's length between
---- the placard and the ramjet, the ticks, the 30% lift and the window's roof. Answers the tape's length.
-function RD.SizeGauge(size)
-    local g, G = RD.gauge, RD.GAUGE
-    if not g then return nil end
-    -- the whole width once the panel closes into a square (Arn, 10 Nov: "once its closed like a square rail recenter all
-    -- the stuff since we got extra space"): over the right rail's column too while it shows
-    local railW = size + RD.TOOL_RAIL_W + RD.RAIL_GAP + RD.RightW()
-    if RD.gaugeRail then RD.gaugeRail:SetWidth(railW) end
-    local w = railW - G.left - G.right
-    g:ClearAllPoints()
-    g:SetPoint("BOTTOMLEFT", RD.gaugeRail or RD.frame, "BOTTOMLEFT", G.left, G.base)
-    return RD.ShapeTape(w)
-end
-
 --- The tape `w` long wherever it was just anchored: its size, the scale, the ticks, the 30% lift and BINGO's window.
---- The radar's rail (RD.SizeGauge) and the engineer's small strip on top (Engineer.lua, EN.Gauge) both shape it here.
+--- The deck's small strip on top (Engineer.lua, EN.Gauge) shapes it here.
 function RD.ShapeTape(w)
     local g, G = RD.gauge, RD.GAUGE
     if not g then return nil end
@@ -3841,21 +2907,6 @@ function RD.ShipFor(n)
     return RD.SHIPS[#RD.SHIPS]
 end
 
---- The corner brackets for a ship: `be` long, `bw` thick, from the square's corners.
-function RD.ShapeBrackets(ship)
-    local b = RD.SIZE / 2 - 4
-    local e = ship.be or 22
-    local c = ship.bracket
-    for _, l in ipairs(RD.brackets or {}) do
-        local sx, sy = l.sx, l.sy
-        l:SetStartPoint("CENTER", RD.scope, sx * b, sy * b)
-        if l.across then l:SetEndPoint("CENTER", RD.scope, sx * (b - e), sy * b)
-        else l:SetEndPoint("CENTER", RD.scope, sx * b, sy * (b - e)) end
-        l:SetThickness(ship.bw or 2)
-        l:SetVertexColor(c[1], c[2], c[3], 1)
-    end
-end
-
 --- FLY THIS SHIP: repaint the radar's chrome in its colours. Out of a fight (RD.Arm); colours only, nothing secure.
 --- RD.PLATE is the hull and is changed IN PLACE, so everything made later from it (a stabilizer cover the client builds
 --- at the next aura) comes out in the same dark. Answers the ship.
@@ -3865,7 +2916,6 @@ function RD.ApplyShip(ship)
     local P = ship.plate
     RD.PLATE[1], RD.PLATE[2], RD.PLATE[3] = P[1], P[2], P[3]
     local function plate(t) if t then t:SetVertexColor(P[1], P[2], P[3], 1) end end
-    plate(RD.fade)
     for _, r in ipairs({ RD.toolRail, RD.gaugeRail, RD.defRail, RD.bbRail }) do plate(r and r.bg) end
     RD.PaintHull()                                   -- the hull and its soft edge, in the same plate
     local sh = RD.shield
@@ -3874,13 +2924,8 @@ function RD.ApplyShip(ship)
         for _, t in ipairs(sh.cover or {}) do plate(t) end
     end
     -- (the last-charge stencil is the buff's own icon now, never painted the plate's dark)
-    -- the scope: rings, cross and ticks at the ship's line, dimmed; the brackets; you in the middle in its accent
-    local L, k = ship.line, RD.SCOPE_DIM
-    for _, l in ipairs(RD.scopeLines or {}) do l:SetVertexColor(L[1] * k, L[2] * k, L[3] * k, 0.85) end
-    RD.ShapeBrackets(ship)
-    local A = ship.accent
-    RD.PaintMe()
-    -- the fuel tape: your mana and the ruler in the ship's fuel colour, the groove, the scale, the readout, the placard
+    local L, A = ship.line, ship.accent
+    -- the fuel tape: your mana and the ruler in the ship's fuel colour, the groove, the scale, the readout
     local g = RD.gauge
     if g then
         local F = ship.fuel
@@ -3901,14 +2946,7 @@ function RD.ApplyShip(ship)
             box.tip2:SetVertexColor(A[1], A[2], A[3], 1)
             box.num:SetTextColor(1, 1, 1)
         end
-        if g.ship then
-            g.ship:SetText(ship.name)
-            g.ship:SetTextColor(A[1], A[2], A[3])
-        end
-        if g.fuelWord then g.fuelWord:SetTextColor(L[1], L[2], L[3]) end
     end
-    RD.PaintRole()
-    RD.PaintKnobs()                                  -- the knobs' "on" dot is the ship's line too
     return ship
 end
 
@@ -3960,62 +2998,8 @@ function RD.SetKnob(kind, isOff)
     local d = db()
     d.off = type(d.off) == "table" and d.off or {}
     d.off[kind] = isOff and true or nil
-    RD.PaintKnobs()
     if RD.Active() then RD.PaintQuiet() RD.PaintChaff() end
     return RD.KnobOff(kind)
-end
-
---- The knob on a tool's top-left corner: a plain button on the tool's rail, over the pip. A click flips it.
-function RD.Knob(b)
-    local k = CreateFrame("Button", nil, b.rail or RD.frame)
-    k:SetSize(RD.KNOB_PX, RD.KNOB_PX)
-    k:SetPoint("CENTER", b, "TOPLEFT", 1, -1)
-    k:SetFrameLevel((b:GetFrameLevel() or 0) + 6)
-    if k.RegisterForClicks then k:RegisterForClicks("LeftButtonUp") end
-    k.dot = k:CreateTexture(nil, "OVERLAY")
-    k.dot:SetAllPoints(k)
-    k.dot:SetTexture(RD.ART .. "disc")
-    k.owner = b
-    k:SetScript("OnClick", function(self)
-        local kind = self.owner.kind
-        RD.SetKnob(kind, not RD.KnobOff(kind))
-        if GameTooltip and GameTooltip:IsOwned(self) then self:GetScript("OnEnter")(self) end
-    end)
-    k:SetScript("OnEnter", function(self)
-        if not GameTooltip then return end
-        local tool = self.owner
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine((tool.tip and tool.tip[1] or "TOOL") .. (RD.KnobOff(tool.kind) and "  -  OFF" or "  -  ON"))
-        GameTooltip:AddLine(RD.KnobOff(tool.kind) and "Switched off: it never lights.  Click to switch it back on."
-                            or "Lights when it needs you.  Click to switch it off (works in a fight).", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    k:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    b.knob = k
-    return k
-end
-
---- Every knob: shown on an armed tool only; red when off (a warning, every ship), a faint dot in the ship's line when on
---- (Arn's 9 Nov screenshot: the old phosphor green sat wrong on the purple fighter). Plain frames: any time, fight or not.
-function RD.KnobOnColour()
-    local L = RD.ship and RD.ship.line
-    if not L then return RD.KNOB_ON end
-    return { L[1], L[2], L[3], RD.KNOB_ON[4] }
-end
-function RD.PaintKnobs()
-    local on = RD.KnobOnColour()
-    for _, b in ipairs(RD.knobbed or {}) do
-        local k = b.knob
-        if k then
-            if b.macro then
-                local c = RD.KnobOff(b.kind) and RD.KNOB_OFF or on
-                k.dot:SetVertexColor(c[1], c[2], c[3], c[4])
-                k:Show()
-            else
-                k:Hide()
-            end
-        end
-    end
 end
 
 function RD.Build()
@@ -4038,7 +3022,6 @@ function RD.Build()
     end)
     f:SetScript("OnDragStop", endDrag)
     f:SetScript("OnHide", endDrag)
-    buildScope(f)
     RD.spokes = {}                      -- made as the roster needs them (RD.Spoke)
     -- THE MANA COLUMN on its own rail outside the square (RD.toolRail): the STABILIZER on top (only the button moved - its client
     -- cover is anchored to the button, so it follows), then the regen tools: Mana Tide, the best mana potion, the best
@@ -4100,12 +3083,8 @@ function RD.Build()
         RD[name] = b
     end
     RD.TOTEMS = { RD.call, RD.tcall, RD.recall }
-    -- THE VIEW BUTTON: radar <-> the engineer's console (RD.ToggleView)
-    RD.BuildClassButton(f)
+    -- THE SWITCHES BUTTON (RD.ToggleSwitches)
     RD.BuildViewButton(f)
-    -- a knob on each tool that lights by itself (the stabilizer and the rations stay: always wanted)
-    RD.knobbed = { RD.tide, RD.potion, RD.reserve, RD.fuel, RD.chaff, RD.call, RD.tcall, RD.recall }
-    for _, b in ipairs(RD.knobbed) do RD.Knob(b) end
     buildGauge(f)
     RD.ApplyShip(RD.SHIPS[1])                        -- a fighter until the roster says otherwise (RD.Arm)
     -- (the rail drawn inside the scope is gone: the rails stand outside the square now - RD.BuildRails)
@@ -4174,31 +3153,6 @@ function RD.Role(unit)
     return "damage"
 end
 
---- YOUR ROLE ON THE PLACARD (Arn, 9 Nov: "lets add our role here Healer, DPS, Tank" ... "we take the role from what the
---- games tell us, the frames already tell us"): ONLY the game's own answer, the one its party and raid frames show - the
---- group role set for you (UnitGroupRolesAssigned), else a raid's main tank assignment (GetPartyAssignment). No guess
---- from the class, no tank mark of ours: the game says nothing, the line stays empty. A font string - fine in a fight;
---- asked in RD.Arm (a role set fires PLAYER_ROLES_ASSIGNED, which re-arms). Answers the word ("" for none).
-RD.ROLE_PLACARD = { TANK = "TANK", HEALER = "HEALER", DAMAGER = "DPS" }
-function RD.GameRole()
-    if UnitGroupRolesAssigned then
-        local okR, r = pcall(UnitGroupRolesAssigned, "player")
-        r = okR and plain(r) or nil
-        if type(r) == "string" and RD.ROLE_PLACARD[r] then return RD.ROLE_PLACARD[r] end
-    end
-    if GetPartyAssignment then
-        local ok, mt = pcall(GetPartyAssignment, "MAINTANK", "player")
-        if ok and plain(mt) == true then return "TANK" end
-    end
-    return ""
-end
-function RD.PaintRole()
-    local g = RD.gauge
-    local w = RD.GameRole()
-    if g and g.role then g.role:SetText(w) end
-    return w
-end
-
 -- ------------------------------------------------------------------ arming (out of a fight only)
 
 local function armHeal(sp, unit)
@@ -4212,7 +3166,7 @@ local function armHeal(sp, unit)
         for _, t in ipairs(sp.glyph or {}) do t:Hide() end
         for _, t in ipairs(sp.redGlyph or {}) do t:Hide() end
         for _, t in ipairs(sp.amberGlyph or {}) do t:Hide() end
-        local px = ((sp.slot and sp.slot.ph) or RD.PARTY.ph) * RD.GLYPH
+        local px = ((sp.slot and sp.slot.ph) or 26) * RD.GLYPH
         sp.glyph = glyph(b.face, role, px)
         sp.redGlyph = glyph(b.redFace, role, px)
         sp.amberGlyph = glyph(b.amberFace, role, px)
@@ -4236,42 +3190,6 @@ function RD.PetOf(unit)
     return nil
 end
 
---- Where a slot's pet sits, and how big: a party's beside its owner (turned clockwise), yours below you, a raid's own
---- group nearer the middle on its owner's bearing. nil = no pet here (a raid's other groups).
-function RD.PetSpot(s)
-    if not s or s.nopet then return nil end                -- the deck's places carry no pet (yet)
-    local P = RD.PET
-    if s.self then
-        return math.sin(P.selfB) * P.selfR, math.cos(P.selfB) * P.selfR, RD.raid and P.raidPx or P.px
-    end
-    if RD.raid then
-        if not s.own then return nil end
-        local r = s.rh - P.inward
-        return math.sin(s.b) * r, math.cos(s.b) * r, P.raidPx
-    end
-    local b = s.b + P.turn
-    return math.sin(b) * s.rh, math.cos(b) * s.rh, P.px
-end
-
---- A paw, our own shape: a pad and four toes, plain textures born invisible (the curve's colour lands on textures).
-local function paw(face, px)
-    local out = {}
-    local function dot(w, h, x, y)
-        local t = face:CreateTexture(nil, "OVERLAY")
-        t:SetTexture(RD.ART .. "disc")
-        t:SetVertexColor(1, 1, 1, 0)
-        t:SetSize(w, h)
-        t:SetPoint("CENTER", face, "CENTER", x, y)
-        out[#out + 1] = t
-    end
-    local u = px / 14
-    dot(7 * u, 6 * u, 0, -2.5 * u)                                   -- the pad
-    dot(3 * u, 3 * u, -4.5 * u, 1.5 * u) dot(3 * u, 3.5 * u, -1.6 * u, 4 * u)
-    dot(3 * u, 3.5 * u, 1.6 * u, 4 * u) dot(3 * u, 3 * u, 4.5 * u, 1.5 * u)
-    return out
-end
-
---- Put a spoke's pet where its slot says, on its owner's pet token, the client watching it. Out of a fight only.
 --- No owner, or no place for a pet (a raid's other groups): off the watch and hidden.
 --[[ YOUR BINDS ARE THE CLICKS (10 Nov 2026, Arn: "did we set a heal to left click? if we did get rid of it and lets
   whatever binds set as the heal"). The radar's own left-click heal is gone: a pip or a pet carries exactly what the
@@ -4298,7 +3216,6 @@ function RD.ApplyBinds()
     local n = 0
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.unit and sp.heal then RD.BindsOn(sp.heal) n = n + 1 end
-        if sp.petUnit and sp.pet then RD.BindsOn(sp.pet) n = n + 1 end
     end
     return n
 end
@@ -4328,52 +3245,6 @@ function RD.HealFaces(b, a)
     if b.face then b.face:SetAlpha(a) end
     if b.redFace then b.redFace:SetAlpha(a) end
     if b.amberFace then b.amberFace:SetAlpha(a) end
-end
-
-local function armPet(sp, unit, s)
-    local p = sp.pet
-    if not p then return nil end
-    local x, y, px = RD.PetSpot(s)
-    local pu = unit and x and RD.PetOf(unit) or nil
-    if not pu then
-        if UnregisterUnitWatch then pcall(UnregisterUnitWatch, p) end
-        p:SetAttribute("unit", nil)
-        p:SetAttribute("type1", nil)
-        p:Hide()
-        -- the size goes with the paw (15 Nov 2026): kept, a pet coming back at the same size found no paw and was never drawn
-        for _, t in ipairs(sp.petTex or {}) do t:Hide() end
-        sp.petUnit, sp.petTex, sp.petPx = nil, nil, nil
-        return nil
-    end
-    p:SetSize(px, px)
-    p:ClearAllPoints()
-    p:SetPoint("CENTER", RD.frame, "CENTER", x, y)
-    p:SetAttribute("unit", pu)
-    RD.BindsOn(p)                                                     -- your binds, like on its owner
-    p.unit = pu
-    if sp.petPx ~= px then
-        for _, t in ipairs(sp.petTex or {}) do t:Hide() end
-        sp.petTex, sp.petPx = paw(p.face, px), px
-    end
-    sp.petUnit = pu
-    if RegisterUnitWatch then pcall(RegisterUnitWatch, p) end         -- the client shows it while the pet is there
-    return pu
-end
-
---- A pet's pip, coloured by the client from the pet's health through the radar's curve (hidden when healthy).
-function RD.PaintPet(sp)
-    local p = sp and sp.pet
-    if not (p and sp.petUnit and sp.petTex) then return false end
-    local okE, there = pcall(UnitExists, sp.petUnit)
-    if okE and plain(there) == false then p.face:SetAlpha(0) return false end
-    p.face:SetAlpha(1)
-    if RD.DeadDark(p.face, sp.petUnit) then return false end
-    local curve = RD.Curve(RD.AMBER)
-    local ok, col = false, nil
-    if curve and UnitHealthPercent then ok, col = pcall(UnitHealthPercent, sp.petUnit, true, curve) end  -- an `and` keeps one return
-    local drew = ok and paint(sp.petTex, col)
-    if not drew then p.face:SetAlpha(0) end                      -- no colour back: nothing, never a stale sign
-    return drew
 end
 
 local function armBogey(sp, unit)
@@ -4408,8 +3279,7 @@ local function armCures(sp, unit)
     for n, cure in ipairs(cures) do
         local px = s.pc
         local off = (n - (#cures + 1) / 2) * (px + 6)
-        local cx, cy = RD.Point(s, s.rc)
-        cx, cy = cx + math.cos(s.b) * off, cy - math.sin(s.b) * off
+        local cx, cy = off, 0                   -- parked in a row; the deck places each box (RD.DeckLayout)
         local c = sp.cures[n]
         if not c then
             c = {}
@@ -5695,7 +4565,6 @@ function RD.ArmTools()
     RD.ArmChaff()
     RD.ArmTotems()
     RD.SeedCooldowns()
-    RD.PaintKnobs()
     return true
 end
 
@@ -6336,64 +5205,20 @@ function RD.Arm()
     RD.HealAmount(RD.heal)
     local units, raid, mine = RD.Roster()
     RD.units, RD.raid, RD.ownGroup = units, raid, mine
-    local slots, size, rim = RD.Geometry(raid, mine)
-    -- in a raid your own slot (wherever your group put you) moves to the centre; its sector keeps the gap
-    if raid then
-        for i, s in ipairs(slots) do
-            local u = units[i]
-            if u then
-                local okU, me = pcall(UnitIsUnit, u, "player")
-                if okU and plain(me) == true then
-                    local S, own = RD.SELF, RD.RAID.own
-                    slots[i] = { b = S.b, rh = S.rh, rc = S.rc, rb = S.rb, ph = own.ph + 4, pc = own.pc, pb = own.pb,
-                                 own = true, self = true, group = s.group, pos = s.pos }
-                end
-            end
-        end
-    end
-    -- THE RADAR'S SHIPS (11 Nov): a class bigger than the fighter is its own drawing - rings by rank round you
-    -- (RD.FleetGeometry); the class is chosen (the class button) or the smallest that holds everyone
+    -- its class (party .. raid 40): the smallest that holds everyone; THE SHIP's colours with it (Arn, 9 Nov: "the more
+    -- the group gets we change the color") - out of a fight only, here
     local T = RD.ConsoleTier(units)
-    if not RD.Console() and T.n > 5 then
-        local order = RD.ConsoleOrder(units, T.n)
-        RD.conOrder = order
-        slots, size, rim = RD.FleetGeometry(T, order)
-    end
-    if not RD.Console() then RD.TanksNorth(slots, units) end   -- the tanks in the top half, always
-    RD.slots, RD.rim = slots, rim
-    -- the square grows for a raid; the scope's drawing scales with it, so its rings sit where the slots do
-    RD.frame:SetSize(size, size)
-    RD.scope:SetScale(size / RD.PARTY.size)
-    if RD.fade then RD.fade:SetSize(RD.FADE_PX * size / RD.PARTY.size, RD.FADE_PX * size / RD.PARTY.size) end
-    RD.SizeGauge(size)                 -- the fuel tape runs the rail over the tool rail and the square
-    -- THE SHIP for this many (Arn, 9 Nov: "the more the group gets we change the color"): out of a fight only, here
-    local n = 0
-    for i = 1, #slots do if units[i] then n = n + 1 end end
-    RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(math.max(1, n)))   -- the class's colours (a preview shows its own)
-    local con = RD.Console()                         -- the engineer's console: small slots, placed on its grid after
-    if con then
-        -- its class (fighter .. capital): chosen, or the smallest that holds everyone; the radar's ship colours with it
-        local T = RD.ConsoleTier(units)
-        -- who goes where: a rank (you, then the brains' order), the top five carrying interrupts and pets
-        local order = RD.ConsoleOrder(units, T.n)
-        local top, rankOf = {}, {}
-        for k = 1, math.min(5, #order) do top[order[k]] = true end
-        for k, i in ipairs(order) do rankOf[i] = k end
-        RD.conOrder = order
-        slots = RD.ConsoleSlots(T, top, rankOf)
-        -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
-        -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
-        if RD.Deck() then
-            order, RD.deckTanks = RD.DeckOrder(units, T.n)
-            RD.conOrder = order
-            local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
-            RD.deckPets = #pets
-            slots = RD.DeckSlots(T, #pets)
-            units = RD.DeckUnits(units, T.n, pets)
-        end
-        RD.slots = slots
-        RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
-    end
+    RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
+    -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
+    -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
+    local order
+    order, RD.deckTanks = RD.DeckOrder(units, T.n)
+    RD.conOrder = order
+    local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
+    RD.deckPets = #pets
+    local slots = RD.DeckSlots(T, #pets)
+    units = RD.DeckUnits(units, T.n, pets)
+    RD.slots = slots
     for i, s in ipairs(slots) do
         local sp = RD.Spoke(i)
         local unit = units[i]
@@ -6402,7 +5227,7 @@ function RD.Arm()
             sp.cd.active = unit and true or false
             if not unit and sp.cd.Clear then pcall(sp.cd.Clear, sp.cd) end
         end
-        RD.PlaceSpoke(sp, s, rim)
+        RD.PlaceSpoke(sp, s)
         sp.heal:Show()
         if unit then
             sp.heal:EnableMouse(true)
@@ -6419,8 +5244,7 @@ function RD.Arm()
             sp.bogey:EnableMouse(false)
             sp.kick, sp.paintTex = nil, nil
         end
-        armCures(sp, (not (RD.Deck() and not RD.Sw("cures"))) and unit or nil)   -- cures switched off: none armed
-        armPet(sp, unit, s)
+        armCures(sp, RD.Sw("cures") and unit or nil)   -- cures switched off: none armed
         if s.rb then sp.bogey:Show() else sp.bogey:Hide() end
     end
     -- spokes beyond this layout (a raid became a party): off, out of the way
@@ -6430,8 +5254,6 @@ function RD.Arm()
         sp.heal:SetAttribute("unit", nil) sp.heal:SetAttribute("type1", nil) sp.heal:EnableMouse(false) sp.heal:Hide()
         sp.bogey:SetAttribute("unit", nil) sp.bogey:EnableMouse(false) sp.bogey:Hide()
         armCures(sp, nil)
-        armPet(sp, nil, nil)
-        for _, fr in ipairs(sp.dims) do fr:Hide() end
         sp.los:SetAlpha(0)
         -- the deck's own parts of a place no longer used (a pet sent away): its box, name, paw and cast bar
         if sp.deckPlate then sp.deckPlate:Hide() end
@@ -6445,11 +5267,8 @@ function RD.Arm()
     armUse(RD.rations, foodItem)
     RD.rations.wanted = foodWanted
     RD.PickFuel()
-    RD.PaintMe()                                     -- your role's sign in the middle (a role change lands here)
-    if con then RD.ConsoleLayout() else RD.RadarLayout() end
-    RD.DrawRings(T)                                  -- the class's own rings (a fleet), or the party's
-    RD.PaintSeats(slots)                             -- a faint dot at every place, out of a fight
-    RD.ApplyView()                                   -- what steps aside in the console, and the view button
+    RD.ConsoleLayout()
+    RD.ApplyView()                                   -- the rails out of sight, the black box, the switches button
     RD.Paint()
     return true
 end
@@ -6499,17 +5318,10 @@ function RD.PaintHeal(sp)
     return drew
 end
 
---- In a fight the scope, the empty slots and the idle bogeys are see-through; out of one they are drawn dim.
+--- The tools and the totems: lit, dim or dark for a fight or the quiet between.
 function RD.PaintQuiet()
     -- a fight: the lockdown, or the moment PLAYER_REGEN_DISABLED says one starts (the lockdown begins just after it)
     local fight = RD.inFight or combat()
-    -- THE SCOPE STAYS IN A FIGHT (Arn, 8 Nov: "i like this green outline in combat too"): rings, cross and corners are
-    -- the instrument; only the pips come and go
-    if RD.scope then RD.scope:SetAlpha(1) end
-    -- the dim slot outlines are never drawn (Arn, 8 Nov: "the box outlines are not needed"); the scope alone says where
-    if RD.dims then RD.dims:SetAlpha(0) end
-    -- the faint seats instead (Arn, 11 Nov): out of a fight only
-    if RD.seatFrame then RD.seatFrame:SetAlpha(fight and 0 or 1) end
     if RD.rations then
         local r = RD.rations
         if fight or not r.item then
@@ -7035,7 +5847,7 @@ end
 
 function RD.Paint()
     if not RD.frame then return end
-    for _, sp in ipairs(RD.spokes or {}) do RD.PaintHeal(sp) RD.PaintPet(sp) end
+    for _, sp in ipairs(RD.spokes or {}) do RD.PaintHeal(sp) end
     RD.PaintShield()
     RD.PaintQuiet()
     RD.PaintFuel()
@@ -7319,13 +6131,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
             end
         end
         for _, sp in ipairs(RD.spokes) do
-            if sp.unit == a1 then RD.PaintHeal(sp) elseif sp.petUnit == a1 then RD.PaintPet(sp) end
+            if sp.unit == a1 then RD.PaintHeal(sp) end
         end
         if a1 ~= nil and a1 == RD.fuelUnit then RD.PaintBoss() end
     elseif event == "UNIT_PET" then
-        -- an owner called or sent away a pet: the client's watch shows or hides the pip; we repaint its colour
-        if NS.Secret and NS.Secret(a1) then return end
-        for _, sp in ipairs(RD.spokes) do if sp.unit == a1 then RD.PaintPet(sp) end end
         -- the deck: a pet is a box of its own - called or sent away, the deck is laid out again (after the fight, in one)
         if RD.Deck() then if combat() then RD.pending = true else RD.Arm() end end
     elseif event == "UNIT_POWER_UPDATE" or event == "UNIT_MAXPOWER" then

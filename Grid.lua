@@ -302,77 +302,12 @@ function FG.PerRow(W, bw, P, raid)
     return per
 end
 
---[[ THE ENGINEER'S PLACES (15 Nov 2026, Arn: "if our deck is 16:9 engineering is 9:16" - picked A from the mockup, then
-  the raid rule for 10 / 20 / 40, "as long as we get the 5 man 10 man 20man 40 man rules to apply automatically"). One
-  narrow width (m.w), growing only downward:
-    a PARTY:  the top row = the tanks, your target and its target in equal shares; then the others TWO to a row (a lone
-              last one takes the whole row), then the pets two to a row, a little shorter.
-    a RAID:   the tanks their own row; your target and its target a short row under it (room for its header line above);
-              then everyone five across in SHORT boxes so each raid group lines up; the pets last, five across, shorter.
-  A short box (r.short) carries its icons in a thin column at its right end instead of a row under the bar. ]]
-function FG.EngPlace(nTanks, nPeople, nPets, party, m, Wd)
-    local W, P = Wd or m.w, m.gap
-    local tanks, rest = {}, {}
-    local target, tot, box, y
-    local function across(count, per, h, short, stretch)
-        local i = 0
-        while i < count do
-            local n = math.min(per, count - i)
-            local cols = stretch and n or per
-            local w = math.floor((W - (cols - 1) * P) / cols)
-            for c = 1, n do
-                local last = (c == cols)
-                rest[#rest + 1] = { x = (c - 1) * (w + P), y = y, w = last and (W - (c - 1) * (w + P)) or w, h = h, short = short }
-            end
-            i = i + n
-            y = y + h + P
-        end
-    end
-    if party then
-        local n = math.max(nTanks, 1) + 2
-        local bw = math.floor((W - (n - 1) * P) / n)
-        for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = bw, h = m.top } end
-        local tx = (n - 2) * (bw + P)
-        target = { x = tx, y = 0, w = bw, h = m.top }
-        tot = { x = tx + bw + P, y = 0, w = W - (tx + bw + P), h = m.top }
-        box = { x = tx, y = 0, w = W - tx, h = m.top }
-        y = m.top + P
-        local per = math.max(2, FG.PerRow(W, m.pw or 100, P, false))   -- two to a row at its own width, more when dragged wider
-        across(nPeople, per, m.row2, false, true)
-        across(nPets, per, m.pet2, true, true)
-    else
-        y = 0
-        if nTanks > 0 then
-            local tw = math.floor((W - (nTanks - 1) * P) / nTanks)
-            for i = 1, nTanks do
-                local last = (i == nTanks)
-                tanks[i] = { x = (i - 1) * (tw + P), y = 0, w = last and (W - (i - 1) * (tw + P)) or tw, h = m.rtank, short = true }
-            end
-            y = m.rtank + P
-        end
-        y = y + m.rhead
-        local hw = math.floor((W - P) / 2)
-        target = { x = 0, y = y, w = hw, h = m.rtgt, short = true }
-        tot = { x = hw + P, y = y, w = W - hw - P, h = m.rtgt, short = true }
-        box = { x = 0, y = y, w = W, h = m.rtgt }
-        y = y + m.rtgt + P * 2
-        local per = FG.PerRow(W, m.rw or 39, P, true)
-        across(nPeople, per, m.row5, true, false)
-        across(nPets, per, m.pet5, true, false)
-    end
-    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = y - P }
-end
-
 --- The deck is on: OUT OF THE ALPHA since 15 Nov 2026 (Arn: "this new view is ready to get out of alpha and replace the old
---- rader we can retire it") - the radar look IS the deck, unless the view button picked the engineer's view. The old radar
---- disc is retired: nothing reaches it any more (its code stays until Arn says it can go).
+--- rader we can retire it") - the radar look IS the deck (the engineer's view is gone, 16 Nov 2026: "its one unified
+--- deck", and the old radar disc with it).
 function FG.DeckOn()
     local RD = NS.RD
-    if not (RD and RD.On and RD.On()) then return false end
-    if RD.DiscView and RD.DiscView() then return false end      -- the retired disc: the suite's own door, until it is gone
-    -- the engineer's view is the deck too since 15 Nov (Arn: "just do what we did but make it more condensed ... slightly
-    -- more narrow and more tall"): RD.Compact() picks its sizes
-    return true
+    return (RD and RD.On and RD.On()) == true
 end
 
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid
