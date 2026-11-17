@@ -2218,7 +2218,9 @@ end
 --- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
 --- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
 --- the gap under it.
-RD.TOOL_KEYS = { "shield", "tide", "potion", "reserve", "fuel", "rations", "chaff", "res" }
+-- Mana Tide in the MIDDLE of the mana four (Arn, 16 Nov: "move it to the middle of the mana i confused it for my call totems a
+-- couple times cause they were both far left")
+RD.TOOL_KEYS = { "shield", "potion", "tide", "reserve", "fuel", "rations", "chaff", "res" }
 RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
 function RD.DeckTools(W, top)
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
@@ -2263,11 +2265,15 @@ function RD.DeckTools(W, top)
         mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
         RD.manaBox = mb
     end
-    if xs[RD.tide] and xs[RD.fuel] and ys[RD.tide] == ys[RD.fuel] then
-        local l, r = xs[RD.tide] - S / 2 - 2, xs[RD.fuel] + S / 2 + 2
+    local first, last                                  -- the box runs from the mana four's first button to its last
+    for _, k in ipairs(RD.TOOL_KEYS) do
+        if RD.MANA_KEYS[k] and RD[k] then first = first or RD[k] last = RD[k] end
+    end
+    if first and xs[first] and xs[last] and ys[first] == ys[last] then
+        local l, r = xs[first] - S / 2 - 2, xs[last] + S / 2 + 2
         mb:SetSize(r - l, S + 4)
         mb:ClearAllPoints()
-        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -ys[RD.tide])
+        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -ys[first])
         mb:Show()
     else
         mb:Hide()
@@ -5046,9 +5052,12 @@ RD.TIDE_SPEC = { spell = RD.TIDE, key = "tide", word = "MANA TIDE",
 RD.TEST_SPEC = { spell = "Grounding Totem", key = "groundTest", word = "GROUNDING", life = 45, len = 15 }
 
 --- NO PING ON THE FIRST CLICK (Arn, 16 Nov: "dont need to ping first click"): only a standing totem, targeted, is pinged.
+--- THE PING FIRST, THE DROP LAST (Arn, 16 Nov night: "when i click mana tide do not ping ... second click pings it only"):
+--- on the drop's click no totem stands yet, so /target finds none and nothing is pinged; on the next click the totem is
+--- there - targeted, pinged, back to your own target - and the /cast at the end fails quietly while it cools.
 function RD.TideMacroFor(spell)
-    return "/cast " .. spell .. "\n/target " .. spell .. "\n/ping [@target,help,noparty,noraid]"
-        .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]"
+    return "/target " .. spell .. "\n/ping [@target,help,noparty,noraid]"
+        .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]\n/cast " .. spell
 end
 function RD.TideMacro() return RD.TideMacroFor(RD.TIDE) end
 
@@ -5149,7 +5158,11 @@ function RD.TideChatLine(cooling, spec)
     end
     return RD.TideLink(spec) .. " down - ready again in " .. mmss(val(spec.len))
 end
+-- NOTHING IN CHAT (Arn, 16 Nov night: "when i click mana tide do not ping or say anything in chat, second click pings it
+-- only, nothing in chat"): the party's chat line is off; the BiS users' tag (addon messages, never chat) stays
+RD.TIDE_CHAT = false
 function RD.TideChat(cooling, spec)
+    if not RD.TIDE_CHAT then return nil end
     local now = GetTime()
     if RD.tideChatAt and now - RD.tideChatAt < RD.TIDE_CHAT_GAP then return nil end
     local chan = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY" or nil)
@@ -5293,7 +5306,14 @@ end
 --- The marks on the boxes: a Riptide icon top-right on whoever has one of yours standing.
 function RD.RipMarks()
     local now = GetTime()
-    for u, t in pairs(RD.rips) do if t <= now then RD.rips[u] = nil end end
+    -- EACH MARK ENDS WITH ITS OWN RIPTIDE (Arn's cousin, 16 Nov: "riptide one person and then another person but the icon
+    -- stayed on two people, the second rip tide extended the timer for the first one"): the marks were cleared only at a
+    -- cast or when the NEWEST one ran out; RD.ripNext = the soonest end, and the bar's ticker calls this when it comes
+    local nextAt
+    for u, t in pairs(RD.rips) do
+        if t <= now then RD.rips[u] = nil elseif not nextAt or t < nextAt then nextAt = t end
+    end
+    RD.ripNext = nextAt
     local on = RD.Deck() and RD.Sw("rip")
     for _, sp in ipairs(RD.spokes or {}) do
         local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
