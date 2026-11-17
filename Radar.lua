@@ -5313,7 +5313,20 @@ RD.RIPTIDE = "Riptide"
 RD.RIP_LEN = 15
 RD.RIP_SEGS = 6
 RD.RIP_CLICK = 1.5
-RD.rips = {}                                         -- unit -> until (GetTime), at most a couple standing at once
+RD.rips = {}                                         -- person (RD.RipKey) -> until (GetTime), at most a couple at once
+--- WHO, NOT WHICH BOX (17 Nov 2026, Arn's shot: "rip tide is not propagating to the other frames" - he stood in three boxes
+--- at once, the tank's and the TARGET / ITS TARGET pair, and only the clicked box was marked): a Riptide belongs to the
+--- PERSON - their GUID while the client says it plainly, else the box's own unit token.
+function RD.RipKey(unit)
+    if not unit then return nil end
+    local g
+    if UnitGUID then
+        local ok, v = pcall(UnitGUID, unit)
+        if ok then g = plain(v) end
+    end
+    if type(g) == "string" and g ~= "" then return g end
+    return unit
+end
 function RD.RipKnown()
     local FM = NS.FM
     return (FM and FM.Ranks and #FM.Ranks(RD.RIPTIDE) > 0) and true or false
@@ -5350,13 +5363,49 @@ function RD.RipCast(now)
     end
     local unit = sp and sp.unit
     if not unit then return nil end
-    RD.rips[unit] = now + RD.RipLength()
-    RD.ripLast = { unit = unit, at = now, untilAt = RD.rips[unit] }
+    local key = RD.RipKey(unit)
+    RD.rips[key] = now + RD.RipLength()
+    RD.ripLast = { unit = unit, key = key, at = now, untilAt = RD.rips[key] }
     RD.RipMarks()
     if NS.EN and NS.EN.RipPaint then NS.EN.RipPaint() end
     return unit
 end
---- The marks on the boxes: a Riptide icon top-right on whoever has one of yours standing.
+--[[ THE HEAL CUE (17 Nov 2026, Arn: "let place it in the middle with a white border so it does not get lost. only for stuff
+  that you need to heal the person ... I need to heal this person with chain heal, so I can see it at a glance"): the
+  middle of a box is kept for ONE thing - a sign that says heal THIS person now, with this. The Riptide mark is the first
+  (a Riptide standing = Chain Heal starts here); the icon in the box's middle, edged white, over the health bar. ]]
+RD.CUE = { px = 20, edge = 1, col = { 1, 1, 1, 1 } }
+function RD.CueMark(sp)
+    if sp.cue then return sp.cue end
+    -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the health
+    -- bar, which lives in the pip; the callsign's road: a child frame lifted over the pip, RD.DeckTag)
+    local hold = CreateFrame("Frame", nil, sp.deckPlate)
+    hold:SetAllPoints(sp.deckPlate)
+    local hl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+    if type(hl) == "number" and hold.SetFrameLevel then hold:SetFrameLevel(hl + 6) end
+    local C = RD.CUE
+    local b = hold:CreateTexture(nil, "OVERLAY", nil, 5)
+    b:SetColorTexture(C.col[1], C.col[2], C.col[3], C.col[4])
+    local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
+    if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    local h = sp.deckPlate.GetHeight and sp.deckPlate:GetHeight()
+    local px = math.min(C.px, math.max(10, (type(h) == "number" and h > 0 and h or C.px + 6) - 6))
+    m:SetSize(px, px)
+    m:SetPoint("CENTER", sp.deckPlate, "CENTER", 0, 0)
+    b:SetSize(px + 2 * C.edge, px + 2 * C.edge)
+    b:SetPoint("CENTER", m, "CENTER", 0, 0)
+    sp.cue = { hold = hold, edge = b, icon = m }
+    sp.ripHold = hold
+    return sp.cue
+end
+function RD.CueShow(sp, on)
+    local q = sp.cue
+    if not q then return end
+    q.edge:SetShown(on and true or false)
+    q.icon:SetShown(on and true or false)
+end
+
+--- The marks on the boxes: the Riptide icon in the middle (the heal cue) on EVERY box of whoever has one of yours standing.
 function RD.RipMarks()
     local now = GetTime()
     -- EACH MARK ENDS WITH ITS OWN RIPTIDE (Arn's cousin, 16 Nov: "riptide one person and then another person but the icon
@@ -5369,26 +5418,16 @@ function RD.RipMarks()
     RD.ripNext = nextAt
     local on = RD.Deck() and RD.Sw("rip")
     for _, sp in ipairs(RD.spokes or {}) do
-        local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
+        local has = on and sp.unit and RD.rips[RD.RipKey(sp.unit)] and sp.deckPlate and sp.deckPlate:IsShown()
         if has and not sp.ripMark then
-            -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the
-            -- health bar, which lives in the pip; the callsign's road: a child frame lifted over the pip, RD.DeckTag)
-            local hold = CreateFrame("Frame", nil, sp.deckPlate)
-            hold:SetAllPoints(sp.deckPlate)
-            local hl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
-            if type(hl) == "number" and hold.SetFrameLevel then hold:SetFrameLevel(hl + 6) end
-            sp.ripHold = hold
-            local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
-            m:SetSize(14, 14)
-            m:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
-            if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+            local q = RD.CueMark(sp)
             if C_Spell and C_Spell.GetSpellTexture then
                 local ok, t = pcall(C_Spell.GetSpellTexture, RD.RIPTIDE)
-                if ok then pcall(m.SetTexture, m, t) end
+                if ok then pcall(q.icon.SetTexture, q.icon, t) end
             end
-            sp.ripMark = m
+            sp.ripMark = q.icon
         end
-        if sp.ripMark then sp.ripMark:SetShown(has and true or false) end
+        if sp.ripMark then RD.CueShow(sp, has) end
     end
 end
 

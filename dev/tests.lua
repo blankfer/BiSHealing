@@ -15764,6 +15764,23 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                local q = tsp.cue
+                ok(q and q.icon:IsShown() and q.edge:IsShown() and q.edge.__w > q.icon.__w and q.edge.__color and q.edge.__color[1] == 1,
+                   "the mark edged white, bigger than before (Arn: in the middle so it does not get lost)")
+                -- EVERY BOX OF THAT PERSON (Arn: "rip tide is not propagating to the other frames"): the same GUID elsewhere
+                local twin
+                for _, sp in ipairs(RD.spokes) do
+                    if sp ~= tsp and sp.unit and sp.deckPlate:IsShown() then twin = sp break end
+                end
+                if twin then
+                    local keepG = STATE.guids[twin.unit]
+                    STATE.guids[twin.unit] = UnitGUID(tsp.unit)
+                    RD.RipMarks()
+                    ok(twin.ripMark and twin.ripMark:IsShown(), "the same person in another box (the TARGET pair): marked there too")
+                    STATE.guids[twin.unit] = keepG
+                    RD.RipMarks()
+                    ok(not (twin.ripMark and twin.ripMark:IsShown()), "someone else in that box: no mark")
+                end
                 ok(tsp.ripHold and tsp.ripHold:GetFrameLevel() > tsp.heal:GetFrameLevel() + 1,
                    "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
                    tsp.ripHold and tsp.ripHold:GetFrameLevel(), tsp.heal:GetFrameLevel())
@@ -15786,7 +15803,7 @@ do
                 EN.RipPaint()
                 ok(rq.rip.iconK == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],
                    "under one Chain Heal left: red, the icon lit, red edged - too late")
-                RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
+                RD.ripLast.untilAt, RD.rips[RD.RipKey(tsp.unit)] = GetTime() - 1, GetTime() - 1
                 ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
                 -- TWO RIPTIDES (Arn's cousin: "the icon stayed on two people, the second rip tide extended the timer for the
                 -- first one"): A's mark ends with A's own Riptide, while B's bar runs on
@@ -15800,8 +15817,8 @@ do
                     RD.lastClick, RD.lastClickAt = other, GetTime()
                     RD.RipCast(GetTime())
                     ok(tsp.ripMark:IsShown() and other.ripMark:IsShown(), "two Riptides standing: two marks")
-                    RD.rips[tsp.unit] = GetTime() - 0.1                -- A's runs out; B's has most of its time
-                    RD.ripNext = RD.rips[tsp.unit]
+                    RD.rips[RD.RipKey(tsp.unit)] = GetTime() - 0.1     -- A's runs out; B's has most of its time
+                    RD.ripNext = RD.rips[RD.RipKey(tsp.unit)]
                     EN.RipPaint()
                     rq:GetScript("OnUpdate")(rq, 1)                    -- the bar's ticker
                     ok(not tsp.ripMark:IsShown() and other.ripMark:IsShown() and rq.rip.bar:GetValue() > 10,
