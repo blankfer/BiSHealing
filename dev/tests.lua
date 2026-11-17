@@ -6662,6 +6662,85 @@ do
             -- AND RANGE IS STILL THE HEAL'S
             ok(FM.RangeSpell() ~= "Nature's Swiftness", "range is never measured with the booster")
 
+            -- RIPTIDE ON THE CHAIN HEAL BIND (Arn, 15 Nov: "cast rip tide if its cooldown is up and then go back to
+            -- casting chain heal"): it rides in front like a booster, but AIMED at the living friend under the mouse
+            do
+                local keepRight = FM.Get("", "right")
+                FM.Set("", "right", "Chain Heal(Rank 2)")
+                local landed = FM.Landing("", "right", "Riptide(Rank 1)")
+                ok(landed == "Riptide+Chain Heal(Rank 2)", "Riptide dropped on Chain Heal goes in front, the heal and its rank kept",
+                   tostring(landed))
+                FM.Set("", "right", landed)
+                ok(FM.Landing("", "button5", "Riptide") == "Riptide", "Riptide on an empty button is just Riptide")
+                local rc = CreateFrame("Button", "RiptideCell", UIParent, "SecureUnitButtonTemplate")
+                FM.ApplyTo(rc)
+                local rt = rc.__attrs["*macrotext2"] or ""
+                -- 16 Nov: Forever stops a macro at a spell that is cooling ("Nothing casts, with a red 'Spell is not ready
+                -- yet'"), so Riptide in front is ONE cast sequence: Riptide, then five Chain Heals (Arn: "5 chain heals and then
+                -- it refreshes riptide"), a 15 s pause starts it over
+                local CH = "Chain Heal(Rank 2)"
+                -- 16 Nov night: the count is FINISHED casts off the book's cast time (Arn: "i stopped casting 12 times and it
+                -- never riptide, i casted 8 to completion and then it riptide" - a cancel never moves the list), and the
+                -- guard rides in the sequence's own conditions so more ranked heals fit in 255
+                local seq6 = "/castsequence [@mouseover,help,nodead] reset=15 Riptide"
+                for _ = 1, 6 do seq6 = seq6 .. ", " .. CH end
+                ok(rc.__attrs["*type2"] == "macro" and rt == seq6,
+                   "a click: one cast sequence guarded by its own conditions - Riptide, six 2.5 s Chain Heals, Riptide again", rt)
+                ok(not rt:find("/cast [@mouseover,help,nodead] Riptide", 1, true), "never the plain Riptide line that stalls the macro")
+                ok(#rt <= FM.MACRO_MAX, "the macro fits", #rt)
+                local keepInfo = C_Spell.GetSpellInfo
+                C_Spell.GetSpellInfo = function() return { castTime = 2000 } end
+                ok(FM.SeqCount(CH) == 7, "a 2 s Chain Heal (Arn's cast bar): seven", FM.SeqCount(CH))
+                ok(1.5 + (FM.SeqCount(CH) - 1) * 2.0 >= 12, "finished casts only: Riptide is ready when the list comes back")
+                C_Spell.GetSpellInfo = function() return { castTime = 1500 } end
+                ok(FM.SeqCount("Lesser Healing Wave(Rank 1)") == 8, "a 1.5 s heal: eight")
+                C_Spell.GetSpellInfo = function() return { castTime = 3000 } end
+                ok(FM.SeqCount("Healing Wave(Rank 1)") == 5, "a 3 s heal: five")
+                C_Spell.GetSpellInfo = function() return { castTime = secret() } end
+                ok(FM.SeqCastTime(CH) == FM.CAST_GUESS and FM.SeqCount(CH) == 6, "a hidden cast time: the 2.5 s guess")
+                -- HASTE (Arn: "trolls have a racial for 10% faster cast ... haste items"): shorter casts, more heals
+                C_Spell.GetSpellInfo = function() return { castTime = 2000 } end
+                local keepHaste = _G.UnitSpellHaste
+                _G.UnitSpellHaste = function() return 10 end
+                ok(FM.SeqCount(CH) == 7, "10% haste on a 2 s heal: still seven (1.82 s casts)", FM.SeqCount(CH))
+                _G.UnitSpellHaste = function() return 30 end
+                ok(FM.SeqCount(CH) == 9, "30% haste: nine (1.54 s casts, a shorter GCD too)", FM.SeqCount(CH))
+                _G.UnitSpellHaste = function() return secret() end
+                ok(FM.Haste() == 0, "hidden haste: none counted")
+                _G.UnitSpellHaste = keepHaste
+                ok(FM.SeqInfo(CH):find("7 heals after Riptide", 1, true), "the readout says what the list is built from", FM.SeqInfo(CH))
+                -- Riptide's own cooldown off the book
+                local keepBase = _G.GetSpellBaseCooldown
+                C_Spell.GetSpellInfo = function(n) if n == "Riptide" then return { spellID = 61295, castTime = 0 } end return { castTime = 2500 } end
+                _G.GetSpellBaseCooldown = function(id) return id == 61295 and 6000 or 0 end
+                ok(FM.RiptideCooldown() == 6 and FM.SeqCount(CH) == 3 and FM.SeqReset() == 15, "a 6 s Riptide: the floor of three, the reset kept", FM.SeqCount(CH))
+                _G.GetSpellBaseCooldown = function() return 20000 end
+                ok(FM.SeqCount(CH) == 9 and FM.SeqReset() == 21, "a 20 s Riptide: nine, the reset longer than it", FM.SeqCount(CH), FM.SeqReset())
+                _G.GetSpellBaseCooldown, C_Spell.GetSpellInfo = keepBase, keepInfo
+                local seq8 = seq6
+                local g = FM.GuardedHeal("", "Riptide+" .. CH, "", CH)
+                ok(g == seq6, "GuardedHeal: nothing in front - the sequence guards itself")
+                local short = FM.HealLines("Riptide+" .. CH, "", CH, 120)
+                ok(#short <= 120 and select(2, short:gsub("Chain Heal", "")) == 3, "too long for the macro: fewer heals, never past it", short)
+                local body = NS.FK.Encode({ right = landed }, {})
+                local back = NS.FK.Decode(body)
+                ok(back and back.right == landed, "Riptide + Chain Heal is written into the macro and read back whole", body)
+                ok(FM.CycleRank("", "right") == "Riptide+Chain Heal(Rank 3)" or FM.Get("", "right"):find("^Riptide%+Chain Heal"),
+                   "the rank button steps Chain Heal and keeps Riptide in front", tostring(FM.Get("", "right")))
+                FM.Set("", "wheeldown", "Riptide+Chain Heal(Rank 2)")
+                FM.ApplyWheel(FG.anchor)
+                local wd = _G["BiSHealWheelwheeldown"]
+                local wdt = wd and wd.__attrs and wd.__attrs["macrotext"] or ""
+                ok(wdt:find("/castsequence [@mouseover,help,nodead] reset=15 Riptide, Chain Heal(Rank 2)", 1, true)
+                   and select(2, wdt:gsub("Chain Heal", "")) == 6, "on the wheel too: the guarded Riptide cast sequence, six heals", wdt)
+                ok(FM.FirstLines("Nature's Swiftness+Healing Wave", "") == "/cast Nature's Swiftness\n",
+                   "Nature's Swiftness stays a plain line (it needs no target)")
+                FM.Clear("", "wheeldown")
+                FM.Set("", "right", keepRight)
+                if keepRight == nil then FM.Clear("", "right") end
+                FM.ApplyWheel(FG.anchor)
+            end
+
             -- THE WAYS BACK: the heal dropped again is a plain heal; a booster on an empty slot is
             -- just the booster
             RANKS[331] = "Rank 4"

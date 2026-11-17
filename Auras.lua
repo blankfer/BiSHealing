@@ -430,6 +430,9 @@ FA.HOTS = {
     -- NAMED, NOT NUMBERED: nobody here knows this client's Riptide ids, and a guess would be the
     -- same mistake as assuming Water Shield could not exist. The spellbook answers, and a shaman
     -- who has not trained it simply has no family.
+    -- 15 Nov 2026: the id is known now - Arn's tooltip on Forever: "Riptide, Rank 0/1, SpellID 408521, IconID 252995"
+    -- (a talent, one rank). Still NOT listed here: a fixed id would give a shaman who has not taken the talent a family,
+    -- and so a marker slot on every cell; the book, read by name, answers only once it is learned.
     SHAMAN = {
         { key = "Riptide", name = "Riptide" },
     },
