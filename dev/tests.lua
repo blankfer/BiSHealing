@@ -14846,6 +14846,100 @@ do
     BB.Paint() BB.Wake()
 end
 
+-- THE FLIGHT DECK'S SPELL TABLES (15 Nov 2026, step 1; research in bisdev docs/spells/): every class's interrupt, cures
+-- and keep-up spells as the research found them on Forever, and the fixes it turned up in the old tables
+do
+    local FM, FA = NS.FM, NS.FA
+    local keep = { known = _G.IsSpellKnown, classes = STATE.classes and STATE.classes.player }
+    STATE.classes = STATE.classes or {}
+    local slots = { 190, 191, 192, 193, 194, 195 }
+    local kept = {}
+    for _, i in ipairs(slots) do kept[i] = BOOK[i] end
+    local function as(class, spells)
+        STATE.classes.player = class
+        for _, i in ipairs(slots) do BOOK[i] = nil end
+        for n, name in ipairs(spells or {}) do BOOK[slots[n]] = { name = name, rank = "" } end
+        bookSaid()
+        FG.kickSpell, FG.backupSpell = nil, nil
+    end
+
+    -- the warlock's Felhunter: Spell Lock and Devour Magic are PET spells, never in the player's book
+    local petKnows = {}
+    _G.IsSpellKnown = function(id, pet) return pet == true and petKnows[id] == true end
+    as("WARLOCK", { "Death Coil" })
+    ok(FG.KickSpell() == "Death Coil", "a warlock with no Felhunter out: Death Coil", tostring(FG.KickSpell()))
+    ok(#FA.Cures() == 0, "and no cure")
+    petKnows[19244], petKnows[19647], petKnows[19736] = true, true, true
+    as("WARLOCK", { "Death Coil" })
+    local sl = FM.BookIds("Spell Lock")
+    ok(#sl == 2 and sl[1] == 19244 and sl[2] == 19647, "the Felhunter's Spell Lock found by asking the client per rank", #sl)
+    ok(FG.KickSpell() == "Spell Lock", "a warlock with a Felhunter: the kick is Spell Lock", tostring(FG.KickSpell()))
+    ok(FG.KickCast() == "Spell Lock", "cast by name: the pet's top rank (8 s lockout)", tostring(FG.KickCast()))
+    local wc = FA.Cures()
+    ok(#wc == 1 and wc[1].name == "Devour Magic" and wc[1].types.Magic, "and a Magic cure box: Devour Magic", #wc)
+    petKnows = {}
+
+    -- the mage: Remove Lesser Curse is all there is
+    as("MAGE", { "Remove Lesser Curse", "Counterspell" })
+    local mc = FA.Cures()
+    ok(#mc == 1 and mc[1].name == "Remove Lesser Curse", "a mage's cure: Remove Lesser Curse")
+
+    -- the druid: Feral Charge is the real interrupt, Bash the backup
+    as("DRUID", { "Feral Charge", "Bash" })
+    ok(FG.KickSpell() == "Feral Charge" and FG.BackupSpell() == "Bash", "a druid: Feral Charge, Bash behind it",
+       tostring(FG.KickSpell()) .. "/" .. tostring(FG.BackupSpell()))
+
+    -- the priest: Psychic Scream is targetless - a backup, never the kick
+    as("PRIEST", { "Psychic Scream" })
+    ok(FG.KickSpell() == nil and FG.BackupSpell() == "Psychic Scream", "a priest without Silence: no kick, Psychic Scream as the backup")
+    as("PRIEST", { "Silence", "Psychic Scream" })
+    ok(FG.KickSpell() == "Silence", "with Silence: Silence")
+
+    -- the warrior: Pummel needs Berserker Stance, Shield Bash the other two - the client picks at the click
+    as("WARRIOR", { "Pummel", "Shield Bash" })
+    local m = FG.KickStanceMacro("raid1target")
+    ok(m == "/cast [@raid1target,stance:3] Pummel; [@raid1target] Shield Bash", "a warrior with both: one macro by stance", tostring(m))
+    local wcell = { kickFx = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate") }
+    FG.ArmKick(wcell, "raid1target", FG.KickCast())
+    local a = wcell.kickFx.__attrs
+    ok(a["*type-kick"] == "macro" and a["*macrotext-kick"] == m and a["*spell-kick"] == nil and a["*harmbutton1"] == "kick",
+       "the kick cell casts it through the client's hostile switch", tostring(a["*type-kick"]))
+    as("WARRIOR", { "Shield Bash" })
+    ok(FG.KickStanceMacro("raid1target") == nil, "only one of them trained: the plain spell")
+    as("SHAMAN", { "Earth Shock" })
+    FG.ArmKick(wcell, "raid1target", FG.KickCast())
+    ok(a["*type-kick"] == "spell" and a["*macrotext-kick"] == nil, "a shaman's kick stays a plain spell")
+
+    -- the paladin's default shift-left: Cleanse from 42, Purify before it
+    as("PALADIN", { "Holy Light", "Purify" })
+    ok((FM.Defaults()["shift-left"] or ""):find("^Purify"), "a paladin under 42 starts with Purify on shift-left",
+       tostring(FM.Defaults()["shift-left"]))
+    as("PALADIN", { "Holy Light", "Purify", "Cleanse" })
+    ok((FM.Defaults()["shift-left"] or ""):find("^Cleanse"), "with Cleanse trained: Cleanse")
+
+    -- the heals over time that land under another id: their AURA ids, only once learned
+    local function fam(class, key) for _, f in ipairs(FA.HOTS[class]) do if f.key == key then return f end end end
+    as("PRIEST", { "Renew" })
+    ok(next(FA.HotIds(fam("PRIEST", "Mending"))) == nil, "Prayer of Mending not learned: no ids, so no marker slot")
+    as("PRIEST", { "Prayer of Mending" })
+    local pm = FA.HotIds(fam("PRIEST", "Mending"))
+    ok(pm[401877] and pm[1240848] and pm[1240849], "learned: the aura ids the target really wears are watched")
+    as("PALADIN", { "Light's Vigil" })
+    local lv = FA.HotIds(fam("PALADIN", "Vigil"))
+    ok(lv[1310909] and lv[1311593] and lv[1311597], "Light's Vigil: its aura ids too")
+    as("PRIEST", { "Power Word: Shield" })
+    ok(next(FA.HotIds(fam("PRIEST", "Shield"))) ~= nil, "Power Word: Shield from the book (its aura is its own id)")
+    as("DRUID", { "Wild Growth" })
+    ok(next(FA.HotIds(fam("DRUID", "WildGrowth"))) ~= nil, "Wild Growth from the book")
+
+    -- put everything back
+    _G.IsSpellKnown = keep.known
+    for _, i in ipairs(slots) do BOOK[i] = kept[i] end
+    STATE.classes.player = keep.classes
+    bookSaid()
+    FG.kickSpell, FG.backupSpell = nil, nil
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
