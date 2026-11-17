@@ -1,5 +1,18 @@
 # BiS Healing
 
+## 1.6.0
+
+- **The radar look is now a deck: one window with everything a healer looks at.** Your tank, your target and its target across the top; your group as health boxes with their names, in class colours; under each person an interrupt for their target and a box for each cure you have. An enemy's cast fills that row so you see it coming. Pets get a small box with a paw.
+- **Switches: show only what you want.** The SWITCHES button in the corner opens a list - BARE, LEAN or FULL, then a switch for every part - plus width and box-height sliders and a RESET. Shrink it down to party-frame size: the totems and tools stack instead of overlapping.
+- **The top row talks:** LOS, RNG and OVH light when a heal fails or would be wasted; a box shows when **you** are stunned, silenced or locked out, with how long is left.
+- **Group mana in the mana strip:** a thin bar for each mana user once they drop under half. When everyone is under, Mana Tide glows.
+- **Mana Tide tells your group:** one click drops it and posts "Mana Tide down - ready again in 5:00" in party chat; click it again to ping the totem so everyone knows where to stand. Other BiS Healing users see a small tag under your name.
+- **Red and amber outlines** on the deck's icons: red means click it now (food missing, a buff nearly out, a mana tool due), amber means getting close. Water Shield's last charge gets an amber ring.
+- **Shamans:** drop Riptide on your Chain Heal bind and one button does both - Riptide, then Chain Heals until it is ready again (counted from your own cast time and haste, so it never gets stuck). The person with your Riptide gets a mark, and a bar on top shows how long it has left. After each Chain Heal, **a bolt of lightning** runs across the people it landed on: gold for 3, amber for 2, a red flash for 1, a star on every crit - and a fanfare when all three crit. Its sounds have their own switch.
+- **Heal with a controller:** `/bish pad on` (or the options' "heal with a controller"). The D-pad steps through your group, A B X Y are your mouse binds on whoever is lit. Works in a fight.
+- **More classes' interrupts and cures:** a warlock's Felhunter (Spell Lock, Devour Magic), a druid's Feral Charge, a warrior's Pummel or Shield Bash by stance, a paladin's Cleanse, and the mage's curse cure fixed.
+- **Fixes:** clicking a rank-2 water or earth totem drops it again; totem timers right after a fight; OVH judges Chain Heal; your target's target shows in its class colour in a fight.
+
 ## 1.5.2
 
 - **The mouse wheel heals over party frames again** - EllesmereUI's, VuhDo's and the game's own party and raid frames, as well as BiS Healing's. Scroll over the world and the camera still zooms. It works with Clique installed too: Clique was hiding other addons' frames from us. `/bish wheel ours` keeps it to BiS Healing's frames only; `/bish wheel everywhere` is the old way.

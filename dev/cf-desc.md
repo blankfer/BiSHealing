@@ -1,7 +1,9 @@
-# BiS Healing — CurseForge page text (1.4.4)
+# BiS Healing — CurseForge page text (1.6.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.4.4 text (16 Nov, 1.6.0): "The radar look" becomes "The deck (the radar look)" - the one-window deck with switches, the top row, group mana, Mana Tide's chat line and ping, outlines, Riptide and the Chain Heal bolt; a new "Heal with a controller" section.
 
 Changed since the 1.4.3 text (12 Nov, 1.4.4): the radar's pips carry a mini health bar on top (cyan incoming,
 magenta overheal, your hover's heal); LOS / RANGE / OVER/H light three boxes in the black box's bottom row instead of
@@ -140,25 +142,27 @@ Every cell is drawn like one screen on an aircraft's instrument panel, with one 
 
 Prefer the plain grid? **look: classic** in the options (or `/bish look classic`) puts every cell back, at once. New installs start in classic.
 
-## The radar look
+## The deck (the radar look)
 
-The third look turns the grid into **a quiet radar**: you in the middle, your group around you, tanks always on top. **Only what needs a click lights up** — in a fight everything else goes invisible, so your eyes go straight to the one thing to do.
+The third look puts **everything a healer looks at in one window**, and lets you switch off whatever you don't want.
 
-- **Who needs a heal:** each person is a pip that appears **green, amber, then red** as they get hurt, and is gone when they're fine. Click to heal; your other binds still work on it. Pets are small paws beside their owner.
-- **A mini health bar on top of each pip**, filling left to right in the same colours, with **heals on their way in cyan** and the part that would land on nobody in **magenta**. Rest your mouse on someone and a fainter cyan shows how much your heal adds, a fainter magenta what it would waste. Like the pip, it only shows when someone is hurt.
-- **Dispels:** a diamond in the cure's colour on whoever carries something you can remove.
-- **Interrupts:** a red triangle on someone's target the moment it casts — click it to kick. If the game marks that cast as one you **can't interrupt**, a grey shield covers the triangle.
-- **LOS / RANGE:** when a heal fails, the word lights its box in the bar along the bottom (the black box), so you know to move.
-- **OVER/H:** lights its box beside LOS and RANGE when your heal would be **wasted** — as your mouse rests on them, and again the moment you start the heal. Your heal is the middle of its tooltip ("heals for X to Y") for the rank on that mouse button (a macro counts the first heal in it, so Nature's Swiftness + Healing Wave judges the Healing Wave); what they miss is the game's own number, minus heals already on their way. How much waste counts is yours: **overheal word: off / any / half / 75%** (half to start), and which button a hover judges: **hover heal: left / right / wheel / thumb1 / thumb2**.
-- **Your mana tools on the left:** your shield, Mana Tide, a mana potion, Mana Spring as the last resort, a drink (mage water first) and food — each lights only when it would keep you off empty, and goes dark while it cools.
-- **The fuel gauge across the top:** the boss's health racing your mana. When the boss is well ahead of you, a warning band says slow down.
-- **The right rail:** a catch-all (Grounding Totem, Psychic Scream) when your interrupt is cooling; after a fight, the best person to res — healers first; and for shamans **CALL, BRING and RECALL**: call your totems before the pull, bring them along in the fight, and after it bring them or recall them for mana back, whichever is cheaper.
-- **Ships:** the colours change with your group's size, from a fighter for a party to a capital ship for a raid.
-- **The engineer's view:** a button in the corner swaps the radar for the same buttons on a plain grid — party, dispels, interrupts, pets, tools — for anyone who'd rather not have the radar. Its party boxes are **health bars in class colours**, dimmed when someone is out of range, with **heals on their way in cyan** and the part that would land on nobody in **magenta**. While you hover, a fainter band shows how much your heal would add, and a fainter magenta what it would waste. **LOS, RANGE and OVER/H** light three small boxes across its top for whichever square you clicked or hovered, and a **small fuel gauge** sits over it: your mana, the boss's health past it, BINGO, your regen % and the five second rule.
-- **Resize** by dragging the bottom-right corner (right-click it for 100%). Drag the radar itself to move it. Both out of a fight.
-- **The black box** along the bottom holds the LOS / RANGE / OVER/H boxes.
+- **Across the top:** your tank, then **TARGET** and **ITS TARGET** - the enemy you're on in red, and whoever it is hitting. The tank spot goes to the game's tank, else BiS> now's, else the toughest player in your group.
+- **Your group** as health boxes with their names, in class colours, with heals on their way in cyan. Pets get a small box with a paw. Click to heal; every bind works on them.
+- **Under each person:** an interrupt for their target - it lights the moment that target casts, and the enemy's cast bar fills the row - and a box for each cure you have, lit when they carry something you can remove. A cast you can't interrupt wears a grey shield.
+- **The top row:** **LOS**, **RNG** and **OVH** light when a heal fails or would be wasted; a box shows when **you** are stunned, silenced or locked out, with a countdown.
+- **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
+- **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
+- **Mana Tide tells your group:** one click drops it and posts its cooldown in party chat; click again to ping the totem. Other BiS Healing users see a tag under your name.
+- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL, a **Riptide** mark on whoever has yours with a bar showing how long it lasts, and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
+- **The black box** along the bottom.
+- **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
+- **Resize** by dragging the bottom-right corner; Shift-drag for width. Out of a fight.
 
 Turn it on with **look: radar** in the options, or `/bish look radar`.
+
+## Heal with a controller
+
+`/bish pad on`, or **heal with a controller** in the options. The D-pad steps through your group (left and right jump a group of five), and A, B, X and Y are your left, right, middle and thumb binds on whoever is lit - with the pad's shift for your Shift binds. It works in a fight.
 
 ## The cells
 
