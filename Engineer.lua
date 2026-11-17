@@ -568,7 +568,12 @@ local function ripShape(q, B)
     B.icon:SetSize(is, is)
     B.icon:ClearAllPoints()
     B.icon:SetPoint("CENTER", q, "LEFT", 1 + sw / 2, 0)
-    if B.iconBack then B.iconBack:ClearAllPoints() B.iconBack:SetAllPoints(B.icon) end
+    if B.iconBack then                                     -- the WHOLE first square (Arn: "should not see that sliver of green to the
+        B.iconBack:ClearAllPoints()                       -- left of riptide" - an icon-sized back left the square's edge showing)
+        B.iconBack:SetPoint("TOPLEFT", q, "TOPLEFT", 1, -1)
+        B.iconBack:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", 1, 1)
+        B.iconBack:SetWidth(math.max(1, sw))
+    end
     local L = B.late
     local x0, x1 = 1, 1 + sw
     L.TOP:ClearAllPoints() L.TOP:SetPoint("TOPLEFT", q, "TOPLEFT", x0, -1) L.TOP:SetSize(sw, 2)
