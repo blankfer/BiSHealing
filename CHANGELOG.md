@@ -1,5 +1,12 @@
 # BiS Healing
 
+## 1.6.1
+
+- **Mana Tide is quiet:** one click drops it - no ping, nothing in chat. Click it again to ping the totem so your group knows where to stand. Other BiS Healing users still see the small tag under your name.
+- **Mana Tide sits in the middle of the mana buttons** (potion, Mana Tide, Mana Spring, drink), away from your totems' CALL button.
+- **Riptide marks end with their own Riptide.** Riptide two people and the first one's mark now goes the moment its Riptide runs out (it used to stay until the second one's did).
+- **The Riptide icon on top of its bar** shows clearly over the colour: greyed while there is time, full colour on the last stretch.
+
 ## 1.6.0
 
 - **The radar look is now a deck: one window with everything a healer looks at.** Your tank, your target and its target across the top; your group as health boxes with their names, in class colours; under each person an interrupt for their target and a box for each cure you have. An enemy's cast fills that row so you see it coming. Pets get a small box with a paw.

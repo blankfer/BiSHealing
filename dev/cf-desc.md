@@ -1,4 +1,4 @@
-# BiS Healing — CurseForge page text (1.6.0)
+# BiS Healing — CurseForge page text (1.6.1)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
@@ -152,7 +152,7 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **The top row:** **LOS**, **RNG** and **OVH** light when a heal fails or would be wasted; a box shows when **you** are stunned, silenced or locked out, with a countdown.
 - **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
 - **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
-- **Mana Tide tells your group:** one click drops it and posts its cooldown in party chat; click again to ping the totem. Other BiS Healing users see a tag under your name.
+- **Mana Tide, quietly:** one click drops it; click again to ping the totem so your group knows where to stand. Nothing goes in chat. Other BiS Healing users see a tag under your name.
 - **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL, a **Riptide** mark on whoever has yours with a bar showing how long it lasts, and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
 - **The black box** along the bottom.
 - **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
