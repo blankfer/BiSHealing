@@ -3,7 +3,7 @@
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
 
-Changed since the 1.4.4 text (16 Nov, 1.6.0): "The radar look" becomes "The deck (the radar look)" - the one-window deck with switches, the top row, group mana, Mana Tide's chat line and ping, outlines, Riptide and the Chain Heal bolt; a new "Heal with a controller" section.
+Changed since the 1.4.4 text (16 Nov, 1.6.0; Arn: "its one unified deck / classic, cockpit is just colors in classic now" - no radar or engineer words on the page): "The radar look" becomes "The deck", "The cockpit look" becomes "Cockpit colours for classic" - the one-window deck with switches, the top row, group mana, Mana Tide's chat line and ping, outlines, Riptide and the Chain Heal bolt; a new "Heal with a controller" section.
 
 Changed since the 1.4.3 text (12 Nov, 1.4.4): the radar's pips carry a mini health bar on top (cyan incoming,
 magenta overheal, your hover's heal); LOS / RANGE / OVER/H light three boxes in the black box's bottom row instead of
@@ -129,9 +129,9 @@ Open `/bish mouse` and there are four chips along the bottom: **Assist**, **Atta
 
 This client forgets addon settings at every restart, so BiS Healing keeps your binds and settings in a macro called `BiSHealing` in **each character's own macro tab**. Your druid and your priest never share, and everything comes back at login. Please don't rename it. (`/bish keep` shows what's in it.)
 
-## The cockpit look
+## Cockpit colours for classic
 
-Every cell is drawn like one screen on an aircraft's instrument panel, with one colour rule: **green is fine, amber is a caution, red is a warning, cyan is information, magenta is what you've selected.**
+Classic can wear cockpit colours: every cell drawn like one screen on an aircraft's instrument panel, with one colour rule: **green is fine, amber is a caution, red is a warning, cyan is information, magenta is what you've selected.**
 
 - **A dark screen** with a thin steel border.
 - **The name big on top**, in white, behind a small **lamp in their class colour**.
@@ -140,11 +140,11 @@ Every cell is drawn like one screen on an aircraft's instrument panel, with one 
 - **Heals on their way in cyan, a shield in white, overheal in orange** — all riding the tape.
 - **Your target in magenta**; **DEAD** in red, **OFFLINE** in amber.
 
-Prefer the plain grid? **look: classic** in the options (or `/bish look classic`) puts every cell back, at once. New installs start in classic.
+Cockpit colours are a choice inside classic, in the options' look row; plain classic puts every cell back at once. New installs start in plain classic.
 
-## The deck (the radar look)
+## The deck
 
-The third look puts **everything a healer looks at in one window**, and lets you switch off whatever you don't want.
+The deck puts **everything a healer looks at in one window**, and lets you switch off whatever you don't want.
 
 - **Across the top:** your tank, then **TARGET** and **ITS TARGET** - the enemy you're on in red, and whoever it is hitting. The tank spot goes to the game's tank, else BiS> now's, else the toughest player in your group.
 - **Your group** as health boxes with their names, in class colours, with heals on their way in cyan. Pets get a small box with a paw. Click to heal; every bind works on them.
@@ -158,7 +158,7 @@ The third look puts **everything a healer looks at in one window**, and lets you
 - **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
 - **Resize** by dragging the bottom-right corner; Shift-drag for width. Out of a fight.
 
-Turn it on with **look: radar** in the options, or `/bish look radar`.
+Pick **the deck** in the options' look row. It and classic are the two looks.
 
 ## Heal with a controller
 
@@ -170,9 +170,9 @@ One per person, and the groups can run **down or across**. Options: **groups: do
 
 - **The first name on the top line** — "Kumlust", not "Kumlust Surname".
 - **A number on the bottom line: what they still need.** It counts heals already on their way, so two healers stop filling the same gap. Shortened (`3.2K`), and **blank at full health**. Prefer a **percentage**? Or nothing? Your choice.
-- **Heals on their way, and the overheal.** Incoming heals fill the missing health (cyan in the cockpit look, green in classic) and stop at the cell's edge. The part of a heal that would land on nobody shows as a bold band over the end of their health (orange in the cockpit look, magenta in classic), with a white tick where it starts — that is how much damage they can take before your heal stops being wasted. Mid-cast, cancel and re-cast until there is no magenta left - then every point of it lands.
+- **Heals on their way, and the overheal.** Incoming heals fill the missing health (cyan with cockpit colours, green in plain classic) and stop at the cell's edge. The part of a heal that would land on nobody shows as a bold band over the end of their health (orange with cockpit colours, magenta in plain classic), with a white tick where it starts — that is how much damage they can take before your heal stops being wasted. Mid-cast, cancel and re-cast until there is no magenta left - then every point of it lands.
 - **See your heal before you cast it.** Rest your mouse on someone and a fainter copy of the incoming colour shows how much your heal would add; if it runs into the cell's edge, that part would be overheal. Hold Shift, Ctrl or Alt to see that heal instead.
-- **Coloured by health**: green, amber below 70%, red below 35% — always in the cockpit look; in classic, class colour or by health, your pick.
+- **Coloured by health**: green, amber below 70%, red below 35% — always with cockpit colours; in plain classic, class colour or by health, your pick.
 - **Cure boxes, down the left edge.** One small box per cure you know: Cure Poison and Cure Disease for a shaman, Dispel Magic and Cure Disease for a priest, Remove Curse and Cure Poison for a druid, Cleanse for a paladin. Click the box to cure that person, mid-fight too. When they pick up something that box can remove, the game draws its icon in the box and the box pulses teal, with the stack count in the corner. On Forever a cure takes one stack off, so the number is how many clicks are left. Each box lights only for its own kind, so the one lit is the one to click. Your mouse buttons stay free for heals. `/bish cures off` puts back a single marker instead.
 - **Your heals over time, with a countdown**: Renew for priests, Rejuvenation and Regrowth for druids, and **Riptide for shamans** — only your own casts, every rank. Each is found by name in your own spellbook, so it appears the day you train it and never before.
 - **Marker size**, 6 to 20 pixels.
@@ -187,7 +187,7 @@ One per person, and the groups can run **down or across**. Options: **groups: do
 
 Thick corner brackets with a tick in from each side, outlined so they read on any class colour.
 
-- **Gold on you** — or, with `/bish ring target` (**gold ring: me / target** in the options), **on whoever you have targeted** (magenta in the cockpit look, red in classic): their raid cell, the target cell and the tot cell when they are the same person.
+- **Gold on you** — or, with `/bish ring target` (**gold ring: me / target** in the options), **on whoever you have targeted** (magenta with cockpit colours, red in plain classic): their raid cell, the target cell and the tot cell when they are the same person.
 - **White on whoever your mouse is on** — hover a party or raid member's character in the world and their cell lights up, so you can see who that is on your frames.
 - **Target and mouse on the same person**: the corners stay red and the four ticks turn white.
 
@@ -226,7 +226,7 @@ Off by default for everyone. `/bish pvp off` turns it off.
 
 ## BiS> now — the button for the moment you are in
 
-A small block you can drag anywhere. Switch it on with `/bish now`.
+**On the deck, BiS> now is part of the deck**: your shield, the res, food, drink, Mana Tide and the rest sit in its own button row, so there is nothing extra to place. In classic it is a small block you can drag anywhere - switch it on with `/bish now`.
 
 It starts with one button: **help**. It is faint while you are well, warms to amber as your health drops, and goes solid red low down, with its outline following — and **the colour is chosen by the game**, from health this addon is never allowed to read. Click it to ping for help at yourself. On your corpse it keeps a dimmer, slower glow, so somebody looking to res you can find you.
 
