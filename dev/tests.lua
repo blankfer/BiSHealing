@@ -15761,6 +15761,8 @@ do
                    "the Riptide icon and the lines on a layer OVER the bar's fill (Arn: \"keep riptide on top of the duration bar\")")
                 ok(rq.rip.iconBack and rq.rip.iconBack.__color and rq.rip.iconBack.__color[4] == 1,
                    "a solid back under the icon: the bar's colour never shows through it (Arn: \"looks like it has an overlay on it\")")
+                ok(math.abs((rq.rip.iconBack.__w or 0) - (rq.__w - 2) / 6) < 0.01,
+                   "the back fills the icon's whole square: no sliver of green beside it (Arn)", rq.rip.iconBack.__w)
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 6
