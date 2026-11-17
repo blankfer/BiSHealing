@@ -509,16 +509,23 @@ function EN.RipBuild(q)
     B.bar:SetStatusBarColor(c[1], c[2], c[3], c[4])
     B.bar:SetMinMaxValues(0, 1)
     B.bar:SetValue(0)
+    -- THE ICON, THE LINES AND THE RED EDGE OVER THE FILL (Arn, 16 Nov: "keep riptide on top of the duration bar"): they
+    -- sat on the box itself, and the bar - a child frame - drew its fill over them; now a layer of their own above it
+    B.over = CreateFrame("Frame", nil, q)
+    B.over:SetAllPoints(q)
+    local bl = B.bar.GetFrameLevel and B.bar:GetFrameLevel()
+    if type(bl) == "number" and B.over.SetFrameLevel then B.over:SetFrameLevel(bl + 2) end
+    local top = B.over
     B.ticks = {}
     local RD = NS.RD
     local segs = (RD and RD.RIP_SEGS) or 6
     for k = 1, segs - 1 do
-        local t = q:CreateTexture(nil, "OVERLAY")
+        local t = top:CreateTexture(nil, "OVERLAY")
         t:SetColorTexture(0, 0, 0, 0.8)
         t:SetWidth(1)
         B.ticks[k] = t
     end
-    B.icon = q:CreateTexture(nil, "OVERLAY", nil, 2)
+    B.icon = top:CreateTexture(nil, "OVERLAY", nil, 2)
     if B.icon.SetTexCoord then B.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     if C_Spell and C_Spell.GetSpellTexture then
         local ok, t = pcall(C_Spell.GetSpellTexture, (RD and RD.RIPTIDE) or "Riptide")
@@ -526,7 +533,7 @@ function EN.RipBuild(q)
     end
     B.late = {}
     for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-        local t = q:CreateTexture(nil, "OVERLAY", nil, 3)
+        local t = top:CreateTexture(nil, "OVERLAY", nil, 3)
         t:SetColorTexture(1, 0.2, 0.2, 1)
         B.late[side] = t
     end

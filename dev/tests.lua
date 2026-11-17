@@ -15757,6 +15757,8 @@ do
                    "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
                    tsp.ripHold and tsp.ripHold:GetFrameLevel(), tsp.heal:GetFrameLevel())
                 ok(EN.RipPaint() == true and rq.rip.bar:GetValue() > 14 and rq.rip.icon:GetAlpha() < 1, "the bar full, the Riptide icon dim: time for Chain Heals")
+                ok(rq.rip.over and rq.rip.over:GetFrameLevel() > rq.rip.bar:GetFrameLevel(),
+                   "the Riptide icon and the lines on a layer OVER the bar's fill (Arn: \"keep riptide on top of the duration bar\")")
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
                 RD.ripLast.untilAt = GetTime() + 6
