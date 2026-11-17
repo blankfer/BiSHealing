@@ -3240,6 +3240,58 @@ function RD.PlaceViewButton()
     end
     if c then c:SetShown(not RD.Deck()) end                -- the deck and the engineer size themselves: no size button
     RD.PaintViewButton()
+    RD.PlaceTopGrip()
+end
+
+--[[ THE TOP GRIP (17 Nov 2026, Arn: "make bis healing easier to drag and move from the header"). The deck has no title bar - its
+  top strip holds the alert boxes, which take no mouse, so a drag there fell through to the window only in the gaps the
+  boxes and the pad left. Now the whole strip (the pad above it included) is one grab band over them, up to the switches
+  button in the corner: it washes on hover with a bar on the left (every row that does something pops), says so in a
+  tooltip, and drags the window like the background does - out of a fight only, ended before one (endDrag). ]]
+RD.GRIP_RIGHT = 34                                  -- (left free at the right: the switches button)
+function RD.BuildTopGrip(f)
+    if RD.topGrip or not f then return RD.topGrip end
+    local g = CreateFrame("Frame", nil, f)
+    g:SetFrameLevel(f:GetFrameLevel() + 12)           -- (over the strip, under the switches button at +14)
+    g:EnableMouse(true)
+    g:RegisterForDrag("LeftButton")
+    local c = RD.PHOS
+    g.wash = g:CreateTexture(nil, "HIGHLIGHT")
+    g.wash:SetAllPoints(g)
+    g.wash:SetTexture(RD.WHITE)
+    g.wash:SetVertexColor(c[1], c[2], c[3], 0.10)
+    g.bar = g:CreateTexture(nil, "HIGHLIGHT")
+    g.bar:SetPoint("TOPLEFT") g.bar:SetPoint("BOTTOMLEFT")
+    g.bar:SetWidth(2)
+    g.bar:SetTexture(RD.WHITE)
+    g.bar:SetVertexColor(c[1], c[2], c[3], 0.9)
+    g:SetScript("OnDragStart", function() local st = f:GetScript("OnDragStart") if st then st(f) end end)
+    g:SetScript("OnDragStop", function() endDrag(f) end)
+    g:SetScript("OnHide", function() endDrag(f) end)
+    g:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("BiS> Healing")
+        if combat() then GameTooltip:AddLine("Not while the fight is on.", 0.94, 0.55, 0.69)
+        else GameTooltip:AddLine("Drag to move the window.", 0.86, 0.84, 0.92) end
+        GameTooltip:Show()
+    end)
+    g:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    RD.topGrip = g
+    return g
+end
+--- The grip over the deck's top strip (the console's views); away on the radar.
+function RD.PlaceTopGrip()
+    local g, f = RD.topGrip, RD.frame
+    if not (g and f) then return end
+    if not (RD.Console and RD.Console()) then g:Hide() return end
+    local C = RD.CON or {}
+    local head = (RD.Deck() and RD.DeckHead and RD.DeckHead()) or C.head or 14
+    g:ClearAllPoints()
+    g:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    g:SetPoint("TOPRIGHT", f, "TOPRIGHT", -RD.GRIP_RIGHT, 0)
+    g:SetHeight((C.pad or 8) + head)
+    g:Show()
 end
 
 function RD.PaintViewButton()
@@ -4109,6 +4161,7 @@ function RD.Build()
     -- THE VIEW BUTTON: radar <-> the engineer's console (RD.ToggleView)
     RD.BuildClassButton(f)
     RD.BuildViewButton(f)
+    RD.BuildTopGrip(f)
     -- a knob on each tool that lights by itself (the stabilizer and the rations stay: always wanted)
     RD.knobbed = { RD.tide, RD.potion, RD.reserve, RD.fuel, RD.chaff, RD.call, RD.tcall, RD.recall }
     for _, b in ipairs(RD.knobbed) do RD.Knob(b) end

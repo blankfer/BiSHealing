@@ -15589,6 +15589,17 @@ do
             RD.SetDeckWidth(nil)
             local nt = FG.DeckPlace(1, 4, true, RD.DECK, 382, true)
             ok(nt.target == nil and nt.tanks[1].w > 300, "target off: the tank takes the whole top row")
+            -- THE TOP GRIP (Arn, 17 Nov: "make bis healing easier to drag and move from the header")
+            RD.PlaceViewButton()
+            local tg = RD.topGrip
+            ok(tg and tg:IsShown() and (tg.__h or tg:GetHeight()) >= RD.DeckHead(), "the deck's whole top strip is a grab band")
+            ok(tg:GetFrameLevel() < RD.viewBtn:GetFrameLevel(), "under the switches button: that still clicks")
+            local started = 0
+            local keepDS = RD.frame:GetScript("OnDragStart")
+            RD.frame:SetScript("OnDragStart", function() started = started + 1 end)
+            tg:GetScript("OnDragStart")(tg)
+            RD.frame:SetScript("OnDragStart", keepDS)
+            ok(started == 1, "a drag on the band moves the window (the window's own drag)")
             -- the panel
             ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == #RD.SW, "the switches button opens the list, a row each")
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
