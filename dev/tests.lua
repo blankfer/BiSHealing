@@ -15771,6 +15771,27 @@ do
                    "under one Chain Heal left: red, the icon lit, red edged - too late")
                 RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
                 ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
+                -- TWO RIPTIDES (Arn's cousin: "the icon stayed on two people, the second rip tide extended the timer for the
+                -- first one"): A's mark ends with A's own Riptide, while B's bar runs on
+                local other
+                for _, sp in ipairs(RD.spokes) do
+                    if sp ~= tsp and sp.unit and sp.unit ~= "player" and sp.deckPlate:IsShown() then other = sp break end
+                end
+                if other then
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.RipCast(GetTime())
+                    RD.lastClick, RD.lastClickAt = other, GetTime()
+                    RD.RipCast(GetTime())
+                    ok(tsp.ripMark:IsShown() and other.ripMark:IsShown(), "two Riptides standing: two marks")
+                    RD.rips[tsp.unit] = GetTime() - 0.1                -- A's runs out; B's has most of its time
+                    RD.ripNext = RD.rips[tsp.unit]
+                    EN.RipPaint()
+                    rq:GetScript("OnUpdate")(rq, 1)                    -- the bar's ticker
+                    ok(not tsp.ripMark:IsShown() and other.ripMark:IsShown() and rq.rip.bar:GetValue() > 10,
+                       "A's ran out: A's mark gone at once, B's mark and B's bar carry on")
+                    RD.rips, RD.ripLast, RD.ripNext = {}, nil, nil
+                    RD.RipMarks()
+                end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
                 RD.lastClick, RD.over = nil, nil
                 ok(RD.RipCast(GetTime()) == nil, "nobody clicked or under the mouse, no name: no guess")

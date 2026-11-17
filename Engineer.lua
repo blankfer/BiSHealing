@@ -571,6 +571,7 @@ function EN.RipPaint()
         B.icon:SetAlpha(0.25)
         ripLate(B, false)
         q:SetScript("OnUpdate", nil)
+        q.ripTicking = nil                                 -- (so the next Riptide starts the ticker again, however this ended)
         if RD.RipMarks then RD.RipMarks() end
         return false
     end
@@ -591,6 +592,8 @@ function EN.RipPaint()
             self.ripAcc = (self.ripAcc or 0) + (tonumber(e) or 0)
             if self.ripAcc < EN.RIP_EVERY then return end
             self.ripAcc = 0
+            local R = NS.RD                                    -- an older Riptide ran out: its mark goes now
+            if R and R.ripNext and GetTime() >= R.ripNext and R.RipMarks then R.RipMarks() end
             if not EN.RipPaint() then self.ripTicking = nil end
         end)
     end

@@ -5306,7 +5306,14 @@ end
 --- The marks on the boxes: a Riptide icon top-right on whoever has one of yours standing.
 function RD.RipMarks()
     local now = GetTime()
-    for u, t in pairs(RD.rips) do if t <= now then RD.rips[u] = nil end end
+    -- EACH MARK ENDS WITH ITS OWN RIPTIDE (Arn's cousin, 16 Nov: "riptide one person and then another person but the icon
+    -- stayed on two people, the second rip tide extended the timer for the first one"): the marks were cleared only at a
+    -- cast or when the NEWEST one ran out; RD.ripNext = the soonest end, and the bar's ticker calls this when it comes
+    local nextAt
+    for u, t in pairs(RD.rips) do
+        if t <= now then RD.rips[u] = nil elseif not nextAt or t < nextAt then nextAt = t end
+    end
+    RD.ripNext = nextAt
     local on = RD.Deck() and RD.Sw("rip")
     for _, sp in ipairs(RD.spokes or {}) do
         local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
