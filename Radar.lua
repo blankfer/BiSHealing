@@ -1701,18 +1701,13 @@ end
 --- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier). THE FLIGHT DECK is a console
 --- too (15 Nov 2026, Arn: "this is going to replace radar and engineer is going to be this new deck but barebones"): the
 --- engineer's boxes - health bars, kick squares, cure chips, the fuel strip, the tools and totems - laid out as the deck.
+--- The engineer's view is gone (16 Nov 2026, Arn: "its one unified deck"): the console is the deck.
 function RD.Deck() return (NS.FG and NS.FG.DeckOn and NS.FG.DeckOn()) == true end
-function RD.Console() return db().view == "console" or RD.Deck() end
---- The view button picked the engineer's view (the deck is the radar look's own view otherwise).
-function RD.EngineerView() return db().view == "console" end
+function RD.Console() return RD.Deck() end
 --- The retired radar disc, reachable only by the suite (`RD.FORCE_DISC`, never set in the game), so its code stays tested
 --- until it is deleted.
 RD.FORCE_DISC = false
 function RD.DiscView() return RD.FORCE_DISC == true end
---- The engineer's view: the deck, condensed (RD.DECK_SMALL) - narrower, taller boxes, short totem timers.
-function RD.Compact() return RD.EngineerView() and RD.Deck() end
---- The deck's sizes for the view on screen.
-function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
 
 --[[ THE SWITCHES (16 Nov 2026, Arn: "maybe we just do toggles with everything off its the quasi engineer look and deck would
   be with everything on names flavor etc" - "that unifies them, no more deck and engineer, just deck now"; sketch
@@ -1849,14 +1844,14 @@ function RD.FloorInner() return RD.NARROW_INNER end
 --- The width the player dragged this view to (Shift + the corner grip), never under the floor; nil = the view's own.
 function RD.DeckWidth()
     local t = db().deckW
-    local w = type(t) == "table" and tonumber(t[RD.Compact() and "eng" or "deck"]) or nil
+    local w = type(t) == "table" and tonumber(t.deck) or nil
     if not w then return nil end
     return math.max(RD.FloorInner(), math.floor(w + 0.5))
 end
 function RD.SetDeckWidth(w)
     local d = db()
     d.deckW = type(d.deckW) == "table" and d.deckW or {}
-    d.deckW[RD.Compact() and "eng" or "deck"] = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
+    d.deckW.deck = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
 end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
@@ -2073,108 +2068,6 @@ function RD.BrainsSay(P)
     end
 end
 
---- Every slot of a class: the fighter's own (RD.ConsoleSlot), else small ones. `top` = the slots that carry an interrupt
---- and a pet (the top five of the rank).
-function RD.ConsoleSlots(T, top, rankOf)
-    local out = {}
-    top, rankOf = top or {}, rankOf or {}
-    for i = 1, T.n do
-        if T.n == 5 then
-            out[i] = RD.ConsoleSlot(i)
-        else
-            local mine = top[i] == true
-            local z = 1                              -- one size a class (the bands are told by brightness)
-            out[i] = { b = 0, rh = 0, rc = 0, rb = mine and 0 or nil, ph = math.floor(T.ph * z + 0.5), pc = math.max(2, T.chip - 4),
-                       pb = T.kick * 0.8, own = mine, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, console = true,
-                       scale = z }
-        end
-    end
-    return out
-end
-
---- THE FLEET'S SHAPE (Arn, 11 Nov: "we are the star destroyer, our best ships are around us ... like how herds keep the
---- vulnerable in the middle, out in the outer edges are the screen ships smaller ships that dont take much damage"):
---- the size of the k-th in rank - the core five full size, the escorts a little smaller, the outer screen the smallest.
-RD.SHIP_SIZES = { core = 1, escort = 0.85, screen = 0.72 }
-function RD.ShipScale(k, n)
-    if k <= 5 then return RD.SHIP_SIZES.core end
-    if k <= math.ceil(n * 2 / 3) then return RD.SHIP_SIZES.escort end
-    return RD.SHIP_SIZES.screen
-end
-
---- The slot a spoke gets in the fighter: drawn small (its glyph fits its square), placed by RD.ConsoleLayout.
-function RD.ConsoleSlot(i)
-    local C = RD.CON
-    return { b = 0, rh = 0, rc = 0, rb = 0, ph = C.ph, pc = C.cure, pb = C.pb, own = true, group = 1, pos = i,
-             self = (i == 1) or nil, console = true }
-end
-
---- The fighter's grid: column centres, row centres, the size. Every place is (x, -y) from the radar frame's top-left.
-function RD.ConsoleGrid()
-    local C = RD.CON
-    local W = C.pad * 2 + C.colW * RD.SPOKES
-    local y1 = C.pad + C.head + C.sq / 2
-    local y2 = y1 + C.sq / 2 + C.gap + (C.cure + 4) / 2
-    local y3 = y2 + (C.cure + 4) / 2 + C.gap + C.sq / 2
-    local y4 = y3 + C.sq / 2 + C.gap + C.sq / 2
-    local y5 = y4 + C.sq / 2 + C.gap + RD.SYS_PX / 2
-    local H = y5 + RD.SYS_PX / 2 + C.pad
-    local cols = {}
-    for i = 1, RD.SPOKES do cols[i] = C.pad + C.colW * (i - 0.5) end
-    return { W = W, H = H, cols = cols, rows = { y1, y2, y3, y4, y5 } }
-end
-
---- A bigger class's places: an odd grid, sorted nearest the middle first (in pixels), the n nearest kept. Answers the
---- places {x, y}, the crew block's size.
-function RD.ConsoleCells(T, x0)
-    local C = RD.CON
-    local pitch = T.sq + T.rowGap
-    local midC, midR = (T.cols + 1) / 2, (T.rows + 1) / 2
-    local cells = {}
-    for r = 1, T.rows do
-        for c = 1, T.cols do
-            local dx, dy = (c - midC) * T.colW, (r - midR) * pitch
-            cells[#cells + 1] = { x = x0 + T.colW * (c - 0.5), y = C.pad + C.head + T.sq / 2 + (r - 1) * pitch, d = dx * dx + dy * dy,
-                                  r = r, c = c }
-        end
-    end
-    table.sort(cells, function(a, b)
-        if a.d ~= b.d then return a.d < b.d end
-        if a.r ~= b.r then return a.r < b.r end
-        return a.c < b.c
-    end)
-    local out = {}
-    for k = 1, T.n do out[k] = cells[k] end
-    return out, T.cols * T.colW, T.rows * T.sq + (T.rows - 1) * T.rowGap
-end
-
--- an empty square: four thin edges in the dim phosphor, on the console's own layer
-local function square(key, px, col)
-    RD.conSquares = RD.conSquares or {}
-    local q = RD.conSquares[key]
-    if not q then
-        q = CreateFrame("Frame", nil, RD.conLayer)
-        q.edges = edge(q, RD.DIM, 1)
-        RD.conSquares[key] = q
-    end
-    col = col or RD.DIM
-    if q.col ~= col then
-        for _, e in ipairs(q.edges) do e:SetVertexColor(col[1], col[2], col[3], col[4] or 1) end
-        q.col = col
-    end
-    q:SetSize(px, px)
-    q:Show()
-    return q
-end
-
--- THE BANDS BY BRIGHTNESS: the core five bright, the escorts the usual dim, the outer screen fainter
-RD.BAND_COL = { core = { 0.22, 1.00, 0.53, 0.75 }, escort = RD.DIM, screen = { 0.11, 0.36, 0.22, 0.5 } }
-local function bandCol(k, n)
-    if k <= 5 then return RD.BAND_COL.core end
-    if k <= math.ceil(n * 2 / 3) then return RD.BAND_COL.escort end
-    return RD.BAND_COL.screen
-end
-
 local function at(fr, x, y)
     fr:ClearAllPoints()
     fr:SetPoint("CENTER", RD.frame, "TOPLEFT", x, -y)
@@ -2186,35 +2079,6 @@ local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve,
 -- just go with dim and very bright when needed if we are going to outline we outline the box mana stuff blue"): the
 -- icons alone, dim or bright; Mana Tide, the potion, Mana Spring and the drink inside one blue outline.
 RD.MANA_BOX_COL = { 0.30, 0.62, 1.00, 0.9 }
-local function toolsRow(W, y, deck)
-    local tools = CON_TOOLS()
-    local n, gap = #tools, RD.CON.toolGap
-    local w = n * RD.SYS_PX + (n - 1) * gap
-    local x0 = (W - w) / 2 + RD.SYS_PX / 2
-    local xs = {}
-    for k, b in ipairs(tools) do
-        local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        xs[b] = x
-        if not deck then at(square("tool" .. k, RD.SYS_PX), x, y) end
-        at(b, x, y)
-    end
-    local mb = RD.manaBox
-    if deck and xs[RD.tide] and xs[RD.fuel] then
-        if not mb then
-            mb = CreateFrame("Frame", nil, RD.conLayer)
-            mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
-            RD.manaBox = mb
-        end
-        local l, r = xs[RD.tide] - RD.SYS_PX / 2 - 2, xs[RD.fuel] + RD.SYS_PX / 2 + 2
-        mb:SetSize(r - l, RD.SYS_PX + 4)
-        mb:ClearAllPoints()
-        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -y)
-        mb:Show()
-    elseif mb then
-        mb:Hide()
-    end
-end
-
 --- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
 --- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
 --- the gap under it.
@@ -2363,82 +2227,12 @@ function RD.LitAlpha(b, lit)
     return 0
 end
 
--- THE TOTEMS' LINE under the tools (11 Nov): only the ones you know (RD.ArmTotems), centred; answers the height it took
-local function totemRow(W, y)
-    local list = {}
-    for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
-    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
-    if #list == 0 then return 0 end
-    local gap = RD.CON.toolGap
-    local y6 = y + RD.SYS_PX + RD.CON.gap
-    local x0 = (W - (#list * RD.SYS_PX + (#list - 1) * gap)) / 2 + RD.SYS_PX / 2
-    for k, b in ipairs(list) do
-        local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        at(square("totem" .. k, RD.SYS_PX), x, y6)
-        at(b, x, y6)
-    end
-    return RD.SYS_PX + RD.CON.gap
-end
-
 -- a spoke's crosshairs and dims, in the console: on its pip, the dims away
 local function settle(sp)
     for _, fr in ipairs(sp.dims or {}) do fr:Hide() end
     for _, cr in ipairs({ sp.cross, sp.totCross, sp.bogeyCross }) do
         if cr then cr:ClearAllPoints() cr:SetPoint("CENTER", sp.heal, "CENTER") end
     end
-end
-
---- A bigger class (gunship, cruiser, capital): the crew in rings by rank, each person's dispels as chips in their top
---- corners; the top five's interrupts and pets in a row each under them, the middle first; the tools row.
-function RD.ConsoleLayoutWide(T, order)
-    local f, C = RD.frame, RD.CON
-    local blockW = T.cols * T.colW
-    local W = math.max(C.pad * 2 + blockW, C.pad * 2 + 8 * RD.SYS_PX + 7 * C.toolGap)
-    local cells, _, blockH = RD.ConsoleCells(T, (W - blockW) / 2)
-    local yk = C.pad + C.head + blockH + C.gap + T.kick / 2
-    local yp = yk + T.kick / 2 + C.gap + T.pet / 2
-    local yt = yp + T.pet / 2 + C.gap + RD.SYS_PX / 2
-    local H = yt + RD.SYS_PX / 2 + C.pad
-    f:SetSize(W, H)
-    local kw = T.colW                                -- under the crew's own columns
-    local function topX(j) return W / 2 + (RD.CENTER_OUT[j] - 3) * kw end
-    for j = 1, 5 do
-        at(square("kick" .. j, T.kick), topX(j), yk)
-        at(square("pet" .. j, T.pet), topX(j), yp)
-    end
-    local placed = {}
-    for k, i in ipairs(order) do
-        local cell = cells[k]
-        if not cell then break end
-        local sq = T.sq
-        at(square("heal" .. k, sq, bandCol(k, T.n)), cell.x, cell.y)
-        local sp = RD.spokes[i]
-        if sp then
-            placed[i] = cell
-            cell.sq = sq
-            sp.heal:SetSize(sq, sq)
-            at(sp.heal, cell.x, cell.y)
-            settle(sp)
-            -- the dispels: chips in the person's top corners, over the heal square (they take their own click)
-            local lvl = sp.heal:GetFrameLevel()
-            for n, c in ipairs(sp.cures or {}) do
-                local side = (n % 2 == 1) and -1 or 1
-                c.box:SetSize(T.chip, T.chip)
-                at(c.box, cell.x + side * (sq / 2 - T.chip / 2), cell.y - (sq / 2 - T.chip / 2))
-                c.box:SetFrameLevel(lvl + 3)
-                if c.holder then c.holder:SetFrameLevel(lvl + 4) end
-                if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            end
-            if k <= 5 then
-                if sp.bogey then sp.bogey:SetSize(T.kick, T.kick) at(sp.bogey, topX(k), yk) end
-                if sp.pet then sp.pet:SetSize(T.pet, T.pet) at(sp.pet, topX(k), yp) end
-            end
-        end
-    end
-    toolsRow(W, yt)
-    H = H + totemRow(W, yt)
-    f:SetSize(W, H)
-    return { W = W, H = H, tier = T, cells = cells, placed = placed, rows = { kick = yk, pet = yp, tools = yt } }
 end
 
 --[[ THE FLIGHT DECK (15 Nov 2026, dev/FLIGHTDECK.md, Arn's layout B; "its own contained box" like the radar and the
@@ -2459,12 +2253,6 @@ end
 -- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
 -- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
 RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
--- THE ENGINEER'S VIEW (Arn, 15 Nov: his cousin "already thought it took too much space" - "we dont go wider we can go
--- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
-RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22,
-                  -- the 9:16 engineer (FG.EngPlace): one narrow width; a party's rows, then a raid's short ones
-                  w = 218, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10,
-                  pw = 100, rw = 39 }                -- the box widths a wider drag keeps (party, raid)
 -- THE FLOOR (Arn, 15 Nov: "the minimum is that bottom row ... the four totems and the call recall"): the totem row -
 -- CALL / BRING / RECALL in the middle, two timers each side at least RD.TIMER_MIN wide (an icon and "5m") - is the
 -- narrowest the window goes; the mockup showed the timers overlapping below it
@@ -2647,7 +2435,7 @@ end
 --- look is 344 calls with all 40 kicks, 274 with five - the engineer's range on 40 boxes is most of it (its view pays that
 --- today); a kick is about two calls.
 function RD.DeckSlots(T, nPets)
-    local M, out = RD.DeckM(), {}
+    local M, out = RD.DECK, {}
     for i = 1, T.n + 2 + (nPets or 0) do
         local crew = i <= T.n
         out[i] = { b = 0, rh = 0, rc = 0, rb = crew and 0 or nil, ph = M.row - 8, pc = M.chip, pb = M.kick, own = false,
@@ -2711,7 +2499,7 @@ function RD.DeckUnits(units, n, pets)
 end
 
 function RD.DeckLayout(T, order)
-    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DeckM())
+    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DECK)
     local SW = RD.Sw
     local nT = math.min(RD.deckTanks or 0, T.n)
     local crew = {}
@@ -2721,13 +2509,7 @@ function RD.DeckLayout(T, order)
     end
     local firstPet = #crew + 1
     for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
-    local place
-    local dw = RD.DeckWidth()
-    if RD.Compact() then
-        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
-    else
-        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"))
-    end
+    local place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, RD.DeckWidth(), not SW("target"))
     local W = C.pad * 2 + place.w                    -- the tools wrap and the totems stack to fit (RD.DeckTools / DeckTotemRow)
     RD.deckInnerW = place.w
     -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
@@ -2749,34 +2531,28 @@ function RD.DeckLayout(T, order)
         at(plate, left + r.w / 2, cy)
         plate:Show()
         placed[i] = r
-        -- A SHORT BOX (the engineer's raid rows): the bar takes the box's whole height, the icons a thin column at its
-        -- right end - kick at the foot, cures above it - never over the bar (a secure icon keeps its click unseen)
-        local is = r.short and (M.short or 10) or nil
-        local ih = is and 0 or M.icons
-        local ph = is and (r.h - 2) or (r.h - ih - 1)            -- the pip: the bar's height
-        local pw = is and (r.w - 3 - is) or (r.w - 2)            -- and its width
-        local ks = is or math.min(M.kick, ih - 2)
-        local cs = is or math.min(M.chip, ih - 2)
+        local ih = M.icons
+        local ph = r.h - ih - 1                                   -- the pip: the bar's height
+        local pw = r.w - 2                                        -- and its width
+        local ks = math.min(M.kick, ih - 2)
+        local cs = math.min(M.chip, ih - 2)
         local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         sp.heal:SetSize(pw, ph)
         at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
         sp.heal:Show()
         settle(sp)
         local lvl = sp.heal:GetFrameLevel()
-        local colX = right - 1 - (is or 0) / 2                    -- a short box's icon column
-        local footY = y0 + r.y + r.h - 1 - (is or 0) / 2
         kick = kick and SW("kicks")
         if sp.bogey and not SW("kicks") then sp.bogey:Hide() end     -- switched off: disarmed in RD.DeckSlots, out of sight
         if kick and sp.bogey then
             sp.bogey:SetSize(ks, ks)
-            if is then at(sp.bogey, colX, footY) else at(sp.bogey, left + 2 + ks / 2, icy) end
+            at(sp.bogey, left + 2 + ks / 2, icy)
             sp.bogey:SetFrameLevel(lvl + 3)
             RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
         end
         RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
         RD.PlaceCastStrip(sp, ih > 0 and { left + 1, y0 + r.y + r.h - ih, right - 1, y0 + r.y + r.h - 1 } or nil)
         local x = right - 2
-        local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
         for _, c in ipairs(sp.cures or {}) do
             if not SW("cures") then
                 if c.box:IsShown() then c.swHidden = true c.box:Hide() end
@@ -2787,13 +2563,8 @@ function RD.DeckLayout(T, order)
                 if c.container and c.container.Show then c.container:Show() end
             end
             c.box:SetSize(cs, cs)
-            if is then
-                at(c.box, colX, cyCol)
-                cyCol = cyCol - is - 1
-            else
-                at(c.box, x - cs / 2, icy)
-                x = x - cs - 2
-            end
+            at(c.box, x - cs / 2, icy)
+            x = x - cs - 2
             c.box:SetFrameLevel(lvl + 3)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
@@ -2888,7 +2659,7 @@ RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 
   names are secret in one). ]]
 RD.TIMER_DIM = 0.45
 RD.TIMER_FULL = 600                                 -- seconds under which the timer shows minutes:seconds (a totem lasts 300)
-RD.TIMER_SHORT = 60                                 -- the engineer's view: "5m", then plain seconds (Arn: "just 5m or 00")
+RD.TIMER_SHORT = 60                                 -- a narrow timer: "5m", then plain seconds (Arn: "just 5m or 00")
 function RD.TotemTimer(k)
     RD.timers = RD.timers or {}
     local t = RD.timers[k]
@@ -3041,7 +2812,6 @@ end
 function RD.DeckTotemRow(W, top)
     local list = {}
     for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
-    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
     for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
     if #list == 0 then return 0 end
     local wantB, wantT = RD.Sw("totems"), RD.Sw("timers")
@@ -3073,11 +2843,9 @@ function RD.DeckTotemRow(W, top)
         t.icon:SetWidth(RD.SYS_PX - 4)
         t.base:SetWidth(RD.SYS_PX - 4)
         RD.TimerSpot(t, tw)
-        -- the engineer's view: "5m", then seconds (Arn: "no 0:00 timer just 5m or 00"); the deck: 4:59 the whole way
+        -- the deck: 4:59 the whole way
         local cd = t.cd
-        if cd and cd.SetCountdownAbbrevThreshold then
-            pcall(cd.SetCountdownAbbrevThreshold, cd, RD.Compact() and RD.TIMER_SHORT or RD.TIMER_FULL)
-        end
+        if cd and cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TIMER_FULL) end
         t:Show()
     end
     RD.LearnTimers()                                   -- each box's remembered totem, and its click
@@ -3121,66 +2889,20 @@ function RD.DeckTotemStack(W, top, list, wantB, wantT)
     return y - top
 end
 
---- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
+--- Put everything in the deck's places. Out of a fight only (RD.Arm calls it). Answers the layout.
 function RD.ConsoleLayout()
     local f = RD.frame
     if not f or combat() then return nil end
-    local C, G = RD.CON, RD.ConsoleGrid()
     if not RD.conLayer then
         RD.conLayer = CreateFrame("Frame", nil, f)
         RD.conLayer:SetAllPoints(f)
         RD.conLayer:SetFrameLevel(math.max(0, f:GetFrameLevel()))
     end
     RD.conLayer:Show()
-    for _, q in pairs(RD.conSquares or {}) do q:Hide() end
     if RD.deckBox then RD.deckBox:Hide() end
     RD.DeckClear()                                   -- the deck puts back the ones it places
-    local T = RD.ConsoleTier()
-    local order = RD.conOrder or {}
-    if RD.Deck() then
-        RD.conGrid = RD.DeckLayout(T, order)
-        return RD.conGrid
-    end
-    if T.n > 5 then
-        RD.conGrid = RD.ConsoleLayoutWide(T, order)
-        return RD.conGrid
-    end
-    f:SetSize(G.W, G.H)
-    -- THE FIGHTER: one row, the first in rank (you) in the middle, the rest outward (Arn: "from the center out")
-    for k = 1, RD.SPOKES do
-        local i = order[k] or k
-        local x = G.cols[RD.CENTER_OUT[k]]
-        local sp = RD.spokes[i]
-        at(square("heal" .. k, C.sq, RD.BAND_COL.core), x, G.rows[1])   -- the fighter: all five are the core
-        at(square("kick" .. k, C.sq), x, G.rows[3])
-        at(square("pet" .. k, C.sq), x, G.rows[4])
-        if sp then
-            sp.heal:SetSize(C.sq, C.sq)
-            at(sp.heal, x, G.rows[1])
-            if sp.bogey then sp.bogey:SetSize(C.sq, C.sq) at(sp.bogey, x, G.rows[3]) end
-            settle(sp)
-            -- the cures side by side under the person
-            local n = #(sp.cures or {})
-            for j, c in ipairs(sp.cures or {}) do
-                local off = (j - (n + 1) / 2) * (C.cure + 6)
-                at(square("cure" .. k .. "-" .. j, C.cure + 4), x + off, G.rows[2])
-                if not c.cure then RD.conSquares["cure" .. k .. "-" .. j]:Hide() end
-                at(c.box, x + off, G.rows[2])
-                if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
-            end
-            if sp.pet then sp.pet:SetSize(C.pet, C.pet) at(sp.pet, x, G.rows[4]) end
-        end
-    end
-    -- row 5: every tool from both rails, centred
-    toolsRow(G.W, G.rows[5])
-    local extra = totemRow(G.W, G.rows[5])
-    if extra > 0 then
-        G.H = G.H + extra
-        f:SetSize(G.W, G.H)
-    end
-    G.tier = T
-    RD.conGrid = G
-    return G
+    RD.conGrid = RD.DeckLayout(RD.ConsoleTier(), RD.conOrder or {})
+    return RD.conGrid
 end
 
 --- The radar's own places back: the tools to their rails (where RD.Build put them), the console's squares away.
@@ -3239,16 +2961,9 @@ end
 function RD.PaintViewButton()
     local b = RD.viewBtn
     if not b then return end
-    -- since 15 Nov the two sides are the DECK and the engineer's view (the radar disc retired): a drawn sign of where the
-    -- click goes - four small squares (the engineer's view), a ring (back to the deck)
-    local con = RD.EngineerView() == true
-    for _, t in ipairs(b.grid) do t:SetAlpha(con and 0 or 1) end
-    for _, l in ipairs(b.ring) do l:SetAlpha(con and 1 or 0) end
-    b.tip = con and { "ENGINEER VIEW", "Click: back to the deck.  Out of a fight." }
-            or { "DECK", "Click: the engineer's view - the same buttons on a plain grid.  Out of a fight." }
-    if RD.Deck() and not con then                     -- one window since 16 Nov: the button opens its switches
-        b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
-    end
+    -- one window since 16 Nov (the engineer's view is gone): the button opens the deck's switches - four small squares
+    for _, t in ipairs(b.grid) do t:SetAlpha(1) end
+    b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
     local c = RD.classBtn
     if c then
         local T, k = RD.ConsoleTier()
@@ -3258,16 +2973,6 @@ function RD.PaintViewButton()
         c.tip = { T.name, "Click: " .. nT.name .. " - the next group size, in any group (a preview; a size too small "
                   .. "for your group is skipped).  Out of a fight." }
     end
-end
-
---- One click on the view button: radar <-> the engineer's view, the class kept. Refused in a fight (the radar holds
---- secure buttons). Answers "radar" or "console".
-function RD.ToggleView()
-    if combat() or RD.inFight then return nil end
-    local d = db()
-    d.view = (d.view ~= "console") and "console" or nil
-    RD.Arm()
-    return d.view and "console" or "radar"
 end
 
 --- One click on the class button: the next class - fighter, gunship, cruiser, capital, round again (Arn: "let me click
@@ -3336,24 +3041,12 @@ function RD.BuildViewButton(f)
         t:SetPoint("CENTER", b, "CENTER", o[1], o[2])
         b.grid[#b.grid + 1] = t
     end
-    b.ring = {}
-    for k = 1, 12 do
-        local a0, a1 = (k - 1) * math.pi / 6, k * math.pi / 6
-        b.ring[k] = line(b, "OVERLAY", math.sin(a0) * 4, math.cos(a0) * 4, math.sin(a1) * 4, math.cos(a1) * 4, c, 1)
-    end
     -- it pops on hover (every clickable thing does)
     b.hl = b:CreateTexture(nil, "HIGHLIGHT")
     b.hl:SetAllPoints(b)
     b.hl:SetTexture(RD.WHITE)
     b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
-    b:SetScript("OnClick", function(self)
-        if RD.Deck() and not RD.EngineerView() then RD.ToggleSwitches() return end
-        RD.ToggleView()
-        -- the tooltip says where the NEXT click goes: written again at once (Arn's screenshot, 15 Nov: still "DECK - click:
-        -- the engineer's view" while the engineer's view showed)
-        local onEnter = self.GetScript and self:GetScript("OnEnter")
-        if onEnter and GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then onEnter(self) end
-    end)
+    b:SetScript("OnClick", function() if RD.Deck() then RD.ToggleSwitches() end end)
     b:SetScript("OnEnter", function(self)
         local tip = self.tip
         if not (tip and GameTooltip) then return end
@@ -4100,7 +3793,7 @@ function RD.Build()
         RD[name] = b
     end
     RD.TOTEMS = { RD.call, RD.tcall, RD.recall }
-    -- THE VIEW BUTTON: radar <-> the engineer's console (RD.ToggleView)
+    -- THE SWITCHES BUTTON (RD.ToggleSwitches) and, on the retired disc, the class button
     RD.BuildClassButton(f)
     RD.BuildViewButton(f)
     -- a knob on each tool that lights by itself (the stabilizer and the rations stay: always wanted)
@@ -6370,27 +6063,19 @@ function RD.Arm()
     local n = 0
     for i = 1, #slots do if units[i] then n = n + 1 end end
     RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(math.max(1, n)))   -- the class's colours (a preview shows its own)
-    local con = RD.Console()                         -- the engineer's console: small slots, placed on its grid after
+    local con = RD.Console()                         -- the deck: its own places, laid out after
     if con then
-        -- its class (fighter .. capital): chosen, or the smallest that holds everyone; the radar's ship colours with it
+        -- its class (party .. raid 40): the smallest that holds everyone; the ship's colours with it
         local T = RD.ConsoleTier(units)
-        -- who goes where: a rank (you, then the brains' order), the top five carrying interrupts and pets
-        local order = RD.ConsoleOrder(units, T.n)
-        local top, rankOf = {}, {}
-        for k = 1, math.min(5, #order) do top[order[k]] = true end
-        for k, i in ipairs(order) do rankOf[i] = k end
-        RD.conOrder = order
-        slots = RD.ConsoleSlots(T, top, rankOf)
         -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
         -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
-        if RD.Deck() then
-            order, RD.deckTanks = RD.DeckOrder(units, T.n)
-            RD.conOrder = order
-            local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
-            RD.deckPets = #pets
-            slots = RD.DeckSlots(T, #pets)
-            units = RD.DeckUnits(units, T.n, pets)
-        end
+        local order
+        order, RD.deckTanks = RD.DeckOrder(units, T.n)
+        RD.conOrder = order
+        local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
+        RD.deckPets = #pets
+        slots = RD.DeckSlots(T, #pets)
+        units = RD.DeckUnits(units, T.n, pets)
         RD.slots = slots
         RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
     end

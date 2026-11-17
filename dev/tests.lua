@@ -12245,51 +12245,17 @@ do
         RD.ArmRes()
         RD.ArmChaff()
     end
-    -- THE ENGINEER'S CONSOLE (Arn, 10 Nov: "we just show empty squares top row party. next row dispels, next row interrupts,
-    -- next row pets, next row everything else ... all they do is the smart light up"): the same secure buttons on a grid
+    -- THE BOXES ARE HEALTH BARS (Arn, 12 Nov 2026: "get rid of the icons inside the box and make them actual health bars
+    -- class coded and figure out a over heal los range indicator") - born in the engineer's view (gone 16 Nov: "its one
+    -- unified deck"), the deck's boxes since
     do
         local d = NS.DB()
         local f, b = RD.frame, RD.viewBtn
-        local keepView = d.radar.view
-        local W0 = f:GetWidth()
-        ok(b and b:GetParent() == f and not RD.Console(), "a view button, the radar to start with")
+        RD.FORCE_DISC = false
+        RD.Arm()
+        ok(RD.Deck() and b and b:GetParent() == f, "the deck, and its switches button")
         local bp = b.points[1]
-        ok(bp and bp[2] == RD.defRail and bp[1] == "BOTTOM", "on the radar it sits at the right rail's foot")
-        ok(b.ring[1].__alpha == 0 and b.grid[1].__alpha == 1, "its sign: four small squares (the console is where it goes)")
-        STATE.inCombat = true
-        ok(RD.ToggleView() == nil and not RD.Console(), "in a fight: refused (secure buttons)")
-        STATE.inCombat = false
-        ok(RD.ToggleView() == "console" and RD.Console() and d.radar.view == "console" and RD.ConsoleTier().name == "PARTY",
-           "a click: the engineer's view, the fighter (a party)")
-        local G = RD.conGrid
-        ok(G and f:GetWidth() == G.W and f:GetHeight() == G.H and G.W < W0, "the square shrinks to the console's grid", G and G.W)
-        local function c(fr) local p = fr.points[1] return p and p[2] == f and p[3] == "TOPLEFT" and p[4], p and -p[5] end
-        local x1, y1 = c(RD.spokes[1].heal)
-        local x2, y2 = c(RD.spokes[2].heal)
-        ok(x1 == G.cols[3] and y1 == G.rows[1] and x2 == G.cols[2] and y2 == G.rows[1],
-           "row 1: the party's heal pips, you in the middle, the party outward (Arn, 11 Nov: \"build from the center out\")")
-        local cb = RD.spokes[2].cures[1] and RD.spokes[2].cures[1].box
-        local cx, cy = c(cb)
-        ok(cb and cy == G.rows[2] and math.abs(cx - G.cols[2]) < RD.CON.colW / 2, "row 2: their cures under them")
-        -- THE DIAMOND GOES WITH ITS BOX (Arn, 11 Nov: "when my cousin tries to click this on the engineer view to dispel
-        -- the poison it does not dispel"): the marker hangs off its container, the container off the clickable box
-        local cc = RD.spokes[2].cures[1].container
-        local mark
-        for _, sl in pairs(cc and cc.slots or {}) do mark = sl end
-        local mp = mark and mark.points[1]
-        ok(cc and cc.points[1] and cc.points[1][2] == cb and mp and mp[2] == cc and mp[4] == 0 and mp[5] == 0,
-           "the dispel diamond sits on its clickable box in the engineer's view (it stayed at the radar spot before)",
-           mp and tostring(mp[2]))
-        local bx, by = c(RD.spokes[2].bogey)
-        ok(bx == G.cols[2] and by == G.rows[3], "row 3: the kick on their target")
-        local px, py = c(RD.spokes[2].pet)
-        ok(px == G.cols[2] and py == G.rows[4], "row 4: their pet")
-        local tx1, ty1 = c(RD.shield)
-        local tx8, ty8 = c(RD.res)
-        ok(ty1 == G.rows[5] and ty8 == G.rows[5] and tx1 < tx8, "row 5: the tools of both rails, the stabilizer to the res")
-        ok(RD.spokes[2].heal:GetAttribute("unit") == "party1", "the same buttons: party1's pip still heals party1")
-        -- THE BOXES ARE HEALTH BARS (Arn, 12 Nov 2026: "get rid of the icons inside the box and make them actual health
-        -- bars class coded and figure out a over heal los range indicator")
+        ok(bp and bp[1] == "TOPRIGHT" and bp[2] == f and b.grid[1].__alpha == 1, "the switches button in the deck's corner, four small squares")
         do
             local EN = NS.EN
             local sp = RD.spokes[2]
@@ -12303,15 +12269,15 @@ do
             local bc = e.bar.__color or {}
             ok(bc[1] == want[1] and bc[2] == want[2] and bc[3] == want[3], "in the grid's class colour (" .. tostring(cls) .. ")")
             ok(not sp.heal.beat.__shown and not sp.heal.redFace.__shown and not sp.heal.amberFace.__shown,
-               "the role glyphs inside the box are gone in the engineer's view")
+               "the role glyphs inside the box are gone")
             local lp = sp.los.points[1]
             -- ONE PLACE FOR EVERY ALERT (Arn, 12 Nov: "move all the alerts for all players to the same space in the header" -
             -- "so all stacked in the header LOS RANGE OVERHEAL" - "we light it up when any square is clicked")
             local lp2 = RD.spokes[3].los and RD.spokes[3].los.points[1]
-            local HY = -((RD.CON.pad + RD.CON.head) / 2)
+            local HY = -((RD.CON.pad + RD.DeckHead()) / 2)
             ok(lp and lp[1] == "CENTER" and lp[2] == RD.frame and lp[3] == "TOPLEFT" and lp[4] == RD.CON.pad + 17
                and lp[5] == HY and lp2 and lp2[2] == RD.frame and lp2[4] == lp[4],
-               "a click word: in the console's header, the same spot for every player (the LOS box)")
+               "a click word: in the deck's header, the same spot for every player (the LOS box)")
             -- THREE BOXES (Arn: "oh thats right we can have 3 boxes" - "a hover can show a los and overheal at the same time")
             local H = EN.heads or {}
             ok(H.los and H.range and H.over and H.los.__shown and H.range.__shown and H.over.__shown and #H.los.edges == 4,
@@ -12319,7 +12285,7 @@ do
             local hl, hr, ho = H.los.points[1], H.range.points[1], H.over.points[1]
             ok(hl[4] + H.los:GetWidth() / 2 < hr[4] - H.range:GetWidth() / 2 and hr[4] + H.range:GetWidth() / 2 < ho[4] - H.over:GetWidth() / 2
                and ho[4] + H.over:GetWidth() / 2 < RD.frame:GetWidth() - 30,
-               "side by side, never touching, clear of the class and view buttons", ho[4] + H.over:GetWidth() / 2)
+               "side by side, never touching, clear of the switches button", ho[4] + H.over:GetWidth() / 2)
             EN.PlaceWord(sp, "RANGE")
             local rp = sp.los.points[1]
             ok(rp[4] == hr[4] and rp[5] == HY, "RANGE lights its own box")
@@ -12342,7 +12308,7 @@ do
             _G.UnitGetIncomingHeals = function(u) return u == "party1" and INC or 0 end
             ok(EN.Incoming(sp) and e.inc:GetValue() == INC and select(2, e.inc:GetMinMaxValues()) ~= nil,
                "heals on their way handed to it untouched (a secret), on their max")
-            ok(EN.events.__events and EN.events.__events.UNIT_HEAL_PREDICTION, "it listens for heal predictions while the console shows")
+            ok(EN.events.__events and EN.events.__events.UNIT_HEAL_PREDICTION, "it listens for heal predictions while the deck shows")
             local INC2 = secret()
             INC = INC2
             fire(EN.events, "UNIT_HEAL_PREDICTION", "party1")
@@ -12367,7 +12333,7 @@ do
                "hovering: what YOUR heal would waste on top, a fainter band on from the incoming's")
             EN.Ghost(sp, nil)
             ok(not e.overHover.__shown, "the mouse leaves: that band goes too")
-            -- the OVER/H word: IN the box in the console (under it, the dispel row sat right below)
+            -- the OVER/H word: in its own header box
             local o = NS.OV.Build(sp)
             NS.OV.Anchor(sp)
             local wp = o.win.points[1]
@@ -12379,31 +12345,24 @@ do
             -- its own version" - "with the bingo and mana regen 5 second rule but much smaller")
             RD.ApplyView()
             local g, r = RD.gauge, EN.rail
-            local rp = r and r.points or {}
-            ok(r and r.__shown and rp[1] and rp[1][1] == "BOTTOMLEFT" and rp[1][2] == RD.frame and rp[1][3] == "TOPLEFT"
-               and r:GetHeight() == EN.GAUGE.h and r:GetHeight() < RD.GAUGE_RAIL_H,
-               "a thin plate over the console (" .. EN.GAUGE.h .. " px; the radar's rail is " .. RD.GAUGE_RAIL_H .. ")")
-            local gp = g.points[1]
-            local want = RD.frame:GetWidth() - EN.GAUGE.pad - EN.GAUGE.right
-            ok(g.__shown and gp and gp[2] == r and g.len == want and g:GetWidth() == want,
-               "the radar's OWN tape on it, shaped to the console's width (the same bars, BINGO, ticks)", g.len)
+            local rp2 = r and r.points or {}
+            ok(r and r.__shown and rp2[1] and rp2[1][1] == "BOTTOMLEFT" and rp2[1][2] == RD.frame and rp2[1][3] == "TOPLEFT"
+               and r:GetHeight() == EN.GAUGE.h, "a thin plate over the deck (" .. EN.GAUGE.h .. " px)")
+            local gp2 = g.points[1]
+            local manaW = (EN.manaHost and EN.manaHost:IsShown()) and (EN.GAUGE.mana + 4) or 0
+            local wantW = RD.frame:GetWidth() - EN.GAUGE.pad - EN.GAUGE.right - manaW
+            ok(g.__shown and gp2 and gp2[2] == r and g.len == wantW and g:GetWidth() == wantW,
+               "the fuel tape on it, shaped to the deck's width (the same bars, BINGO, ticks)", g.len)
             local hp = g.hotClip.points
             local roof
             for _, pt in ipairs(hp) do if pt[1] == "TOPRIGHT" then roof = pt end end
-            ok(roof and roof[4] == RD.BINGO * want + 2, "BINGO's window sized to the short tape")
+            ok(roof and roof[4] == RD.BINGO * wantW + 2, "BINGO's window sized to the short tape")
             ok(not g.hud.__shown and not g.readout.__shown and not g.chev.__shown,
                "barebones: no scale numbers, no readout box, no chevron")
             ok(g.regen.__shown and g.regen.__size == EN.GAUGE.font and g.regen.points[1][2] == r and g.fsr.__shown,
                "the regen % small at its right end, the five second rule's dashes under it")
             ok(EN.GaugeTop() == EN.GAUGE.h + RD.RAIL_GAP, "the clamp keeps the strip on the screen")
             ok(RD.PaintMana() ~= false, "painted by the radar's own functions")
-            local keepCon = RD.Console
-            RD.Console = function() return false end          -- the view really back on the radar, as the switch leaves it
-            EN.Gauge(false)
-            RD.Console = keepCon
-            ok(not r.__shown and g.hud.__shown and g.readout.__shown and g.points[1][2] == RD.gaugeRail and g.regen.__size == 10,
-               "back on the radar: the tape home on its rail, its scale and readout back")
-            EN.Gauge(true)
             o.word:SetText("")                -- built only for this check: the scope's no-words count comes later
             o.win:Hide()
             sp.over = nil
@@ -12412,82 +12371,35 @@ do
             if not okC then okC, Cost = pcall(dofile, "../../_bisdev/dev/cost.lua") end
             if okC then
                 local n, by = Cost.Count(function() for _ = 1, 10 do EN.Range() end end)
-                print(("   cost: engineer boxes' range, 10 ticks = %d calls (%s)"):format(n, Cost.Top(by, 3)))
+                print(("   cost: deck boxes' range, 10 ticks = %d calls (%s)"):format(n, Cost.Top(by, 3)))
                 ok(n <= 300, "ten ticks of the boxes' range stay in budget", n)
             end
-            -- back on the radar: nothing of this shows; the glyphs and the word under the pip come back
-            local keepConL = RD.Console
-            RD.Console = function() return false end          -- the view really on the radar, as the switch leaves it
-            EN.Layout(false)
-            RD.Console = keepConL
-            ok(not e.box.__shown and sp.heal.beat.__shown and sp.los.points[1][2] == NS.BB.rail.row,
-               "the radar: glyphs back, no bars, LOS in the black box's bottom row (12 Nov)")
-            ok(not EN.events.__events.UNIT_HEAL_PREDICTION, "back on the radar: heal predictions no longer heard")
-            EN.Layout(true)
         end
         local e4 = RD.spokes[4]
         ok(e4.unit == nil and e4.heal:GetAttribute("unit") == RD.EMPTY_UNIT and e4.heal:IsMouseEnabled() ~= false
            and e4.heal:GetAttribute("type1") == nil and f:GetAttribute("unit") == RD.EMPTY_UNIT,
-           "an empty square and the background name nobody: the wheel over them heals no one (Arn, 10 Nov)")
-        ok(not RD.scope:IsShown() and not RD.toolRail:IsShown() and not RD.gaugeRail:IsShown() and not RD.defRail:IsShown()
-           and not (RD.bbRail and RD.bbRail:IsShown()), "the scope, the rails and the black box step aside")
+           "an empty place and the background name nobody: the wheel over them heals no one (Arn, 10 Nov)")
+        ok(not RD.scope:IsShown() and not RD.toolRail:IsShown() and not RD.gaugeRail:IsShown() and not RD.defRail:IsShown(),
+           "the scope and the side rails step aside")
         ok(RD.gauge:IsShown() and NS.EN.rail and NS.EN.rail:IsShown() and RD.gauge.points[1][2] == NS.EN.rail,
-           "the tape moves to the engineer's own small strip on top (Arn, 12 Nov) - never left floating")
+           "the tape moves to its own small strip on top (Arn, 12 Nov) - never left floating")
         -- the tools re-armed on their own (max mana changed, a fight ended): the right rail stays away (Arn, 11 Nov:
         -- "why does his engineer 2 have a right rail")
-        local wConsole = f:GetWidth()
+        local wDeck = f:GetWidth()
         RD.ArmTools()
-        ok(not RD.defRail:IsShown() and f:GetWidth() == wConsole and RD.hull.points[2][2] == f,
-           "the tools re-armed in the console: no right rail beside it, the hull still the console's square")
-        ok(RD.conSquares.heal1 and RD.conSquares.heal1:IsShown() and RD.conSquares.tool8:IsShown(), "an empty square where each one lives")
+        ok(not RD.defRail:IsShown() and f:GetWidth() == wDeck and RD.hull.points[1][2] == f,
+           "the tools re-armed in the deck: no right rail beside it, the hull still the deck's")
         ok(not RD.gauge.chev:IsShown() and RD.gauge.regen.points[1][2] == NS.EN.rail and RD.gauge.fsr.points[1][2] == RD.gauge.regen,
-           "the tape's pieces go WITH it: the regen % and the dashes on the strip (never the 100% Arn saw floating over the console), no chevron")
-        local hp = RD.hull.points
-        ok(hp[1][2] == f and hp[2][2] == f, "the hull is the console's own square")
-        bp = b.points[1]
-        ok(bp and bp[1] == "TOPRIGHT" and bp[2] == f and b.ring[1].__alpha == 1, "the view button in the console's corner, its sign the ring (back to the radar)")
-        local cbp = RD.classBtn.points[1]
-        ok(cbp and cbp[2] == b, "the class button beside it")
-        -- THE SHIPS (Arn, 11 Nov: "upgrading ships to the next class ... let me click them even if i am not in that size
-        -- party or raid, only go bigger 5-10%"): each class a hull only a little wider, rows folded, from the centre out
-        local widths = { f:GetWidth() }
-        for _, want in ipairs({ "RAID 10", "RAID 20", "RAID 40" }) do
-            ok(RD.NextClass() == want and RD.ship == RD.SHIPS[RD.ConsoleTier().ship], "the class button: the " .. want .. ", in its colours")
-            widths[#widths + 1] = f:GetWidth()
-            local grow = widths[#widths] / widths[#widths - 1]
-            ok(grow > 1.0 and grow <= 1.10, want .. ": only a little wider than the last (5-10%)", grow)
-            local T = RD.ConsoleTier()
-            ok(#RD.slots == T.n and RD.spokes[T.n] and RD.spokes[T.n].heal:IsShown(), want .. ": a place for all " .. T.n)
-            ok(RD.spokes[2].heal:GetAttribute("unit") == "party1" and RD.spokes[T.n].heal:GetAttribute("unit") == RD.EMPTY_UNIT,
-               want .. ": your party where it was, the empty places empty (a preview)")
-            local hx = RD.spokes[1].heal.points[1][4]
-            ok(math.abs(hx - f:GetWidth() / 2) < T.colW, want .. ": you in the middle of your row", hx)
-            local cb2 = RD.spokes[2].cures[1] and RD.spokes[2].cures[1].box
-            ok(cb2 and cb2.__w == T.chip, want .. ": the dispels are chips in the corners", cb2 and cb2.__w)
-            ok(RD.spokes[6].bogey and not RD.spokes[6].bogey:IsShown(), want .. ": interrupts for your own group only")
-        end
-        -- THE FLEET (Arn, 11 Nov: "top 5 with me in the center ... outer edges people that arent really taking any damage"
-        -- ... "we are the star destroyer, our best ships are around us"): rank, not group; the core big, the screen small
-        local G4 = RD.conGrid
-        ok(G4.placed[1] == G4.cells[1], "the capital: you in the very middle place")
-        local c1 = G4.cells[1]
-        local far = G4.cells[#G4.cells]
-        -- TIDY (Arn, 11 Nov: "lets clean it up at least"): one size a class, the bands told by brightness
-        ok(c1.d < far.d and RD.spokes[1].heal.__w == RD.spokes[40].heal.__w
-           and RD.conSquares.heal1.col == RD.BAND_COL.core and RD.conSquares.heal40.col == RD.BAND_COL.screen,
-           "one square size; the core bright, the outer screen faint", RD.spokes[40].heal.__w)
-        local vb, top1 = RD.viewBtn, RD.conSquares.heal1
-        ok(G4.cells[1].y - RD.CON.sq / 2 >= RD.CON.pad + RD.CON.head - 1, "the crew starts under the buttons' strip (no overlap)")
-        local keepBrains, keepGUN = _G.BiSBrains, _G.GetUnitName
-        _G.GetUnitName = function(u) return "Name-" .. tostring(u) end   -- whole names, as Forever gives them
-        _G.BiSBrains = { order = { "Name-party2", "Name-party1" } }
+           "the tape's pieces go WITH it: the regen % and the dashes on the strip (never the 100% Arn saw floating), no chevron")
+        RD.FORCE_DISC = true
         RD.Arm()
-        G4 = RD.conGrid
-        ok(RD.conOrder[1] == 1 and RD.conOrder[2] == 3 and RD.conOrder[3] == 2 and G4.placed[3] == G4.cells[2],
-           "the brains' order: party2 first after you, next to you, any group", table.concat(RD.conOrder, ",", 1, 4))
-        ok(RD.spokes[3].bogey:IsShown() and RD.slots[3].rb, "the top five carry the interrupts")
-        _G.BiSBrains, _G.GetUnitName = keepBrains, keepGUN
-        RD.Arm()
+    end
+    -- THE FLEET ON THE RETIRED DISC (11 Nov): its order, its tanks north, its ships
+    do
+        local d = NS.DB()
+        local f = RD.frame
+        local W0 = f:GetWidth()
+        local keepBrains = _G.BiSBrains
         -- THE FLEET'S ORDERS (Arn, 11 Nov: "they take out your communicatiion ship ... you will still have your tanks close
         -- to screen you ... melee dps classes near by too ... the other layers are small agile ships"): without the brains,
         -- you, tanks, melee, healers, ranged; with them, the log's order by GUID
@@ -12594,14 +12506,6 @@ do
             _G.BiSBrains = keepBrains
             RD.Arm()
         end
-        ok(RD.classBtn.dots[4].__alpha == 1, "on the capital all four of the class button's dots are lit")
-        ok(RD.NextClass() == "PARTY" and RD.ConsoleTier().n == 5, "and round again to the fighter (a party fits it)")
-        ok(RD.ToggleView() == "radar" and not RD.Console(), "the view button again: the radar")
-        local hx = RD.shield.points[1]
-        ok(hx and hx[2] == RD.toolRail and RD.toolRail:IsShown() and RD.scope:IsShown() and not RD.conLayer:IsShown(),
-           "the tools back on their rails, the scope back, the squares away")
-        ok(f:GetWidth() == W0, "and the square its own size", f:GetWidth())
-        ok(RD.gauge.regen:IsShown(), "the regen readout back with the tape")
         -- THE RADAR'S SHIPS (Arn, 11 Nov: "reimage the radar screen, for 10 20 40"): previewed from a party with the class
         -- button - rings by rank round you, the scope only 7-8% bigger a class
         do
@@ -12636,8 +12540,9 @@ do
             fire(RD.events, "PLAYER_REGEN_ENABLED")
             ok(RD.seatFrame:GetAlpha() == 1, "and come back after it")
         end
-        d.radar.view = keepView
         RD.Arm()
+    end
+    do
         -- ENEMIES ONLY (Arn, 10 Nov: "when im healing myself and targeting myself it shows the interuppt?")
         local sp1 = RD.spokes[1]
         local keepCast, keepAtk, keepKick, keepT = NS.FG.Casting, _G.UnitCanAttack, sp1.kick, STATE.units[sp1.tok]
@@ -14376,15 +14281,7 @@ do
             ok(RD.OnCast("player", 36936) == "recall" and not RD.TotemsUp() and RD.slotUp[2] == false, "recalled mid-fight: every slot empty")
             STATE.inCombat, RD.inFight = false, false
             RD.slotUp, RD.slotSeen, RD.lifeSlot = {}, {}, nil
-            -- the engineer's view: their own line under the tools, the console a line taller
-            local f = RD.frame
-            ok(RD.ToggleView() == "console", "the engineer's view")
-            local G = RD.conGrid
-            local cy = RD.call.points[1] and -RD.call.points[1][5]
-            ok(G and cy and cy > G.rows[5] and f:GetHeight() == G.H and RD.conSquares.totem3:IsShown(),
-               "the totems: a line of their own under the tools", cy)
-            RD.ToggleView()
-            ok(RD.call.points[1][2] == RD.defRail, "back on the radar: under the res on the right rail")
+            ok(RD.call.points[1][2] == RD.defRail, "on the radar: under the res on the right rail")
             BOOK[48], BOOK[49], BOOK[50], BOOK[51] = nil, nil, nil, nil
             NS.FM.BookChanged()
             RD.Arm()
@@ -15486,40 +15383,7 @@ do
         _G.C_CurveUtil, _G.CreateColor, _G.Enum, _G.UnitHealthPercent = keep2.cc, keep2.cr, keep2.en, keep2.uhp
         RD.outlineCurves = {}
     end
-    d.radar.view = "console"
-    RD.Arm()
-    ok(RD.EngineerView() and RD.Compact() and RD.Deck() and RD.deckBox:IsShown(),
-       "the view button's other side: the engineer's view - the same deck, condensed (Arn: \"just do what we did but make it more condensed\")")
     do
-        local small = FG.DeckPlace(1, 4, true, RD.DECK_SMALL)
-        local big = FG.DeckPlace(1, 4, true, RD.DECK)
-        ok(small.w < big.w and RD.DECK_SMALL.row / RD.DECK_SMALL.cell > RD.DECK.row / RD.DECK.cell,
-           "narrower, and its boxes taller for their width (Arn: \"slightly more narrow and more tall\")", small.w .. " vs " .. big.w)
-    end
-    -- THE 9:16 ENGINEER (Arn: "if our deck is 16:9 engineering is 9:16"; picked A, then the raid rule for 10 / 20 / 40)
-    do
-        local S = RD.DECK_SMALL
-        local pp = FG.EngPlace(1, 4, 1, true, S)
-        ok(pp.w == S.w and #pp.tanks == 1 and pp.target.y == 0 and pp.tanks[1].w == pp.target.w,
-           "a party: the top row in thirds - tank, your target, its target", pp.tanks[1].w)
-        ok(#pp.rest == 5 and pp.rest[1].y == pp.rest[2].y and pp.rest[3].y > pp.rest[1].y and pp.rest[1].w == pp.rest[2].w
-           and pp.rest[2].x + pp.rest[2].w == S.w, "then the others two to a row, filling the width")
-        ok(pp.rest[5].short and pp.rest[5].h == S.pet2 and pp.rest[5].w == S.w, "the pet last, a little shorter (alone: the whole row)")
-        local deckW = FG.DeckPlace(1, 5, true, RD.DECK).w
-        ok(pp.h > pp.w and pp.w < deckW, "taller than wide, and narrower than the deck: the deck turned on its side",
-           pp.w .. " x " .. pp.h)
-        local p3 = FG.EngPlace(2, 3, 0, true, S)
-        ok(p3.rest[3].w == S.w, "two tanks: three others, the lone last one takes the whole row")
-        local rr = FG.EngPlace(4, 36, 6, false, S)
-        ok(#rr.tanks == 4 and rr.tanks[4].x + rr.tanks[4].w == S.w and rr.tanks[1].y == 0 and rr.tanks[1].short,
-           "a raid: the four tanks share their own row")
-        ok(rr.target.y > rr.tanks[1].h and rr.target.w + rr.tot.w + S.gap == S.w and rr.target.h == S.rtgt,
-           "your target and its target a short row under them")
-        local five = rr.rest[1].y == rr.rest[5].y and rr.rest[6].y > rr.rest[1].y and rr.rest[6].x == 0
-        ok(#rr.rest == 42 and five and rr.rest[1].short and rr.rest[1].h == S.row5,
-           "then everyone five across in short boxes, so each raid group lines up")
-        ok(rr.rest[37].h == S.pet5 and rr.rest[37].x == 0 and rr.rest[37].y > rr.rest[36].y, "the six pets last, on their own rows")
-        ok(rr.w == S.w and rr.h < 640, "never wider; a full raid stays on the screen", rr.w .. " x " .. rr.h)
         ok(not RD.classBtn or not RD.classBtn:IsShown(), "no size button: the group decides (Arn: \"we can get rid of the button\")")
         -- SHIFT + DRAG = THE WIDTH (Arn: "the boxes themselves don't get any bigger, just more fit")
         local M = RD.DECK
@@ -15531,8 +15395,6 @@ do
         local raidXL = FG.DeckPlace(2, 38, false, M, 800)
         ok(raidXL.rest[10].y == raidXL.rest[1].y and raidXL.rest[11].y > raidXL.rest[1].y,
            "a raid dragged very wide: ten across - two raid groups to a row, never seven")
-        local e3 = FG.EngPlace(1, 4, 0, true, S, 330)
-        ok(e3.rest[1].y == e3.rest[3].y and e3.rest[4].y > e3.rest[1].y, "the engineer dragged wider: three to a row instead of two")
         local floor = RD.FloorInner()
         ok(floor + 2 * RD.CON.pad <= 134, "the floor is Ellesmere's width now (Arn: \"we gotta be able to go down to that size\")", floor)
         ok(RD.WidthFor(300, 500, 100, 1) == floor, "dragged past the floor: held at the floor")
@@ -15975,18 +15837,6 @@ do
         ok(RD.GripReadout("75%") == "75%" and RD.grip.pct.__text == "75%" and RD.grip.pct:IsShown(), "the % beside the grip while it drags")
         RD.GripReadout(nil)
         ok(not RD.grip.pct:IsShown(), "and gone after")
-        do  -- the view button really changes what you see (Arn, alone: "engineer and deck now look indistinguishable")
-            d.radar.view = nil
-            RD.Arm()
-            local deckW = RD.frame.__w
-            RD.ToggleView()
-            local engW = RD.frame.__w
-            ok(RD.EngineerView() and engW < deckW - 100, "one click: the engineer's view is plainly narrower", deckW .. " -> " .. engW)
-            RD.ToggleView()
-            ok(not RD.EngineerView() and RD.frame.__w == deckW, "and back: the deck's own width")
-            d.radar.view = "console"
-            RD.Arm()
-        end
         -- NO HEADER: THE BOXES SAY IT (Arn: "we just pretend thats the name and put it in that place")
         do
             local keepGUN = _G.GetUnitName
