@@ -4,8 +4,8 @@
   Arn: "engineer view for friendly boxes can we get rid of the icons inside the box and make them actual health bars class
   coded and figure out a over heal los range indicator?"
 
-  The engineer's console (Radar.lua, RD.Console) places the radar's own secure heal pips on a grid. In the console only,
-  each pip shows a HEALTH BAR instead of its role glyph:
+  Born in the engineer's console; the DECK's boxes since (Radar.lua, RD.DeckLayout places the radar's own secure heal
+  pips; the engineer's view and the old disc are gone, 16 Nov 2026). Each pip shows a HEALTH BAR instead of its role glyph:
     * the bar: a plain StatusBar inside the pip (never the secure pip itself), handed UnitHealthMax / UnitHealth untouched
       - the client scales it, the addon never learns either number (the grid's own bargain) - in the grid's class colour
       (FG.CLASS_COLOR), the grid's dead red when dead; the glyph faces hide (RD.PaintHeal still colours them, unseen);
@@ -18,8 +18,7 @@
     * OVERHEAL: while you hover, your hover heal as a paler GHOST right after the incoming - as long as the heal is,
       cut off at the box's edge (the client draws the heal against their max, a secret) - and OVER/H under the box when
       more than half would be wasted (Overheal.lua). Gone while your own cast is in the air (it is incoming then).
-  On the radar nothing changes: the bars hide, the glyphs come back, the click word goes back under the pip.
-  Cost: health on its events (one unit), range on the radar's half-second tick while the console shows.
+  Cost: health on its events (one unit), range on the radar's half-second tick while the deck shows.
 ]]
 local ADDON, NS = ...
 NS = NS or {}
@@ -48,8 +47,6 @@ EN.TEX = "Interface\\Buttons\\WHITE8X8"
 -- right), in THREE BOXES (Arn: "oh thats right we can have 3 boxes" - "because a hover can show a los and overheal at
 -- the same time"): LOS, RANGE, OVER/H, each its own dim empty box (the console's own look), lit by its word. Only one box
 -- is under the mouse at a time, so the box you are on is whose it is.
-EN.HEAD = { { key = "los", x = 0, w = 34 }, { key = "range", x = 38, w = 58 }, { key = "over", x = 100, w = 62 } }
-EN.HEAD_H = 16
 
 -- THE DECK'S BOXES, BIGGER (Arn, 15 Nov: "the los is a bit big if we have to go a little taller we can do that to
 -- accommodate make sure they are centered"): the word keeps its size; its box grows round it, the strip taller.
@@ -66,24 +63,21 @@ EN.HEAD_DECK = { { key = "los", x = 0, w = 34 }, { key = "range", x = 37, w = 34
 -- up top ... make them fit that icon tallness"): the strip is the icons' 22 px tall, and the Riptide bar is six 22 px
 -- squares (6 x 22 + its 2 px edge), its Riptide icon as big as the kick and the tools
 EN.HEAD_DECK_H = 22
---- The boxes and their height for the surface showing now: the deck's bigger ones, else the console's / radar's.
+--- The deck's boxes and their height.
 function EN.Heads()
     local RD = NS.RD
-    if RD and RD.Deck and RD.Deck() then
-        -- a narrow window (16 Nov 2026, down to Ellesmere's width): the three boxes shrink to fit beside the switches button
-        local room = (tonumber(RD.deckInnerW) or 999) - 18
-        local full = EN.HEAD_DECK[#EN.HEAD_DECK].x + EN.HEAD_DECK[#EN.HEAD_DECK].w
-        if room >= full then return EN.HEAD_DECK, EN.HEAD_DECK_H end
-        local k = math.max(0.3, room / full)
-        EN.headNarrow = EN.headNarrow or {}
-        for i, h in ipairs(EN.HEAD_DECK) do
-            local n = EN.headNarrow[i] or {}
-            n.key, n.x, n.w = h.key, math.floor(h.x * k), math.floor(h.w * k)
-            EN.headNarrow[i] = n
-        end
-        return EN.headNarrow, EN.HEAD_DECK_H
+    -- a narrow window (16 Nov 2026, down to Ellesmere's width): the three boxes shrink to fit beside the switches button
+    local room = (tonumber(RD and RD.deckInnerW) or 999) - 18
+    local full = EN.HEAD_DECK[#EN.HEAD_DECK].x + EN.HEAD_DECK[#EN.HEAD_DECK].w
+    if room >= full then return EN.HEAD_DECK, EN.HEAD_DECK_H end
+    local k = math.max(0.3, room / full)
+    EN.headNarrow = EN.headNarrow or {}
+    for i, h in ipairs(EN.HEAD_DECK) do
+        local n = EN.headNarrow[i] or {}
+        n.key, n.x, n.w = h.key, math.floor(h.x * k), math.floor(h.w * k)
+        EN.headNarrow[i] = n
     end
-    return EN.HEAD, EN.HEAD_H
+    return EN.headNarrow, EN.HEAD_DECK_H
 end
 
 local function headSlot(kind)
@@ -92,27 +86,14 @@ local function headSlot(kind)
     return list[1]
 end
 
---- Where the alerts live now: the console's top strip, or on the radar the BLACK BOX's bottom row (Arn, 12 Nov: "find a
---- better place for the overheal los and range bars, the black box has a huge chat bot for the code mayeb we can use that
---- space" - the row the code screen sat in; BlackBox.lua puts the screen up over them only while a code is typed).
---- With no black box rail, the radar square's top-left corner. Answers the frame, the boxes' left edge, their middle's y.
+--- Where the alerts live: the deck's top strip. Answers the frame, the boxes' left edge, their middle's y.
 function EN.Where()
     local RD = NS.RD
     if not RD then return UIParent, 8, -11 end
-    if RD.Console and RD.Console() then
-        local C = RD.CON or {}
-        local pad = C.pad or 8
-        local head = (RD.Deck and RD.Deck() and RD.DeckHead and RD.DeckHead()) or C.head or 14   -- the deck's strip is taller
-        return RD.frame or UIParent, pad, -((pad + head) / 2)
-    end
-    -- the rail itself, shown or not yet: the radar's layout runs just before the view switch shows it
-    local bb = RD.bbRail
-    local row = bb and bb.row
-    if row then
-        local h = row.GetHeight and row:GetHeight()
-        return row, 0, -((type(h) == "number" and h > 0 and h or 18) / 2)
-    end
-    return RD.frame or UIParent, 8, -11
+    local C = RD.CON or {}
+    local pad = C.pad or 8
+    local head = (RD.DeckHead and RD.DeckHead()) or C.head or 14
+    return RD.frame or UIParent, pad, -((pad + head) / 2)
 end
 
 --- An alert's spot ("los", "range" or "over"): point, relative frame, relative point, x, y. LOS and RANGE are centred in
@@ -130,21 +111,14 @@ function EN.HeadSpot(kind, sp)
     return "CENTER", f, "TOPLEFT", x0 + h.x + h.w / 2, y
 end
 
---- The three empty boxes, on the surface showing now: the console's own layer, or the radar's gauge rail (each hides
---- with its surface). Answers that surface's boxes.
+--- The empty boxes on the deck's own layer (they hide with it), each by its switch. Answers the boxes.
 function EN.HeadBoxes()
     local RD = NS.RD
-    if not RD then return nil end
-    local con = RD.Console and RD.Console()
-    local bb = RD.bbRail
-    local parent = con and RD.conLayer or (not con and (bb or RD.frame)) or nil
+    local parent = RD and RD.conLayer
     if not parent then return nil end
-    local key = con and "heads" or "radarHeads"
-    EN[key] = EN[key] or {}
-    local set = EN[key]
-    local deck = con and RD.Deck and RD.Deck() and RD.Sw
+    EN.heads = EN.heads or {}
+    local set = EN.heads
     local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
-        if not deck then return key ~= "cc" and key ~= "rip" end
         if key == "cc" then return RD.Sw("cc") end
         if key == "rip" then return RD.Sw("rip") and RD.RipKnown and RD.RipKnown() end
         return RD.Sw("alerts")
@@ -174,41 +148,9 @@ function EN.HeadBoxes()
         q:SetPoint("CENTER", f, "TOPLEFT", x0 + h.x + h.w / 2, y)
         q:SetShown(wanted(h.key))
     end
-    for key, q in pairs(set) do                       -- a box this surface does not list (the cc box off the deck)
-        local listed = false
-        for _, h in ipairs(list) do if h.key == key then listed = true end end
-        if not listed then q:Hide() end
-    end
     if set.cc and set.cc:IsShown() then EN.LossPaint() end
     if set.rip and set.rip:IsShown() then EN.RipPaint() end
-    if not con then
-        EN.TintRadarHeads()
-        -- the black box's screen may be up (a code being typed): the boxes wait under it
-        local NB = NS.BB
-        EN.ShowRadarHeads(not (NB and NB.ScreenUp and NB.ScreenUp()))
-    end
     return set
-end
-
---- The radar's boxes shown or put away (the black box's screen takes their row while a code is typed).
-function EN.ShowRadarHeads(show)
-    for _, q in pairs(EN.radarHeads or {}) do if show then q:Show() else q:Hide() end end
-end
-
--- THE RADAR'S BOXES IN THE SHIP'S COLOURS (Arn, 12 Nov, a screenshot of green boxes on the purple radar: "same color theme
--- please"): edged like the readout box beside the tape - the ship's accent - a little dimmer, as empty boxes are. The
--- console keeps its own green (its squares are green). Repainted when the ship changes (RD.ApplyShip).
-EN.RADAR_HEAD_A = 0.55
-
---- The radar's alert boxes edged in the ship's accent.
-function EN.TintRadarHeads()
-    local RD = NS.RD
-    local A = (RD and RD.ship and RD.ship.accent) or (RD and RD.SHIPS and RD.SHIPS[1] and RD.SHIPS[1].accent)
-    if not (A and EN.radarHeads) then return false end
-    for _, q in pairs(EN.radarHeads) do
-        for _, t in ipairs(q.edges or {}) do t:SetColorTexture(A[1], A[2], A[3], EN.RADAR_HEAD_A) end
-    end
-    return true
 end
 
 --- A click word on a pip (RD.HeardError): into its own box - LOS or RANGE - on whichever surface shows.
@@ -973,8 +915,6 @@ end
 --- The ghost: your heal after the heals on their way, as long as the heal is against their max (a secret, the client's sum).
 --- nil heal = gone.
 function EN.Ghost(sp, heal)
-    -- the radar's mini bars take the same heal (MiniBars.lua): one road from Overheal.lua for both views
-    if NS.MB and NS.MB.Ghost then NS.MB.Ghost(sp, heal) end
     local e = sp and sp.en
     if not e then return false end
     if not (heal and console() and sp.unit and e.box:IsShown()) then e.ghost:Hide() e.overHover:Hide() return false end
@@ -989,64 +929,54 @@ function EN.Ghost(sp, heal)
     return true
 end
 
---- Into the console or back to the radar: bars or glyphs, and where the click word sits. Out of a fight (the layouts).
-function EN.Layout(con)
+--- Into the deck: bars instead of glyphs, and the click word in its header box. Out of a fight (the layout).
+function EN.Layout()
     local RD = NS.RD
     for _, sp in ipairs((RD and RD.spokes) or {}) do
         local b = sp.heal
         if b then
             for _, face in ipairs({ b.beat, b.redFace, b.amberFace }) do
-                if face then if con then face:Hide() else face:Show() end end
+                if face then face:Hide() end
             end
             if sp.los then
                 sp.los:ClearAllPoints()
-                sp.los:SetPoint(EN.HeadSpot("los", sp))    -- the header's LOS box, the console's or the radar's alert row
+                sp.los:SetPoint(EN.HeadSpot("los", sp))    -- the header's LOS box
             end
             if NS.OV and NS.OV.Anchor and sp.over then NS.OV.Anchor(sp) end
-            if con then
-                EN.Box(sp)
-                EN.Size(sp)
-                EN.Paint(sp)
-            elseif sp.en then
-                sp.en.box:Hide()
-                sp.en.ghost:Hide()
-                sp.en.overHover:Hide()
-            end
+            EN.Box(sp)
+            EN.Size(sp)
+            EN.Paint(sp)
         end
     end
-    if con then EN.Range() end
-    EN.HeadBoxes()                                                      -- the three boxes on the surface showing now
-    -- heals on their way: heard only while the console shows (a raid's predictions cost nothing on the radar)
-    if EN.events and EN.events.UnregisterEvent then
-        if con then pcall(EN.events.RegisterEvent, EN.events, "UNIT_HEAL_PREDICTION")
-        else EN.events:UnregisterEvent("UNIT_HEAL_PREDICTION") end
-    end
+    EN.Range()
+    EN.HeadBoxes()                                                      -- the boxes on the deck's top strip
+    -- heals on their way: heard while the deck shows
+    if EN.events and EN.events.RegisterEvent then pcall(EN.events.RegisterEvent, EN.events, "UNIT_HEAL_PREDICTION") end
 end
 
 --[[ THE FUEL STRIP ON TOP (Arn, 12 Nov: "all engineering can get a barebones mana guage on top from the rader its own
   version" - "with the bingo and mana regen 5 second rule but much smaller"). Not a second gauge: the radar's own tape
-  (RD.gauge - your mana, the boss's red past it, BINGO's hot band, the magenta caret, the quarter ticks), moved onto a
-  thin plate over the console and shaped to its width (RD.ShapeTape). Barebones: no placard, no scale numbers, no
-  readout box riding the fill, no chevron - the regen % small at the right end with the five second rule's dashes under
-  it. Every number is still painted by the radar's own functions (RD.PaintFuel); this only moves pieces, out of a fight
-  (the view switch). Back on the radar everything goes home (RD.SizeGauge). ]]
+  (RD.gauge - your mana, the boss's red past it, BINGO's hot band, the magenta caret, the quarter ticks), on a thin plate
+  over the deck and shaped to its width (RD.ShapeTape). Barebones: no scale numbers, no readout box riding the fill, no
+  chevron - the regen % small at the right end with the five second rule's dashes under it. Every number is still
+  painted by the radar's own functions (RD.PaintFuel); this only moves pieces, out of a fight. ]]
 EN.GAUGE = { h = 20, pad = 6, right = 44, font = 8, mana = 30 }   -- mana: the party mana block's width (EN.ManaHost)
 
---- How far the strip reaches over the console's top (the clamp keeps it on the screen); 0 when it is not there.
+--- How far the strip reaches over the deck's top (the clamp keeps it on the screen); 0 when it is not there.
 function EN.GaugeTop()
     local RD = NS.RD
     if not (EN.rail and EN.rail:IsShown()) then return 0 end
     return EN.GAUGE.h + ((RD and RD.RAIL_GAP) or 2)
 end
 
---- Into the console (true) or back to the radar: the tape moves, its extras hide or come back. Out of a fight.
-function EN.Gauge(con)
+--- The tape onto its strip over the deck, its extras hidden (or all of it away while its switch is off). Out of a fight.
+function EN.Gauge()
     local RD = NS.RD
     local g, f = RD and RD.gauge, RD and RD.frame
     if not (g and f) then return false end
     local E, gap = EN.GAUGE, RD.RAIL_GAP or 2
     local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-    if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("fuel") then   -- the fuel strip switched off
+    if RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("fuel") then   -- the fuel strip switched off
         if EN.rail then EN.rail:Hide() end
         if EN.manaHost then EN.manaHost:Hide() end
         EN.ManaPaint()                                       -- no block: the Mana Tide glow off too
@@ -1054,54 +984,39 @@ function EN.Gauge(con)
         for _, x in ipairs({ g.regen, g.fsr, g.chev, g.hud, g.readout }) do if x then x:Hide() end end
         return false
     end
-    if con then
-        if not EN.rail then
-            local r = CreateFrame("Frame", nil, f)
-            r:SetFrameLevel(math.max(0, f:GetFrameLevel()))
-            r.bg = r:CreateTexture(nil, "BACKGROUND")
-            r.bg:SetAllPoints(r)
-            local P = RD.PLATE or { 0.05, 0.04, 0.09 }
-            r.bg:SetColorTexture(P[1], P[2], P[3], 1)
-            EN.rail = r
-        end
-        local r = EN.rail
-        r:ClearAllPoints()
-        r:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, gap)
-        r:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, gap)
-        r:SetHeight(E.h)
-        r:Show()
-        local fw = f:GetWidth()
-        local manaW = EN.ManaHost(r) and (E.mana + 4) or 0          -- party mana's block before the regen readout
-        local w = (type(fw) == "number" and fw or 200) - E.pad - E.right - manaW
-        g:ClearAllPoints()
-        g:SetPoint("LEFT", r, "LEFT", E.pad, 0)
-        RD.ShapeTape(w)
-        g:Show()
-        EN.ManaLayout()
-        if g.hud then g.hud:Hide() end
-        if g.readout then g.readout:Hide() end
-        if g.chev then g.chev:Hide() end
-        if g.regen then
-            if g.regen.SetFont then g.regen:SetFont(font, E.font, "") end
-            g.regen:ClearAllPoints()
-            g.regen:SetPoint("CENTER", r, "RIGHT", -E.right / 2, 3)
-            g.regen:Show()
-        end
-        if g.fsr then g.fsr:Show() end                       -- it hangs under the regen %, wherever that goes
-    else
-        -- only when coming back from the console: the radar's own sizing is left alone otherwise
-        if not (EN.rail and EN.rail:IsShown()) then return false end
-        EN.rail:Hide()
-        if g.hud then g.hud:Show() end
-        if g.readout then g.readout:Show() end
-        if g.regen then
-            if g.regen.SetFont then g.regen:SetFont(font, 10, "") end
-            g.regen:ClearAllPoints()
-            g.regen:SetPoint("CENTER", RD.gaugeRail or f, "RIGHT", -math.floor(RD.GAUGE.right / 2) - 4, 4)
-        end
-        -- the tape home, on the radar's rail, as wide as the radar is now (a raid's square is bigger)
-        if RD.FitWide then RD.FitWide() elseif RD.SizeGauge then RD.SizeGauge(RD.SIZE) end
+    if not EN.rail then
+        local r = CreateFrame("Frame", nil, f)
+        r:SetFrameLevel(math.max(0, f:GetFrameLevel()))
+        r.bg = r:CreateTexture(nil, "BACKGROUND")
+        r.bg:SetAllPoints(r)
+        local P = RD.PLATE or { 0.05, 0.04, 0.09 }
+        r.bg:SetColorTexture(P[1], P[2], P[3], 1)
+        EN.rail = r
     end
+    local r = EN.rail
+    r:ClearAllPoints()
+    r:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, gap)
+    r:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, gap)
+    r:SetHeight(E.h)
+    r:Show()
+    local fw = f:GetWidth()
+    local manaW = EN.ManaHost(r) and (E.mana + 4) or 0          -- party mana's block before the regen readout
+    local w = (type(fw) == "number" and fw or 200) - E.pad - E.right - manaW
+    g:ClearAllPoints()
+    g:SetPoint("LEFT", r, "LEFT", E.pad, 0)
+    RD.ShapeTape(w)
+    g:Show()
+    EN.ManaLayout()
+    if g.hud then g.hud:Hide() end
+    if g.readout then g.readout:Hide() end
+    if g.chev then g.chev:Hide() end
+    if g.regen then
+        if g.regen.SetFont then g.regen:SetFont(font, E.font, "") end
+        g.regen:ClearAllPoints()
+        g.regen:SetPoint("CENTER", r, "RIGHT", -E.right / 2, 3)
+        g.regen:Show()
+    end
+    if g.fsr then g.fsr:Show() end                       -- it hangs under the regen %, wherever that goes
     return true
 end
 
@@ -1110,34 +1025,23 @@ local function wrap()
     local RD = NS.RD
     if not RD or RD.__enWrapped then return end
     RD.__enWrapped = true
-    local paint, conLayout, radarLayout, look = RD.PaintHeal, RD.ConsoleLayout, RD.RadarLayout, RD.Look
+    local paint, conLayout, look = RD.PaintHeal, RD.ConsoleLayout, RD.Look
     if paint then RD.PaintHeal = function(sp, ...) local r = paint(sp, ...) EN.Paint(sp) return r end end
     if conLayout then
         RD.ConsoleLayout = function(...)
             local r = conLayout(...)
-            if r then EN.Layout(true) end
-            return r
-        end
-    end
-    if radarLayout then
-        RD.RadarLayout = function(...)
-            local r = radarLayout(...)
-            if r then EN.Layout(false) end
+            if r then EN.Layout() end
             return r
         end
     end
     if look then RD.Look = function(...) local r = look(...) EN.Range() EN.ManaTick() return r end end
-    -- a new ship (the group grew or shrank): the radar's alert boxes take its colours
-    local ship = RD.ApplyShip
-    if ship then RD.ApplyShip = function(...) local r = ship(...) EN.TintRadarHeads() return r end end
-    -- the view switch: after it has hidden or shown the radar's pieces, the fuel strip moves (and the clamp follows)
+    -- after the rails are put away, the fuel strip takes its place (and the clamp follows)
     local apply = RD.ApplyView
     if apply then
         RD.ApplyView = function(...)
             local r = apply(...)
-            local con = console()
-            EN.Gauge(con)
-            if con and RD.ClampRails then RD.ClampRails() end
+            EN.Gauge()
+            if RD.ClampRails then RD.ClampRails() end
             return r
         end
     end

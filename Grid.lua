@@ -304,12 +304,10 @@ end
 
 --- The deck is on: OUT OF THE ALPHA since 15 Nov 2026 (Arn: "this new view is ready to get out of alpha and replace the old
 --- rader we can retire it") - the radar look IS the deck (the engineer's view is gone, 16 Nov 2026: "its one unified
---- deck"). The old radar disc is retired: nothing reaches it any more.
+--- deck", and the old radar disc with it).
 function FG.DeckOn()
     local RD = NS.RD
-    if not (RD and RD.On and RD.On()) then return false end
-    if RD.DiscView and RD.DiscView() then return false end      -- the retired disc: the suite's own door, until it is gone
-    return true
+    return (RD and RD.On and RD.On()) == true
 end
 
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid

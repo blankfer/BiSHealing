@@ -264,12 +264,11 @@ function BB.Paint()
     else
         setText(r.screen, hex(BB.COL.lilac) .. "[" .. BB.pad .. "|r" .. hex(BB.COL.dim) .. "_|r" .. hex(BB.COL.lilac) .. "]|r")
     end
-    -- the bottom row: the screen while a code is typed or a reply shows, the radar's alert boxes otherwise
+    -- the bottom row: the screen while a code is typed or a reply shows (the deck's alert boxes live on its top strip)
     local up = BB.ScreenUp()
     if r.scrUp ~= up then
         r.scrUp = up
         if up then r.scr:SetAlpha(1) else r.scr:SetAlpha(0) end
-        if NS.EN and NS.EN.ShowRadarHeads then NS.EN.ShowRadarHeads(not up) end
     end
     if not (BB.Recording() or BB.sayUntil) then BB.Wake() end
 end
