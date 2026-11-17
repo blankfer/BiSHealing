@@ -13993,7 +13993,7 @@ do
         STATE.powerMax = 1375
         RD.Arm()
         ok(RD.tide.macro == RD.TideMacro() and RD.tide:GetAttribute("*macrotext1") == RD.TideMacro()
-           and RD.TideMacro():find("^/cast Mana Tide Totem\n"),
+           and RD.TideMacro():find("\n/cast Mana Tide Totem$"),
            "Mana Tide known: its pip casts it (and pings, 16 Nov)")
         ok(RD.potion.item == 6149 and RD.potion:GetAttribute("*macrotext1") == "/use item:6149",
            "the best mana potion in the bags (by the level it needs): a click drinks it", RD.potion.item)
@@ -15678,9 +15678,10 @@ do
             end
             -- THE MANA TIDE PING (Arn: "every time i drop it" - "a ping can be a ping")
             local tm = RD.TideMacro()
-            ok(tm:find("^/cast Mana Tide Totem\n/target Mana Tide Totem\n/ping %[@target,help,noparty,noraid%]\n")
-               and tm:find("\n/targetlasttarget [help,noparty,noraid]", 1, true) and not tm:find("assist", 1, true) and #tm < 255,
-               "the Mana Tide click: drop it; the next click pings the standing totem (else you), then back to your target")
+            ok(tm:find("^/target Mana Tide Totem\n/ping %[@target,help,noparty,noraid%]\n")
+               and tm:find("\n/targetlasttarget [help,noparty,noraid]", 1, true) and tm:find("\n/cast Mana Tide Totem$")
+               and not tm:find("assist", 1, true) and #tm < 255,
+               "the Mana Tide click: the ping lines FIRST (no totem yet on the drop's click: no ping), the drop LAST")
             do
                 local mine = RD.TideHeard(nil, 12, true)
                 ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
@@ -15691,6 +15692,13 @@ do
                 local said = {}
                 _G.SendChatMessage = function(msg, chan) said[#said + 1] = { msg, chan } end
                 _G.IsInGroup, _G.IsInRaid = function() return true end, function() return false end
+                -- 16 Nov night (Arn: "when i click mana tide do not ping or say anything in chat, second click pings it only,
+                -- nothing in chat"): the chat line is OFF - nothing said on the drop or a cooling click
+                RD.tideChatAt, RD.readyAt.tide = nil, GetTime() + 192
+                ok(RD.TIDE_CHAT == false and RD.TideChat(false) == nil and RD.TideClicked() == nil and #said == 0,
+                   "Mana Tide: nothing in chat - not on the drop, not on a click while it cools")
+                RD.readyAt.tide = nil
+                RD.TIDE_CHAT = true                            -- (the line itself, kept for the day it is wanted again)
                 RD.tideChatAt = nil
                 ok(RD.TideChat(false) and said[1][2] == "PARTY" and said[1][1]:find("down %- ready again in 5:00"),
                    "Mana Tide down: its link and ready again in 5:00, in party chat", said[1] and said[1][1])
@@ -15726,7 +15734,10 @@ do
                 ok(RD.ToggleTideTest() == false, "and hidden again")
                 if me then me.tideTag:Hide() end
                 RD.readyAt.groundTest, RD.tideChatAt = nil, nil
+                RD.TIDE_CHAT = false
             end
+            -- MANA TIDE IN THE MIDDLE (Arn: "i confused it for my call totems ... they were both far left")
+            ok(RD.TOOL_KEYS[2] == "potion" and RD.TOOL_KEYS[3] == "tide", "the mana four: potion, MANA TIDE, spring, drink - Tide in the middle")
             -- THE RIPTIDE TRACKER (Arn: "a riptide marker on who i riptided and on top in los row a riptide duration")
             do
                 local keepRanks, keepRips = NS.FM.Ranks, RD.rips
