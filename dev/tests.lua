@@ -15670,6 +15670,103 @@ do
                     _G.AuraUtil, STATE.inCombat, RD.inFight = keepAU, wasC, wasF
                 end
             end
+            -- THE CHAIN HEAL PATH (Arn picked B, the lightning; "you pick sounds")
+            do
+                local keepName, keepTimer, keepSound = C_Spell.GetSpellName, _G.C_Timer, _G.PlaySound
+                local CHID = 1064
+                C_Spell.GetSpellName = function(id) if id == CHID then return "Chain Heal" end return keepName(id) end
+                local later = {}
+                _G.C_Timer = { After = function(_, fn) later[#later + 1] = fn end, NewTicker = keepTimer and keepTimer.NewTicker }
+                local sounds = {}
+                _G.PlaySound = function(id, ch) sounds[#sounds + 1] = { id = id, ch = ch } return true end
+                local boxes = {}
+                for _, sp in ipairs(RD.spokes or {}) do
+                    if sp.unit and sp.deckPlate and sp.deckPlate:IsShown() and RD.BounceGroupToken(sp.unit) then boxes[#boxes + 1] = sp end
+                end
+                local ev = RD.bounceEv:GetScript("OnEvent")
+                local function cast(heals, clicked)
+                    later, sounds = {}, {}
+                    ok(RD.BounceSent(CHID), "a Chain Heal on its way: the path listens")
+                    TICK(2.0)
+                    RD.lastClick, RD.lastClickAt = clicked, GetTime()
+                    for _, h in ipairs(heals) do ev(RD.bounceEv, "UNIT_COMBAT", h[1], h[2] or "HEAL", h[3] or "", secret(), 8) end
+                    RD.OnCast("player", CHID)
+                    for _, fn in ipairs(later) do fn() end
+                    return RD.bnc.last
+                end
+                if #boxes >= 3 then
+                    local a, b, c = boxes[1], boxes[2], boxes[3]
+                    ok(RD.Sw("bounce") and RD.Sw("bsound"), "the path and its sounds: on by default (FULL)")
+                    -- the client places frames; the mock does not - give the layer and three boxes their spots
+                    RD.BounceDraw({ a }, {})
+                    RD.bounceFx.GetLeft = function() return 10 end
+                    RD.bounceFx.GetBottom = function() return 20 end
+                    a.deckPlate.GetCenter = function() return 110, 220 end
+                    b.deckPlate.GetCenter = function() return 210, 160 end
+                    c.deckPlate.GetCenter = function() return 310, 160 end
+                    -- three boxes, look-alike tokens ignored, the clicked one first, a crit starred
+                    local last = cast({ { "target" }, { b.unit, "HEAL", "CRITICAL" }, { "nameplate3" }, { "softfriend" },
+                                        { a.unit }, { b.unit }, { c.unit }, { a.unit, "WOUND" } }, a)
+                    ok(last and last.n == 3 and last.crits == 1, "3 boxes, one crit: target/softfriend/nameplate and a repeat never count",
+                       last and last.n, last and last.crits)
+                    local fx = RD.bounceFx
+                    local shown, glow = 0, nil
+                    for _, l in ipairs(fx.lines) do if l:IsShown() then shown = shown + 1 glow = glow or l.color end end
+                    ok(shown == 2 * RD.BOUNCE_SEGS * 2, "two hops of jagged bolt, each a glow and a core", shown)
+                    ok(glow and math.abs(glow[2] - RD.BOUNCE_COL[3][2]) < 0.01, "3 bounces: gold")
+                    ok(fx.stars[1] and fx.stars[1]:IsShown() and not (fx.stars[2] and fx.stars[2]:IsShown()), "a star on the crit only")
+                    ok(#sounds == 0, "3 bounces, not all crits: no sound")
+                    ok(fx:IsShown() and fx:GetScript("OnUpdate"), "it shows and fades")
+                    fx:GetScript("OnUpdate")(fx, RD.BOUNCE_HOLD + 0.1)
+                    ok(not fx:IsShown() and not fx:GetScript("OnUpdate"), "after the hold it is gone, nothing left running")
+                    -- all three crit: the fanfare
+                    last = cast({ { a.unit, "HEAL", "CRITICAL" }, { b.unit, "HEAL", "CRITICAL" }, { c.unit, "HEAL", "CRITICAL" } }, a)
+                    ok(last.n == 3 and last.crits == 3 and sounds[1] and sounds[1].id == RD.BOUNCE_FANFARE and sounds[1].ch == "SFX",
+                       "3 bounces, 3 crits: the fanfare on SFX")
+                    -- two: amber
+                    last = cast({ { a.unit }, { c.unit } }, c)
+                    glow = nil
+                    for _, l in ipairs(RD.bounceFx.lines) do if l:IsShown() then glow = l.color break end end
+                    ok(last.n == 2 and glow and math.abs(glow[2] - RD.BOUNCE_COL[2][2]) < 0.01 and #sounds == 0, "2 bounces: amber, quiet")
+                    -- one: the red outline and the buzzer
+                    last = cast({ { b.unit } }, b)
+                    ok(last.n == 1 and RD.bounceFx.red:IsShown() and sounds[1] and sounds[1].id == RD.BOUNCE_BUZZ, "1 bounce: red outline + buzzer")
+                    -- a heal well before the landing (another healer, a HoT) is not a bounce
+                    RD.BounceSent(CHID)
+                    ev(RD.bounceEv, "UNIT_COMBAT", c.unit, "HEAL", "", secret(), 8)
+                    TICK(0.5)
+                    RD.lastClick = nil
+                    ev(RD.bounceEv, "UNIT_COMBAT", a.unit, "HEAL", "", secret(), 8)
+                    later = {}
+                    RD.OnCast("player", CHID)
+                    for _, fn in ipairs(later) do fn() end
+                    ok(RD.bnc.last.n == 1, "a heal half a second earlier is not part of it")
+                    -- the sounds switch
+                    RD.SetSw("bsound", false)
+                    last = cast({ { b.unit } }, b)
+                    ok(#sounds == 0, "sounds switched off: no buzzer")
+                    RD.SetSw("bsound", true)
+                    -- lean: while it listens, a stranger's hit costs one check; it lets go on the first event after the landing
+                    RD.BounceSent(CHID)
+                    local Cost = dofile("../_bisdev/dev/cost.lua")
+                    local nC = Cost.Count(function()
+                        for _ = 1, 100 do ev(RD.bounceEv, "UNIT_COMBAT", "nameplate4", "WOUND", "", secret(), 1) end
+                    end)
+                    ok(nC <= 200, "100 enemy hits while it listens: at most 2 client questions each - " .. nC)
+                    RD.OnCast("player", CHID)
+                    TICK(0.5)
+                    ev(RD.bounceEv, "UNIT_COMBAT", "nameplate4", "WOUND", "", secret(), 1)
+                    ok(RD.bnc.listening == false, "after the landing the next event lets UNIT_COMBAT go")
+                    -- switched off: it never listens
+                    RD.SetSw("bounce", false)
+                    ok(RD.BounceSent(CHID) == false, "the path switched off: nothing listens")
+                    RD.SetSw("bounce", true)
+                else
+                    ok(false, "the deck needs three group boxes for the path tests", #boxes)
+                end
+                C_Spell.GetSpellName, _G.C_Timer, _G.PlaySound = keepName, keepTimer, keepSound
+                RD.lastClick = nil
+            end
             -- THE BOUNCE PROBE (Arn: "see a chain heal line on the three targets it bounced to")
             do
                 ok(RD.Command("bounce on") == true and RD.bounceOn, "/bish alpha radar bounce on: the probe listens")

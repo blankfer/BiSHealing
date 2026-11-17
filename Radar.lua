@@ -1736,12 +1736,14 @@ RD.SW = {
     { key = "mana",   group = "MANA",      name = "Party mana",               tip = "In the fuel strip: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
     { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
+    { key = "bounce", group = "SHAMAN",    name = "Chain Heal path",          tip = "After your Chain Heal, a bolt across the boxes it landed on: gold for 3, amber for 2, a red flash for 1. A star on each crit." },
+    { key = "bsound", group = "SHAMAN",    name = "Chain Heal sounds",        tip = "A fanfare when all 3 bounces crit, a buzzer when it healed only one (mana wasted)." },
     { key = "rip",    group = "SHAMAN",    name = "Riptide tracker",          tip = "A Riptide mark on whoever has yours, and a bar on top: six Chain Heals long, the last one the Riptide icon - too late for another Chain Heal." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
-             fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true },
+             fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
@@ -4292,6 +4294,7 @@ end
 --- Your binds changed (FM.Apply): every pip and pet in use takes them. Out of a fight only (secure writes).
 function RD.ApplyBinds()
     if combat() then return 0 end
+    if RD.BounceMap then RD.BounceMap() end           -- out of a fight: which party/raid tokens name which box
     local n = 0
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.unit and sp.heal then RD.BindsOn(sp.heal) n = n + 1 end
@@ -5375,6 +5378,265 @@ function RD.BounceStatus()
     return #RD.bounceLog
 end
 
+--[[ THE CHAIN HEAL PATH (16 Nov 2026, Arn picked B, the lightning, off https://claude.ai/artifact/X85oCkn5UgGfgauC6iPfEH; "you
+  pick sounds"). The probe measured it live: UNIT_COMBAT names each bounce (unit, "HEAL", "CRITICAL"/"") PLAINLY, only the
+  amount is hidden; every bounce lands in ONE frame, the first one often just BEFORE our cast event; the same person also
+  comes as target / targettarget / softfriend / nameplateN, and other heals mix in a little before or after. So:
+  LEAN: UNIT_COMBAT is registered only from your Chain Heal's UNIT_SPELLCAST_SENT (instant ones too) and lets ITSELF go on
+    the first event after the landing (never from a timer); while it listens, anything but a group token's HEAL costs one
+    check. Each group HEAL goes into a short ring.
+  JUDGE: at the landing (UNIT_SPELLCAST_SUCCEEDED, RD.OnCast) a C_Timer a moment later takes the heals within
+    RD.BOUNCE_SAME of it, group tokens only (player / partyN / raidN), one per box (RD.BounceSpoke; aliases mapped out of a
+    fight, RD.BounceMap), the box you clicked first, then in the order the game told us.
+  DRAW (RD.BounceDraw): a jagged bolt box to box on its own layer over the deck - gold 3, amber 2 - a star on each crit,
+    sparkling when all 3 crit; one box: a red flashing outline. Fades over RD.BOUNCE_HOLD.
+  SOUNDS (own switch, SFX): all 3 crit = the quest-complete fanfare; one box = the quest-failed buzz. Nothing for 2 or 3. ]]
+RD.BOUNCE_SAME = 0.06
+RD.BOUNCE_HOLD = 1.5
+RD.BOUNCE_COL = { [3] = { 1.00, 0.83, 0.30 }, [2] = { 1.00, 0.65, 0.15 }, [1] = { 1.00, 0.30, 0.30 } }
+RD.BOUNCE_FANFARE = (SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE) or 878
+RD.BOUNCE_BUZZ = (SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED) or 847
+RD.BOUNCE_SEGS = 6
+RD.bnc = { ring = {} }
+RD.bounceAlias = {}
+function RD.BounceOn() return RD.Deck() and RD.Sw("bounce") end
+local function groupToken(u)
+    if type(u) ~= "string" or (NS.Secret and NS.Secret(u)) then return false end
+    return u == "player" or u:find("^party%d$") ~= nil or u:find("^raid%d+$") ~= nil
+end
+RD.BounceGroupToken = groupToken
+--- Out of a fight: "player" and party1-4 point at whichever box holds them (a raid's boxes hold raidN).
+function RD.BounceMap()
+    local m = {}
+    if UnitIsUnit then
+        for _, sp in ipairs(RD.spokes or {}) do
+            local u = sp.unit
+            if u then
+                for _, a in ipairs({ "player", "party1", "party2", "party3", "party4" }) do
+                    if a ~= u then
+                        local ok, same = pcall(UnitIsUnit, a, u)
+                        if ok and not (NS.Secret and NS.Secret(same)) and same == true then m[a] = sp end
+                    end
+                end
+            end
+        end
+    end
+    RD.bounceAlias = m
+    return m
+end
+--- The box a group token names, or nil.
+function RD.BounceSpoke(u)
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.unit == u and sp.deckPlate and sp.deckPlate:IsShown() then return sp end
+    end
+    local sp = RD.bounceAlias[u]
+    if sp and sp.deckPlate and sp.deckPlate:IsShown() then return sp end
+    return nil
+end
+local bounceEv = CreateFrame("Frame")
+RD.bounceEv = bounceEv
+bounceEv:SetScript("OnEvent", function(self, _, unit, action, flag)
+    local b, now = RD.bnc, GetTime()
+    if (b.landedAt and now - b.landedAt > 0.25) or (not b.landedAt and now - (b.armedAt or 0) > 6) then
+        self:UnregisterAllEvents()                    -- done (or the cast never landed): let go, on an event
+        b.listening = false
+        return
+    end
+    if (NS.Secret and NS.Secret(action)) or action ~= "HEAL" or not groupToken(unit) then return end
+    local ring = b.ring
+    if #ring >= 16 then table.remove(ring, 1) end
+    ring[#ring + 1] = { t = now, u = unit, crit = not (NS.Secret and NS.Secret(flag)) and flag == "CRITICAL" }
+end)
+--- UNIT_SPELLCAST_SENT: a Chain Heal is on its way - listen from now.
+function RD.BounceSent(spellID)
+    if not RD.BounceOn() or (NS.Secret and NS.Secret(spellID)) or type(spellID) ~= "number" then return false end
+    local ok, name = false, nil
+    if C_Spell and C_Spell.GetSpellName then ok, name = pcall(C_Spell.GetSpellName, spellID) end
+    if not ok or (NS.Secret and NS.Secret(name)) or name ~= "Chain Heal" then return false end
+    local b = RD.bnc
+    b.armedAt, b.landedAt, b.ring = GetTime(), nil, {}
+    if not b.listening then
+        pcall(bounceEv.RegisterEvent, bounceEv, "UNIT_COMBAT")
+        b.listening = true
+    end
+    return true
+end
+--- Your Chain Heal landed (UNIT_SPELLCAST_SUCCEEDED): judge it a moment later, when every bounce is in.
+function RD.BounceLanded(now)
+    local b = RD.bnc
+    if not (b.armedAt and RD.BounceOn()) then return false end
+    b.landedAt = now or GetTime()
+    if C_Timer and C_Timer.After then C_Timer.After(RD.BOUNCE_SAME, RD.BounceJudge) else RD.BounceJudge() end
+    return true
+end
+--- The boxes it landed on, in order (the one you clicked first), and the crits. Draws; answers the count.
+function RD.BounceJudge()
+    local b = RD.bnc
+    local at = b.landedAt
+    if not at then return 0 end
+    local path, crit, seen = {}, {}, {}
+    local function add(sp, c)
+        if not sp then return end
+        if not seen[sp] then seen[sp] = true path[#path + 1] = sp end
+        if c then crit[sp] = true end
+    end
+    local hits = {}
+    for _, e in ipairs(b.ring) do
+        if math.abs(e.t - at) <= RD.BOUNCE_SAME then hits[#hits + 1] = { sp = RD.BounceSpoke(e.u), crit = e.crit } end
+    end
+    local first = RD.lastClick and RD.lastClickAt and at - RD.lastClickAt <= 4 and RD.lastClick or nil
+    for _, h in ipairs(hits) do if h.sp == first then add(first, h.crit) end end
+    for _, h in ipairs(hits) do add(h.sp, h.crit) end
+    b.armedAt = nil
+    while #path > 3 do table.remove(path) end
+    local crits = 0
+    for _, sp in ipairs(path) do if crit[sp] then crits = crits + 1 end end
+    b.last = { n = #path, crits = crits, at = at }
+    if #path > 0 then                                 -- a fight feature's first deploy: a slip never breaks your casts
+        local okD, err = pcall(RD.BounceDraw, path, crit)
+        if not okD then RD.bounceErr = err end
+    end
+    return #path
+end
+-- the layer, its lines, stars and the red outline: built on first use, kept
+local function bounceLayer()
+    local fx = RD.bounceFx
+    if fx then return fx end
+    fx = CreateFrame("Frame", nil, RD.conLayer or RD.frame or UIParent)
+    fx:SetAllPoints(RD.conLayer or RD.frame or UIParent)
+    if fx.SetFrameLevel and fx.GetParent and fx:GetParent().GetFrameLevel then
+        local lvl = fx:GetParent():GetFrameLevel()
+        if type(lvl) == "number" then fx:SetFrameLevel(lvl + 40) end
+    end
+    fx.lines, fx.dots, fx.stars = {}, {}, {}
+    fx.red = CreateFrame("Frame", nil, fx)
+    fx.red.edges = edge(fx.red, { 1, 0.3, 0.3, 1 }, 3)
+    fx.red:Hide()
+    fx:Hide()
+    RD.bounceFx = fx
+    return fx
+end
+local function bounceLine(fx, i)
+    local l = fx.lines[i]
+    if not l then
+        l = fx:CreateLine(nil, "OVERLAY")
+        if l.SetTexture then l:SetTexture("Interface\\Buttons\\WHITE8X8") end
+        fx.lines[i] = l
+    end
+    return l
+end
+local function bounceStar(fx, i)
+    local s = fx.stars[i]
+    if not s then
+        s = fx:CreateTexture(nil, "OVERLAY", nil, 7)
+        s:SetTexture("Interface\\Cooldown\\star4")
+        if s.SetBlendMode then s:SetBlendMode("ADD") end
+        s:SetVertexColor(1, 0.85, 0.35, 1)
+        fx.stars[i] = s
+    end
+    return s
+end
+--- A box's middle, on the layer's own coordinates (from its bottom-left).
+local function middleOf(fx, sp)
+    local p = sp.deckPlate
+    if not (p and p.GetCenter) then return nil end
+    local cx, cy = p:GetCenter()                      -- not `p and p:GetCenter()`: `and` keeps only the first answer
+    local ox, oy = fx:GetLeft(), fx:GetBottom()
+    if type(cx) ~= "number" or type(cy) ~= "number" or type(ox) ~= "number" or type(oy) ~= "number" then return nil end
+    return cx - ox, cy - oy
+end
+function RD.BounceDraw(path, crit)
+    local fx = bounceLayer()
+    local n = #path
+    local col = RD.BOUNCE_COL[math.min(n, 3)]
+    for _, l in ipairs(fx.lines) do l:Hide() end
+    for _, s in ipairs(fx.stars) do s:Hide() end
+    fx.red:Hide()
+    local li = 0
+    if n >= 2 then
+        for i = 1, n - 1 do
+            local x1, y1 = middleOf(fx, path[i])
+            local x2, y2 = middleOf(fx, path[i + 1])
+            if x1 and x2 then
+                local dx, dy = x2 - x1, y2 - y1
+                local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+                local px, py = x1, y1
+                for s = 1, RD.BOUNCE_SEGS do
+                    local f = s / RD.BOUNCE_SEGS
+                    local qx, qy = x1 + dx * f, y1 + dy * f
+                    if s < RD.BOUNCE_SEGS then           -- the jag: alternately off the straight line, a little random
+                        local off = ((s % 2 == 1) and 1 or -1) * (4 + math.random() * 5)
+                        qx, qy = qx - dy / len * off, qy + dx / len * off
+                    end
+                    for layer = 1, 2 do                  -- a wide soft glow, then a thin bright core
+                        li = li + 1
+                        local l = bounceLine(fx, li)
+                        l:SetStartPoint("BOTTOMLEFT", fx, px, py)
+                        l:SetEndPoint("BOTTOMLEFT", fx, qx, qy)
+                        if layer == 1 then
+                            l:SetThickness(6) l:SetVertexColor(col[1], col[2], col[3], 0.35)
+                        else
+                            l:SetThickness(1.6) l:SetVertexColor(1, 0.98, 0.88, 1)
+                        end
+                        l:Show()
+                    end
+                    px, py = qx, qy
+                end
+            end
+        end
+    else
+        local p = path[1].deckPlate
+        fx.red:ClearAllPoints()
+        fx.red:SetPoint("TOPLEFT", p, "TOPLEFT", -2, 2)
+        fx.red:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 2, -2)
+        fx.red:Show()
+    end
+    local si, crits = 0, 0
+    for _, sp in ipairs(path) do
+        if crit[sp] then
+            crits = crits + 1
+            si = si + 1
+            local s = bounceStar(fx, si)
+            s:ClearAllPoints()
+            s:SetPoint("CENTER", sp.deckPlate, "TOPRIGHT", -26, -9)
+            s:SetSize(18, 18)
+            s:Show()
+        end
+    end
+    local party = n >= 3 and crits >= 3
+    if RD.Sw("bsound") and PlaySound then
+        if party then pcall(PlaySound, RD.BOUNCE_FANFARE, "SFX")
+        elseif n == 1 then pcall(PlaySound, RD.BOUNCE_BUZZ, "SFX") end
+    end
+    fx.age, fx.party, fx.single, fx.nStars = 0, party, n == 1, si
+    fx:SetAlpha(0)
+    fx:Show()
+    fx:SetScript("OnUpdate", function(self, e)
+        self.age = self.age + (tonumber(e) or 0)
+        local a, t = self.age, RD.BOUNCE_HOLD
+        if a >= t then self:Hide() self:SetScript("OnUpdate", nil) return end
+        local alpha = (a < 0.08 and a / 0.08) or (a < 0.5 and 1) or (1 - (a - 0.5) / (t - 0.5))
+        if self.single and a < 0.6 and math.floor(a * 8) % 2 == 1 then alpha = alpha * 0.25 end   -- the red blinks
+        self:SetAlpha(alpha)
+        if self.party and a < 0.7 then                 -- all three crit: the stars swell and spin
+            for i = 1, self.nStars do
+                local s = self.stars[i]
+                s:SetSize(18 + a * 30, 18 + a * 30)
+                if s.SetRotation then s:SetRotation(a * 4) end
+            end
+        end
+    end)
+    return n
+end
+function RD.BounceStatus2()
+    local P = NS.Print or print
+    local l = RD.bnc.last
+    P("chain heal path: %s, sounds %s, listening %s, last: %s%s", RD.BounceOn() and "on" or "off", RD.Sw("bsound") and "on" or "off",
+        tostring(RD.bnc.listening == true), l and string.format("%d boxes, %d crits", l.n, l.crits) or "none yet",
+        RD.bounceErr and (" - draw error: " .. tostring(RD.bounceErr)) or "")
+    return l and l.n or 0
+end
+
 function RD.TideHook()
     local lib = _G.LibBiSComm
     if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
@@ -6002,9 +6264,10 @@ function RD.OnCast(unit, spellID)
     local sh = RD.shield                             -- your shield back on: its red box goes, mid-fight too
     if name and sh and sh.shieldName == name then RD.AttnSet(sh, nil) end
     if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
-    if name == "Chain Heal" then                      -- the bounce probe's clock (and later the bounce lines)
+    if name == "Chain Heal" then                      -- the bounce probe's clock, and the bounce path
         RD.chainAt = now
         if RD.bounceOn then RD.BounceStart(now) end
+        RD.BounceLanded(now)
     end
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end
@@ -6868,6 +7131,7 @@ function RD.Command(rest)
             P("chain heal bounce probe: %s - cast Chain Heal on a hurt group, then /bish alpha radar bounce", on and "ON" or "off")
             return on
         end
+        RD.BounceStatus2()                            -- the path's own line first
         return RD.BounceStatus()
     end
     if word == "rip" then
@@ -6969,7 +7233,10 @@ if ev.RegisterUnitEvent then pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUC
 -- whom your spell went to (the Riptide tracker's last way to tell, when no deck box was clicked): yours only
 local sentEv = CreateFrame("Frame")
 if sentEv.RegisterUnitEvent then pcall(sentEv.RegisterUnitEvent, sentEv, "UNIT_SPELLCAST_SENT", "player") end
-sentEv:SetScript("OnEvent", function(_, _, _, target) RD.RipSent(target) end)
+sentEv:SetScript("OnEvent", function(_, _, _, target, _, spellID)
+    RD.RipSent(target)
+    RD.BounceSent(spellID)                            -- a Chain Heal on its way: the bounce path starts listening
+end)
 ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     if event == "PLAYER_LOGIN" then RD.TideHook() RD.Apply() return end
     -- THE LOADING WINDOW (11 Nov 2026): a /reload in a fight lets secure frames be armed while the loading events are
