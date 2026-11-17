@@ -52,11 +52,11 @@ OV.HELP_LONG = "OVER/H shows under a teammate on the radar (under their box in t
     .. "What they miss = the game's own number, minus heals already on their way. Heals over time are not judged. any - "
     .. "any overheal at all. half - more than half the heal wasted. 75% - three quarters or more. off - never."
 OV.SPAN = 10000         -- the hidden bar: 1% short of full moves the word 100 px - wholly out of its window, never half
-OV.W, OV.H = 68, 14     -- the window under the pip the word shows in (OVER/H and its outline, with room)
+OV.W, OV.H = 42, 14     -- the window under the pip the word shows in (OVER/H and its outline, with room)
 OV.FLASH_FOR = 1.2      -- the click's flash, the grid's own length (FG.FLASH_FOR)
 OV.MATCH_FOR = 0.6      -- a cast that starts this long after the click is the click's
 OV.COLOUR = { 1.00, 0.24, 0.92 }    -- the cockpit's magenta, as your target's crosshair (Arn, 12 Nov: "magenta")
-OV.WORD = "OVER/H"                   -- Arn, 12 Nov: "Over/H" - overheal, short
+OV.WORD = "OVH"                      -- Arn, 12 Nov: "Over/H"; 16 Nov: "LOS RNG OVH ... save space"
 OV.SLOT = { LeftButton = "left", RightButton = "right", MiddleButton = "middle", Button4 = "button4", Button5 = "button5" }
 
 local function secret(v) return NS.Secret and NS.Secret(v) or false end
@@ -164,12 +164,29 @@ function OV.Judge(cast)
     if type(cast) ~= "string" or cast == "" then return nil end
     local m = cast:match("^macro:(.+)$")
     if m then return OV.MacroHeal(m) end
+    -- WHAT GOES FIRST IS NOT THE HEAL (16 Nov 2026, Arn: "if those two are on the same button it should use chainheal as
+    -- the math for the overheal not the riptide"): "Riptide+Chain Heal(Rank 1)" - a booster or trinket in front, the heal
+    -- after the last "+" - is judged by the heal alone
+    local FM = NS.FM
+    if FM and FM.Front and cast:find("+", 1, true) then
+        local _, _, rest = FM.Front(cast)
+        if type(rest) == "string" and rest ~= "" then cast = rest end
+    end
     local amount = OV.HealOf(cast)
     if amount then return amount, (cast:match("^(.-)%(") or cast) end
     return nil
 end
 
 --- The middle of a heal's "for X to Y", or nil (not a heal we can judge, or its text is not loaded yet).
+--- A parsed heal the word may judge: a direct heal on ONE target. CHAIN HEAL COUNTS (16 Nov 2026, Arn at level 40: OVER
+--- never lit - his left button is Chain Heal, and Forever's text, "If cast on a party member, the heal will only jump to
+--- other party members", read as a party heal and was skipped): its FIRST jump lands whole on the one you hover, which
+--- is all a hover judges. HoTs and true party heals stay out.
+function OV.Usable(p)
+    if type(p) ~= "table" or p.hot then return false end
+    if type(p.lo) ~= "number" or type(p.hi) ~= "number" then return false end
+    return (not p.partial) or p.chain == true
+end
 function OV.HealOf(cast)
     if type(cast) ~= "string" or cast == "" then return nil end
     if cast:match("^macro:") then return (OV.MacroHeal(cast:match("^macro:(.+)$"))) end
@@ -183,8 +200,7 @@ function OV.HealOf(cast)
         if ok then desc = plain(t) end
     end
     local p = desc and NS.FE and NS.FE.Parse and NS.FE.Parse(desc)
-    local amount = p and not p.hot and not p.partial and type(p.lo) == "number" and type(p.hi) == "number"
-        and (p.lo + p.hi) / 2 or nil
+    local amount = OV.Usable(p) and (p.lo + p.hi) / 2 or nil
     if amount and amount <= 0 then amount = nil end
     -- remembered, a "no" too (false); a blank text (not loaded yet) is asked again next time
     if amount or (type(desc) == "string" and desc ~= "") then OV.cache[cast] = amount or false end
@@ -197,6 +213,21 @@ function OV.Mod()
     if IsControlKeyDown and IsControlKeyDown() then return "ctrl-" end
     if IsAltKeyDown and IsAltKeyDown() then return "alt-" end
     return ""
+end
+
+--- `/bish alpha radar over`: the last hover's answer, and what each button holds and would heal for.
+function OV.Status()
+    local P = NS.Print or print
+    local lines = { string.format("overheal: mode %s, hover button %s, last hover %s, heal %s - %s", tostring(OV.Mode()),
+        tostring(OV.HoverSlot()), tostring(OV.lastUnit or "none"), tostring(OV.lastHeal or "none"), tostring(OV.lastWhy or "no hover yet")) }
+    for _, b in ipairs(OV.BUTTONS or {}) do
+        local cast = OV.BindFor(b[2], OV.Mod and OV.Mod() or "")
+        local ok, amt = pcall(OV.Judge, cast)
+        local said = not ok and "error" or (amt and ("heals ~" .. math.floor(amt + 0.5)) or "not judged")
+        lines[#lines + 1] = string.format("  %s: %s -> %s", tostring(b[2]), tostring(cast or "nothing"), said)
+    end
+    for _, l in ipairs(lines) do P(l) end
+    return table.concat(lines, "\n")
 end
 
 --- The bind on a button + modifier when it is a spell of ours (never with Clique in charge, never a ping).
@@ -275,7 +306,7 @@ function OV.Anchor(sp, win)
     win:ClearAllPoints()
     -- the header's OVER/H box, one spot for every player (Arn, 12 Nov: "move all the alerts for all players to the same
     -- space in the header"): the console's top strip, or the radar's alert row along its top rail (EN.HeadSpot)
-    if NS.EN and NS.EN.HeadSpot then win:SetPoint(NS.EN.HeadSpot("over"))
+    if NS.EN and NS.EN.HeadSpot then win:SetPoint(NS.EN.HeadSpot("over", sp))
     else win:SetPoint("TOP", sp.heal, "BOTTOM", 0, -1) end
     local lvl = sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
     if type(lvl) == "number" and win.SetFrameLevel then win:SetFrameLevel(lvl + 8) end
@@ -337,9 +368,12 @@ function OV.PaintHover()
     local RD = NS.RD
     local heal = RD and RD.On and RD.On() and sp.unit and OV.HoverHeal(OV.Mod()) or nil
     if NS.EN then NS.EN.Ghost(sp, heal) end              -- the engineer's box: your heal as a ghost after the incoming
-    if not heal or OV.Mode() == "off" then hideWord(o) OV.Listen(nil) return false end
+    OV.lastUnit, OV.lastHeal = sp.unit, heal
+    if OV.Mode() == "off" then OV.lastWhy = "the overheal word is off (/bish overword)" hideWord(o) OV.Listen(nil) return false end
+    if not heal then OV.lastWhy = "no heal found on your buttons to judge" hideWord(o) OV.Listen(nil) return false end
     o = OV.Build(sp)
-    if not OV.Hand(o, sp.unit, heal) then hideWord(o) OV.Listen(nil) return false end
+    if not OV.Hand(o, sp.unit, heal) then OV.lastWhy = "the game refused the missing health" hideWord(o) OV.Listen(nil) return false end
+    OV.lastWhy = "judged: OVER shows when more than " .. OV.Mode() .. " of it would be wasted"
     show(o)
     if OV.listening ~= sp.unit then OV.Listen(sp.unit) end
     return true

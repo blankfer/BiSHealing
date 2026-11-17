@@ -205,6 +205,176 @@ function FG.Pyramid(n)
     return out
 end
 
+--[[ THE FLIGHT DECK'S SHAPE (15 Nov 2026, dev/FLIGHTDECK.md; Arn picked layout B: "if there is only one tank he should take
+  most of the space, if there is another tank mark they share equally plus the target and target of target those always
+  keep the same size of the other party memebers" ... "all tank are always on the same row tanks always same size but they
+  fill the whole row"). The deck is a VIEW OF THE RADAR (Radar.lua RD.DeckLayout - Arn: "i was thinking it was going to look
+  more like radar and engineer its own contained box"); this is only its arithmetic. One fixed width - five cells - and it
+  grows DOWNWARD:
+    the TANK ROW    every tank, all one width, filling everything left of the TARGET BOX; the box (outlined) holds two
+                    ordinary cells, your target and its target
+    then ROWS OF FIVE, ordinary cells; in a party the first row holds five minus the tanks.
+  Pure - numbers in, rectangles out (x, y from the top-left, down positive) - so it is tested without a client. `m` = the
+  sizes: cell, row, tank, gap, boxIn, boxTop. ]]
+FG.DECK_SIZES = { cell = FRAME_W, row = FRAME_H + NAME_BAND, tank = FRAME_H + NAME_BAND + 16, gap = PAD, boxIn = 3, boxTop = 11 }
+--- `W` (15 Nov 2026, Arn: "the boxes themselves don't get any bigger, just more fit"): the width the player dragged the
+--- window to (Shift + the corner grip); nil = five boxes across. As many boxes to a row as fit; a raid snaps to 5 or 10 so
+--- each raid group lines up; a party's short row stretches to fill.
+--- `noTarget` (16 Nov 2026, the switches): the target pair is switched off - the top row is the tanks alone. Narrower than
+--- FG.TOP_SPLIT the top row splits: the tanks on their own row, the target pair on the next (Ellesmere's width, Arn: "we gotta
+--- be able to go down to that size").
+FG.TOP_SPLIT = 200
+function FG.DeckPlace(nTanks, nRest, party, m, W, noTarget)
+    m = m or FG.DECK_SIZES
+    local cell, P = m.cell, m.gap
+    W = W or (5 * cell + 4 * P)
+    if noTarget or W < FG.TOP_SPLIT then return FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget) end
+    -- THE TOP ROW IN EQUAL SHARES (Arn, 15 Nov: "as wide as the boxes need to fit, so for us thats 3 boxes so thats how wide
+    -- each box gets"): the tanks, your target and its target split the row evenly - one tank = thirds, two = quarters. No
+    -- tank still keeps a tank's share empty, so the target pair never grows past two thirds. The pair has no outline of its
+    -- own any more (the cyan clashed): a header line above it, and its two boxes the full row height.
+    local n = math.max(nTanks, 1) + 2
+    local bw = math.floor((W - (n - 1) * P) / n)
+    local tx = (n - 2) * (bw + P)
+    local target = { x = tx, y = 0, w = bw, h = m.tank }
+    local tot = { x = tx + bw + P, y = 0, w = W - (tx + bw + P), h = m.tank }
+    local box = { x = tx, y = 0, w = W - tx, h = m.tank }
+    local tanks = {}
+    for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = bw, h = m.tank } end
+    local rest, y, i = {}, m.tank + P, 1
+    local per = FG.PerRow(W, cell, P, not party)
+    while i <= nRest do
+        -- A PARTY'S ROW STRETCHES (Arn, 15 Nov: "1st row tanks second row 5 - the tank. 1 tank the 4 party uses that whole
+        -- row they get longer. if 2 tanks the next row is 3 people longer to fill in"): a short row's people share the
+        -- whole width; a raid's rows keep their columns, so the groups line up.
+        local n = math.min(per, nRest - i + 1)
+        local cols = party and n or per
+        local w = math.floor((W - (cols - 1) * P) / cols)
+        for c = 1, n do
+            rest[i] = { x = (c - 1) * (w + P), y = y, w = (c == cols) and (W - (c - 1) * (w + P)) or w, h = m.row }
+            i = i + 1
+        end
+        y = y + m.row + P
+    end
+    local height = (nRest > 0) and (y - P) or m.tank
+    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = height }
+end
+
+--- The top row as its own row of tanks (no tank: one empty tank's place), the target pair - unless switched off - on the
+--- row under it at `m.pair` (or the people's row height), then everyone as DeckPlace lays them.
+function FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget)
+    local cell, P = m.cell, m.gap
+    local n = math.max(nTanks, 1)
+    local bw = math.floor((W - (n - 1) * P) / n)
+    local tanks = {}
+    for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = (i == n) and (W - (i - 1) * (bw + P)) or bw, h = m.tank } end
+    local y = m.tank + P
+    local target, tot, box
+    if not noTarget then
+        local ph = m.pair or m.row
+        local hw = math.floor((W - P) / 2)
+        target = { x = 0, y = y, w = hw, h = ph }
+        tot = { x = hw + P, y = y, w = W - hw - P, h = ph }
+        box = { x = 0, y = y, w = W, h = ph }
+        y = y + ph + P
+    else
+        box = { x = 0, y = 0, w = 0, h = 0 }
+    end
+    local rest, i = {}, 1
+    local per = FG.PerRow(W, cell, P, not party)
+    while i <= nRest do
+        local cnt = math.min(per, nRest - i + 1)
+        local cols = party and cnt or per
+        local w = math.floor((W - (cols - 1) * P) / cols)
+        for c = 1, cnt do
+            rest[i] = { x = (c - 1) * (w + P), y = y, w = (c == cols) and (W - (c - 1) * (w + P)) or w, h = m.row }
+            i = i + 1
+        end
+        y = y + m.row + P
+    end
+    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = y - P }
+end
+
+--- How many boxes of width `bw` fit across `W`; a raid snaps to 5 or 10 (a raid group, or two, to a row).
+function FG.PerRow(W, bw, P, raid)
+    local per = math.max(1, math.floor((W + P) / (bw + P)))
+    if raid then per = (per >= 10) and 10 or 5 end
+    return per
+end
+
+--[[ THE ENGINEER'S PLACES (15 Nov 2026, Arn: "if our deck is 16:9 engineering is 9:16" - picked A from the mockup, then
+  the raid rule for 10 / 20 / 40, "as long as we get the 5 man 10 man 20man 40 man rules to apply automatically"). One
+  narrow width (m.w), growing only downward:
+    a PARTY:  the top row = the tanks, your target and its target in equal shares; then the others TWO to a row (a lone
+              last one takes the whole row), then the pets two to a row, a little shorter.
+    a RAID:   the tanks their own row; your target and its target a short row under it (room for its header line above);
+              then everyone five across in SHORT boxes so each raid group lines up; the pets last, five across, shorter.
+  A short box (r.short) carries its icons in a thin column at its right end instead of a row under the bar. ]]
+function FG.EngPlace(nTanks, nPeople, nPets, party, m, Wd)
+    local W, P = Wd or m.w, m.gap
+    local tanks, rest = {}, {}
+    local target, tot, box, y
+    local function across(count, per, h, short, stretch)
+        local i = 0
+        while i < count do
+            local n = math.min(per, count - i)
+            local cols = stretch and n or per
+            local w = math.floor((W - (cols - 1) * P) / cols)
+            for c = 1, n do
+                local last = (c == cols)
+                rest[#rest + 1] = { x = (c - 1) * (w + P), y = y, w = last and (W - (c - 1) * (w + P)) or w, h = h, short = short }
+            end
+            i = i + n
+            y = y + h + P
+        end
+    end
+    if party then
+        local n = math.max(nTanks, 1) + 2
+        local bw = math.floor((W - (n - 1) * P) / n)
+        for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = bw, h = m.top } end
+        local tx = (n - 2) * (bw + P)
+        target = { x = tx, y = 0, w = bw, h = m.top }
+        tot = { x = tx + bw + P, y = 0, w = W - (tx + bw + P), h = m.top }
+        box = { x = tx, y = 0, w = W - tx, h = m.top }
+        y = m.top + P
+        local per = math.max(2, FG.PerRow(W, m.pw or 100, P, false))   -- two to a row at its own width, more when dragged wider
+        across(nPeople, per, m.row2, false, true)
+        across(nPets, per, m.pet2, true, true)
+    else
+        y = 0
+        if nTanks > 0 then
+            local tw = math.floor((W - (nTanks - 1) * P) / nTanks)
+            for i = 1, nTanks do
+                local last = (i == nTanks)
+                tanks[i] = { x = (i - 1) * (tw + P), y = 0, w = last and (W - (i - 1) * (tw + P)) or tw, h = m.rtank, short = true }
+            end
+            y = m.rtank + P
+        end
+        y = y + m.rhead
+        local hw = math.floor((W - P) / 2)
+        target = { x = 0, y = y, w = hw, h = m.rtgt, short = true }
+        tot = { x = hw + P, y = y, w = W - hw - P, h = m.rtgt, short = true }
+        box = { x = 0, y = y, w = W, h = m.rtgt }
+        y = y + m.rtgt + P * 2
+        local per = FG.PerRow(W, m.rw or 39, P, true)
+        across(nPeople, per, m.row5, true, false)
+        across(nPets, per, m.pet5, true, false)
+    end
+    return { tanks = tanks, rest = rest, box = box, target = target, tot = tot, w = W, h = y - P }
+end
+
+--- The deck is on: OUT OF THE ALPHA since 15 Nov 2026 (Arn: "this new view is ready to get out of alpha and replace the old
+--- rader we can retire it") - the radar look IS the deck, unless the view button picked the engineer's view. The old radar
+--- disc is retired: nothing reaches it any more (its code stays until Arn says it can go).
+function FG.DeckOn()
+    local RD = NS.RD
+    if not (RD and RD.On and RD.On()) then return false end
+    if RD.DiscView and RD.DiscView() then return false end      -- the retired disc: the suite's own door, until it is gone
+    -- the engineer's view is the deck too since 15 Nov (Arn: "just do what we did but make it more condensed ... slightly
+    -- more narrow and more tall"): RD.Compact() picks its sizes
+    return true
+end
+
 --- The roster by RAID GROUP: one column per group, in group order. Arn asked for "regular grid
 --- by group", and the old grid was not quite that - it filled columns of five in raid1, raid2
 --- order, and raid index is the order people JOINED, not their group. It only looked grouped when
@@ -4181,3 +4351,6 @@ end
 
 -- Booted by Core.lua at login. This file used to arm itself, because for two days it WAS the
 -- addon on this client and there was no core to do it.
+
+-- THE FLIGHT DECK (dev/FLIGHTDECK.md) left the alpha on 15 Nov 2026: no switch any more (FG.DeckOn). Its status word is
+-- `/bish alpha radar strip` (RD.Command).

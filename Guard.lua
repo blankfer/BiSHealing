@@ -9,7 +9,7 @@
   game marks never secret, it is a plain boolean and we set the alpha ourselves). Read off EllesmereUI's Forever nameplates
   and unit frames, which do exactly this (learn only).
 
-  THE SHIELD: a dark plate over the interrupt (so the red triangle under it is covered) with a grey shield drawn on it,
+  THE SHIELD: the game's own nameplate shield (KG.ATLAS, since 15 Nov) on a dark plate over the interrupt (so the red triangle under it is covered) with a grey shield drawn on it,
   on the radar's bogey - and so the engineer's view, which places the same buttons - and on the PvP target cell's
   interrupt icon. A child of the face that is already lit only while a cast is on, so it shows only then. The button
   still takes a click (a secure button's mouse cannot change in a fight); the shield says the click would do nothing.
@@ -24,6 +24,21 @@ NS.KG = KG
 
 KG.PLATE = { 0.05, 0.05, 0.07, 0.88 }
 KG.SHIELD = { 0.72, 0.74, 0.78, 1 }      -- grey: "nothing to do here"
+-- THE GAME'S OWN SHIELD (Arn 15 Nov: "do you see that shield icon it means i cant earth shock that target ... use that one"):
+-- the nameplate cast bar's art, an atlas (EllesmereUI's Forever bars use it - learn only). Drawn lines only where it is missing.
+KG.ATLAS = "nameplates-InterruptShield"
+KG.ICON_SHARE = 0.8                       -- the shield's height, a share of the face
+
+--- Does this client carry the shield art? Asked once.
+function KG.AtlasOK()
+    if KG.atlasOK == nil then
+        local get = C_Texture and C_Texture.GetAtlasInfo
+        local ok, info = false, nil
+        if get then ok, info = pcall(get, KG.ATLAS) end
+        KG.atlasOK = (ok and type(info) == "table") and true or false
+    end
+    return KG.atlasOK
+end
 
 local function secret(v) return NS.Secret and NS.Secret(v) or false end
 
@@ -68,7 +83,17 @@ function KG.Build(face, px)
     g.plate = g:CreateTexture(nil, "ARTWORK")
     g.plate:SetAllPoints(g)
     g.plate:SetColorTexture(KG.PLATE[1], KG.PLATE[2], KG.PLATE[3], KG.PLATE[4])
-    -- the shield: a flat top, straight sides, then down to a point
+    if KG.AtlasOK() then
+        local h = math.max(8, (tonumber(px) or 20) * KG.ICON_SHARE)
+        g.icon = g:CreateTexture(nil, "OVERLAY")
+        g.icon:SetAtlas(KG.ATLAS, false)
+        g.icon:SetSize(h * 0.85, h)
+        g.icon:SetPoint("CENTER", g, "CENTER", 0, 0)
+        g:SetAlpha(0)
+        face.guard = g
+        return g
+    end
+    -- no art on this client: a flat top, straight sides, then down to a point
     local s = math.max(4, (tonumber(px) or 20) * 0.28)
     g.lines = {
         line(g, -s, s, s, s),

@@ -80,16 +80,16 @@ RD.GAUGE_RAIL_H = 44                               -- the readout box, the tape,
 --   bracket  the corner brackets (`be` long, `bw` thick)        accent   the centre mark, the readout, the ship's name
 --   fuel     your mana on the tape                              track    the tape's empty groove
 RD.SHIPS = {
-    { key = "fighter", name = "FIGHTER", upTo = 5,
+    { key = "fighter", name = "PARTY", upTo = 5,
       plate = { 0.035, 0.015, 0.060 }, line = { 0.82, 0.38, 1.00 }, bracket = { 0.97, 0.93, 1.00 }, be = 18, bw = 2,
       accent = { 1.00, 0.45, 0.92 }, fuel = { 0.88, 0.56, 1.00, 0.95 }, track = { 0.10, 0.04, 0.16, 0.9 } },
-    { key = "gunship", name = "GUNSHIP", upTo = 10,
+    { key = "gunship", name = "RAID 10", upTo = 10,
       plate = { 0.035, 0.025, 0.070 }, line = { 0.64, 0.52, 1.00 }, bracket = { 1.00, 1.00, 1.00 }, be = 22, bw = 2,
       accent = { 0.82, 0.64, 1.00 }, fuel = { 0.80, 0.72, 1.00, 0.95 }, track = { 0.08, 0.06, 0.17, 0.9 } },
-    { key = "cruiser", name = "CRUISER", upTo = 20,
+    { key = "cruiser", name = "RAID 20", upTo = 20,
       plate = { 0.045, 0.045, 0.060 }, line = { 0.60, 0.64, 0.75 }, bracket = { 1.00, 1.00, 1.00 }, be = 28, bw = 2,
       accent = { 0.70, 0.44, 1.00 }, fuel = { 0.88, 0.90, 0.97, 0.95 }, track = { 0.10, 0.10, 0.14, 0.9 } },
-    { key = "capital", name = "CAPITAL", upTo = 40,
+    { key = "capital", name = "RAID 40", upTo = 40,
       plate = { 0.060, 0.062, 0.072 }, line = { 0.84, 0.86, 0.91 }, bracket = { 1.00, 1.00, 1.00 }, be = 34, bw = 3,
       accent = { 0.64, 0.40, 0.96 }, fuel = { 0.96, 0.96, 0.99, 0.95 }, track = { 0.13, 0.13, 0.16, 0.9 } },
 }
@@ -286,6 +286,28 @@ function RD.Curve(amber)
     return c
 end
 
+--- THE BOX'S EDGE BY HEALTH (15 Nov 2026, Arn: "need the outline of the boxes to turn colors amber when they are low red
+--- very low"): the deck's plate edge - red at and under RD.RED, amber up to `amber` (where your heal stops being wasted,
+--- the pip's own amber), the dim edge above. A step curve the CLIENT evaluates on their health (UnitHealthPercent with a
+--- curve): nothing here reads a number, so it holds in a fight.
+RD.outlineCurves = {}
+function RD.OutlineCurve(amber)
+    amber = math.max(RD.RED + 0.02, math.min(amber or RD.AMBER, RD.GREEN - 0.01))
+    local key = math.floor(amber * 100 + 0.5)
+    if RD.outlineCurves[key] then return RD.outlineCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local R, A, D = RD.COL.red, RD.COL.amber, RD.DIM
+    local function at(x, col) pcall(c.AddPoint, c, x, CreateColor(col[1], col[2], col[3], col[4] or 1)) end
+    at(0.00, R) at(RD.RED, R)
+    at(RD.RED + 0.0001, A) at(amber, A)
+    at(amber + 0.0001, D) at(1.00, D)
+    RD.outlineCurves[key] = c
+    return c
+end
+
 --- The amber layer: solid amber between RD.RED and `amber`, nothing elsewhere (the client pulses that layer gently).
 RD.amberCurves = {}
 function RD.AmberCurve(amber)
@@ -354,6 +376,45 @@ local function paint(texs, col)
         if pcall(function() t:SetVertexColor(col:GetRGBA()) end) then any = true end
     end
     return any                     -- true only if the colour LANDED somewhere (Arn's white blade: it never had)
+end
+
+--- Paint one box's edge from its person's health (the deck only). Dead or gone: the dim edge.
+function RD.PaintOutline(sp)
+    local p = sp and sp.deckPlate
+    if not (p and p.edges and p:IsShown()) then return false end
+    local D = RD.DIM
+    local hold = p.edgeHold
+    local function dim()
+        for _, e in ipairs(p.edges) do e:SetVertexColor(D[1], D[2], D[3], D[4]) end
+        if hold then hold:SetAlpha(1) end
+        return false
+    end
+    if not (sp.unit and RD.Deck()) then return dim() end
+    if not RD.Sw("edges") then return dim() end              -- the warning edges switch
+    -- NO WARNING EDGE ON AN ENEMY (16 Nov 2026, Arn: "the enemy bar gets a health out line which makes me think i need to
+    -- heal it"): your target box never warns (a mob, most of the time); its target warns unless it is an enemy - a plain
+    -- answer decides, a secret one goes to the client (each edge's alpha from the boolean: enemy = no warning colour)
+    if sp.unit == "target" then return dim() end
+    local foe
+    if sp.unit == "targettarget" and UnitCanAttack then
+        local okH, h = pcall(UnitCanAttack, "player", sp.unit)
+        if okH then foe = h end
+        if foe ~= nil and not (NS.Secret and NS.Secret(foe)) and foe == true then return dim() end
+    end
+    local okE, there = pcall(UnitExists, sp.unit)
+    if okE and plain(there) == false then return dim() end
+    local okD, dead = pcall(UnitIsDeadOrGhost, sp.unit)
+    if okD and plain(dead) == true then return dim() end
+    local curve = RD.OutlineCurve(sp.amber)
+    local ok, col = false, nil
+    if curve and UnitHealthPercent then ok, col = pcall(UnitHealthPercent, sp.unit, true, curve) end
+    if not (ok and paint(p.edges, col)) then return dim() end
+    -- a hidden "is it an enemy": the client shows the warning edge only for a friend
+    local hidden = foe ~= nil and NS.Secret and NS.Secret(foe)
+    if hold then
+        if not (hidden and hold.SetAlphaFromBoolean and pcall(hold.SetAlphaFromBoolean, hold, foe, 0, 1)) then hold:SetAlpha(1) end
+    end
+    return true
 end
 
 -- ------------------------------------------------------------------ drawing helpers
@@ -671,7 +732,10 @@ local function buildSpoke(f, i)
         if NS.OV then NS.OV.Leave(sp) end
     end)
     -- THE OVER WORD (Overheal.lua, 12 Nov 2026): the click is measured here, before the cast starts
-    b:HookScript("PostClick", function(_, button) if NS.OV then NS.OV.Click(sp, button) end end)
+    b:HookScript("PostClick", function(_, button)
+        RD.lastClick, RD.lastClickAt = sp, GetTime()            -- the Riptide tracker: whose box the cast went to
+        if NS.OV then NS.OV.Click(sp, button) end
+    end)
     sp.heal = b
     -- BOGEY: their target, a red triangle only while it casts; a click is your interrupt (enemies only)
     local k = CreateFrame("Button", "BiSHealingRadarBogey" .. i, f, "SecureActionButtonTemplate")
@@ -1105,7 +1169,7 @@ local function buildGauge(f)
         w:SetScript("OnEnter", function()
             if not GameTooltip then return end
             GameTooltip:SetOwner(RD.gaugeRail or g, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("FUEL")
+            GameTooltip:AddLine("MANA")      -- plain words, never the old flight words (Arn, 15 Nov: "call it what it is now")
             for _, l in ipairs(RD.FuelTip()) do GameTooltip:AddLine(l, 1, 1, 1, true) end
             GameTooltip:Show()
         end)
@@ -1129,7 +1193,7 @@ local function buildGauge(f)
     g.role:SetTextColor(1, 1, 1)
     g.ship = word(RD.SHIPS[1].name)
     g.ship:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -17)
-    g.fuelWord = word("FUEL")
+    g.fuelWord = word("MANA")
     g.fuelWord:SetPoint("TOPLEFT", P, "TOPLEFT", 6, -29)
     RD.SizeGauge(RD.SIZE)
     return g
@@ -1191,6 +1255,33 @@ function RD.GripScale(startScale, left, top, sx, sy, cx, cy)
     return math.max(RD.SCALE_MIN, math.min(RD.SCALE_MAX, s))
 end
 
+-- THE STOPS (Arn, 15 Nov: "fake stops every 25% and if you keep dragging itll pass it"): within RD.SNAP_BAND of a quarter
+-- (50%, 75%, 100% ... 200%) the scale sits on it; drag on past the band and it moves again
+RD.SNAP_STEP, RD.SNAP_BAND = 0.25, 0.04
+function RD.SnapScale(s)
+    if type(s) ~= "number" then return s end
+    local q = math.floor(s / RD.SNAP_STEP + 0.5) * RD.SNAP_STEP
+    if math.abs(s - q) <= RD.SNAP_BAND then return q end
+    return s
+end
+
+--- THE LIVE READOUT (Arn: "would be nice if it updated live so i can see what % im at"): while the grip drags, the scale
+--- ("75%") or the width ("300 px") beside it - the tooltip goes when the mouse leaves the grip, this stays. nil hides it.
+function RD.GripReadout(text)
+    local g = RD.grip
+    if not g then return nil end
+    if not g.pct then
+        g.pct = g:CreateFontString(nil, "OVERLAY")
+        g.pct:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+        g.pct:SetPoint("BOTTOMRIGHT", g, "TOPLEFT", -2, 2)
+        local P = RD.PHOS
+        g.pct:SetTextColor(P[1], P[2], P[3], 1)
+    end
+    g.pct:SetText(text or "")
+    if text then g.pct:Show() else g.pct:Hide() end
+    return text
+end
+
 --- Scale the radar to `s` with its top-left corner staying at (left, top) in screen pixels.
 function RD.ScaleAt(f, s, left, top)
     if combat() then return false end
@@ -1227,12 +1318,79 @@ function RD.SetScale(v)
     return s
 end
 
+--[[ SHIFT + DRAG = THE WIDTH (15 Nov 2026, Arn: "they could just resize on how many fit in the window by making the window
+  bigger"; mockup https://claude.ai/artifact/NzLCgjinETPrUVic2Xawxc). The top-left corner held; the cursor's sideways move
+  (in the frame's own pixels) is the new width of the boxes' area, never under the totem row's floor. The deck is laid out
+  again as it changes, at most every RD.WIDTH_EVERY seconds (secure buttons move: out of a fight only - a pull ends it). ]]
+RD.WIDTH_EVERY = 0.12
+function RD.WidthFor(startInner, sx, cx, k)
+    if type(k) ~= "number" or k <= 0 then return startInner end
+    return math.max(RD.FloorInner(), startInner + (cx - sx) / k)
+end
+function RD.StartWidthDrag(g, f, k, l, t, sx)
+    local fw = f:GetWidth()
+    if type(fw) ~= "number" then return false end
+    g.sizing = { width = true, start = RD.DeckWidth() or (fw - 2 * RD.CON.pad), sx = sx, k = k, last = 0 }
+    RD.ScaleAt(f, f:GetScale(), l * k, t * k)               -- held by the top-left from here on
+    local ok, p, _, rp, x, y = pcall(f.GetPoint, f)          -- and saved so: a reload keeps the corner where it was
+    p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
+    if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
+        db().pos = { p, type(rp) == "string" and rp or p, x, y }
+    end
+    g:SetScript("OnUpdate", function(self, elapsed)
+        local z = self.sizing
+        if not z or combat() then RD.EndGrip() return end
+        z.last = z.last + (tonumber(elapsed) or 0)
+        if z.last < RD.WIDTH_EVERY then return end
+        z.last = 0
+        local cx = GetCursorPosition()
+        local w = math.floor(RD.WidthFor(z.start, z.sx, cx, z.k) + 0.5)
+        if w ~= z.applied then
+            z.applied = w
+            RD.SetDeckWidth(w)
+            RD.Arm()
+            RD.GripReadout(w + 2 * RD.CON.pad .. " px")         -- the window's width, live
+        end
+    end)
+    return true
+end
+
+--- The window back to 100%, its top-left corner held, the spot saved. Out of a fight.
+function RD.ScaleHome()
+    local f = RD.frame
+    if not f or combat() then return false end
+    local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
+    if type(k) == "number" and type(l) == "number" and type(t) == "number" then
+        RD.ScaleAt(f, 1, l * k, t * k)
+    end
+    db().scale = 1
+    local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
+    p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
+    if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
+        db().pos = { p, type(rp) == "string" and rp or p, x, y }
+    end
+    return true
+end
+
+--- RESET (16 Nov 2026, Arn: "there should be a reset button where in full it resets to everything on and the size i had
+--- it ... i think it was 100%"): every switch on (FULL), the window's own width, the boxes at 100%, the window at 100%.
+function RD.SwReset()
+    if combat() or RD.inFight then return nil end
+    RD.SetDeckWidth(nil)
+    RD.SetBoxHeight(nil)
+    RD.ScaleHome()
+    return RD.SwPreset("full")
+end
+
 --- The grip's drag over: the scale and the corner saved.
 function RD.EndGrip()
     local g, f = RD.grip, RD.frame
     if not (g and g.sizing) then return false end
+    local widthDrag = g.sizing.width
     g.sizing = nil
     g:SetScript("OnUpdate", nil)
+    RD.GripReadout(nil)                                     -- the live % / px goes with the drag
+    if widthDrag then return true end                       -- the width is already saved, the corner held
     if f then
         db().scale = f:GetScale()
         local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
@@ -1266,6 +1424,10 @@ function RD.BuildGrip(f)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("RESIZE  " .. math.floor(f:GetScale() * 100 + 0.5) .. "%")
         GameTooltip:AddLine("Drag to make it bigger or smaller.  Right-click: back to 100%.  Out of a fight.", 1, 1, 1, true)
+        if RD.Deck() then
+            GameTooltip:AddLine("Shift + drag: wider or narrower - the boxes keep their size, more or fewer fit in a row.  "
+                                .. "Shift + right-click: its own width again.", 0.6, 0.9, 1, true)
+        end
         GameTooltip:Show()
     end)
     g:SetScript("OnLeave", function() glow(0.45) if GameTooltip then GameTooltip:Hide() end end)
@@ -1275,29 +1437,25 @@ function RD.BuildGrip(f)
         local l, t = f:GetLeft(), f:GetTop()
         if not (type(k) == "number" and type(l) == "number" and type(t) == "number") then return end
         local sx, sy = GetCursorPosition()
+        if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then return RD.StartWidthDrag(self, f, k, l, t, sx) end
         self.sizing = { scale = f:GetScale(), left = l * k, top = t * k, sx = sx, sy = sy }
         RD.ScaleAt(f, self.sizing.scale, self.sizing.left, self.sizing.top)   -- held by the top-left from here on
         self:SetScript("OnUpdate", function()
             local z = self.sizing
             if not z or combat() then RD.EndGrip() return end
             local cx, cy = GetCursorPosition()
-            RD.ScaleAt(f, RD.GripScale(z.scale, z.left, z.top, z.sx, z.sy, cx, cy), z.left, z.top)
+            local s = RD.SnapScale(RD.GripScale(z.scale, z.left, z.top, z.sx, z.sy, cx, cy))
+            RD.ScaleAt(f, s, z.left, z.top)
+            RD.GripReadout(math.floor(s * 100 + 0.5) .. "%")
         end)
+        RD.GripReadout(math.floor(f:GetScale() * 100 + 0.5) .. "%")
     end)
     g:SetScript("OnMouseUp", function() RD.EndGrip() end)
     g:SetScript("OnHide", function() RD.EndGrip() end)
     g:SetScript("OnClick", function(_, button)
         if button ~= "RightButton" or combat() then return end
-        local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
-        if type(k) == "number" and type(l) == "number" and type(t) == "number" then
-            RD.ScaleAt(f, 1, l * k, t * k)
-        end
-        db().scale = 1
-        local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
-        p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
-        if ok and type(p) == "string" and type(x) == "number" and type(y) == "number" then
-            db().pos = { p, type(rp) == "string" and rp or p, x, y }
-        end
+        if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then RD.SetDeckWidth(nil) RD.Arm() return end
+        RD.ScaleHome()
     end)
     RD.grip = g
     return g
@@ -1380,12 +1538,12 @@ RD.CON = { pad = 8, colW = 39, ph = 18, sq = 26, cure = 12, pb = 18, pet = 18, g
   The view button steps radar -> fighter -> gunship -> cruiser -> capital -> radar, in any group (a preview: the empty
   places are empty squares, on the edge); a group too big for a class skips it. ]]
 RD.CON_TIERS = {
-    { n = 5,  ship = 1, name = "FIGHTER" },
+    { n = 5,  ship = 1, name = "PARTY" },
     -- TIDY (Arn, 11 Nov, three screenshots: "lets clean it up at least"): a full rectangle, one square size a class,
     -- the rank from the centre out within it; the bands told by brightness, not size
-    { n = 10, ship = 2, name = "GUNSHIP", cols = 5, rows = 2, sq = 26, ph = 17, colW = 41, rowGap = 6, chip = 9, kick = 22, pet = 18 },
-    { n = 20, ship = 3, name = "CRUISER", cols = 5, rows = 4, sq = 24, ph = 16, colW = 44, rowGap = 5, chip = 8, kick = 22, pet = 18 },
-    { n = 40, ship = 4, name = "CAPITAL", cols = 8, rows = 5, sq = 22, ph = 14, colW = 30, rowGap = 5, chip = 8, kick = 22, pet = 18 },
+    { n = 10, ship = 2, name = "RAID 10", cols = 5, rows = 2, sq = 26, ph = 17, colW = 41, rowGap = 6, chip = 9, kick = 22, pet = 18 },
+    { n = 20, ship = 3, name = "RAID 20", cols = 5, rows = 4, sq = 24, ph = 16, colW = 44, rowGap = 5, chip = 8, kick = 22, pet = 18 },
+    { n = 40, ship = 4, name = "RAID 40", cols = 8, rows = 5, sq = 22, ph = 14, colW = 30, rowGap = 5, chip = 8, kick = 22, pet = 18 },
 }
 
 --[[ THE RADAR'S SHIPS (11 Nov 2026, Arn: "i want you to reimage the radar screen, for 10 20 40 we already have the 5 version
@@ -1540,8 +1698,166 @@ function RD.PaintSeats(slots)
     sf:SetAlpha((RD.inFight or combat()) and 0 or 1)
 end
 
---- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier).
-function RD.Console() return db().view == "console" end
+--- The console is in use (any group: a class that holds everyone is picked, RD.ConsoleTier). THE FLIGHT DECK is a console
+--- too (15 Nov 2026, Arn: "this is going to replace radar and engineer is going to be this new deck but barebones"): the
+--- engineer's boxes - health bars, kick squares, cure chips, the fuel strip, the tools and totems - laid out as the deck.
+function RD.Deck() return (NS.FG and NS.FG.DeckOn and NS.FG.DeckOn()) == true end
+function RD.Console() return db().view == "console" or RD.Deck() end
+--- The view button picked the engineer's view (the deck is the radar look's own view otherwise).
+function RD.EngineerView() return db().view == "console" end
+--- The retired radar disc, reachable only by the suite (`RD.FORCE_DISC`, never set in the game), so its code stays tested
+--- until it is deleted.
+RD.FORCE_DISC = false
+function RD.DiscView() return RD.FORCE_DISC == true end
+--- The engineer's view: the deck, condensed (RD.DECK_SMALL) - narrower, taller boxes, short totem timers.
+function RD.Compact() return RD.EngineerView() and RD.Deck() end
+--- The deck's sizes for the view on screen.
+function RD.DeckM() return RD.Compact() and RD.DECK_SMALL or RD.DECK end
+
+--[[ THE SWITCHES (16 Nov 2026, Arn: "maybe we just do toggles with everything off its the quasi engineer look and deck would
+  be with everything on names flavor etc" - "that unifies them, no more deck and engineer, just deck now"; sketch
+  https://claude.ai/artifact/NyfWTe1b5MEJRmF1qFcGE7, Arn: "works amazing"). One window; each part of it a switch, saved per
+  character (db().sw[key] = true / false; nil = on, so nobody's deck changes until they switch something). The health
+  boxes always stay. A switch that adds or takes away click buttons is laid out by RD.Arm, out of a fight only - in one it
+  waits for the fight's end (RD.pending), like every other secure change. ]]
+RD.SW = {
+    { key = "names",  group = "LOOK",      name = "Names",                    tip = "The name on each box." },
+    { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
+    { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
+    { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
+    { key = "target", group = "THE FIGHT", name = "Target + its target",      tip = "Your target and who it is hitting, in the top row." },
+    { key = "kicks",  group = "THE FIGHT", name = "Kick buttons",             tip = "Your interrupt on a box when their target casts." },
+    { key = "cures",  group = "THE FIGHT", name = "Cure chips",               tip = "A chip when they carry something you can remove." },
+    { key = "cast",   group = "THE FIGHT", name = "Mini cast bars",           tip = "A red line under whoever a caster targets; grey when you cannot kick it." },
+    { key = "alerts", group = "THE FIGHT", name = "LOS / RANGE / OVER boxes", tip = "Three boxes on top for a failed heal or a big overheal. Off: the word shows on the box itself." },
+    { key = "cc",     group = "THE FIGHT", name = "Loss of control box",      tip = "A fourth box on top: how long you are stunned, silenced, feared or locked out of a school, counting down." },
+    { key = "fuel",   group = "MANA",      name = "Fuel strip",               tip = "Your mana with the boss's health, above the window." },
+    { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
+    { key = "mana",   group = "MANA",      name = "Party mana",               tip = "In the fuel strip: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
+    { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
+    { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
+    { key = "bounce", group = "SHAMAN",    name = "Chain Heal path",          tip = "After your Chain Heal, a bolt across the boxes it landed on: gold for 3, amber for 2, a red flash for 1. A star on each crit." },
+    { key = "bsound", group = "SHAMAN",    name = "Chain Heal sounds",        tip = "A fanfare when all 3 bounces crit, a buzzer when it healed only one (mana wasted)." },
+    { key = "rip",    group = "SHAMAN",    name = "Riptide tracker",          tip = "A Riptide mark on whoever has yours, and a bar on top: six Chain Heals long, the last one the Riptide icon - too late for another Chain Heal." },
+    { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
+}
+RD.SW_PRESETS = {
+    full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
+             fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true },
+    bare = {},
+    lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
+}
+RD.SW_ORDER = { "bare", "lean", "full" }
+RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
+function RD.Sw(key)
+    local t = db().sw
+    if type(t) ~= "table" or t[key] == nil then return true end
+    return t[key] == true
+end
+--- The icon row under each box's bar: while kicks or cures are on.
+function RD.SwIcons() return RD.Sw("kicks") or RD.Sw("cures") end
+--- Which preset the switches match now; nil = your own mix.
+function RD.SwPresetNow()
+    for _, name in ipairs(RD.SW_ORDER) do
+        local p, same = RD.SW_PRESETS[name], true
+        for _, s in ipairs(RD.SW) do if (p[s.key] == true) ~= RD.Sw(s.key) then same = false end end
+        if same then return name end
+    end
+    return nil
+end
+--- Lay the window out again for the switches: now, or after the fight. Answers "now" or "after".
+function RD.SwApply()
+    if RD.PaintSwitches then RD.PaintSwitches() end
+    if combat() or RD.inFight then RD.pending = true return "after" end
+    if RD.Active() then RD.Arm() end
+    if RD.PaintSwitches then RD.PaintSwitches() end
+    return "now"
+end
+function RD.SetSw(key, on)
+    local known
+    for _, s in ipairs(RD.SW) do if s.key == key then known = true end end
+    if not known then return nil end
+    local d = db()
+    d.sw = type(d.sw) == "table" and d.sw or {}
+    d.sw[key] = on and true or false
+    return RD.SwApply()
+end
+function RD.SwPreset(name)
+    local p = RD.SW_PRESETS[name]
+    if not p then return nil end
+    local t = {}
+    for _, s in ipairs(RD.SW) do t[s.key] = p[s.key] == true end
+    db().sw = t
+    return RD.SwApply()
+end
+--- Once per character: whoever used the engineer's view starts LEAN; the view itself is retired (one window now).
+function RD.SwStamp()
+    local d = db()
+    if d.swStamp then return false end
+    d.swStamp = 1
+    if d.view == "console" and d.sw == nil then
+        local t = {}
+        for _, s in ipairs(RD.SW) do t[s.key] = RD.SW_PRESETS.lean[s.key] == true end
+        d.sw = t
+    end
+    d.view = nil
+    return true
+end
+--- A box's sizes with the icon row taken out while kicks and cures are both off (the lean look: the bar is the box).
+--- BOX HEIGHT (16 Nov 2026, Arn: "maybe we also put the sliders there for width and height"): the bar's part of every box
+--- taller or shorter, RD.BOX_H_MIN .. RD.BOX_H_MAX %, saved per character (db().boxH; nil = 100). The icon row keeps its size.
+RD.BOX_H_MIN, RD.BOX_H_MAX, RD.BOX_H_STEP = 50, 200, 5
+function RD.BoxHeight()
+    local v = tonumber(db().boxH)
+    if not v then return 100 end
+    return math.max(RD.BOX_H_MIN, math.min(RD.BOX_H_MAX, math.floor(v + 0.5)))
+end
+function RD.SetBoxHeight(v)
+    v = tonumber(v)
+    db().boxH = (v and v ~= 100) and math.max(RD.BOX_H_MIN, math.min(RD.BOX_H_MAX, math.floor(v + 0.5))) or nil
+end
+function RD.DeckSized(M)
+    local icons, hk = RD.SwIcons(), RD.BoxHeight()
+    if icons and hk == 100 then return M end
+    RD.deckSized = RD.deckSized or {}
+    local key = tostring(M) .. (icons and "i" or "n") .. hk
+    local L = RD.deckSized[key]
+    if not L then
+        L = {}
+        for k, v in pairs(M) do L[k] = v end
+        local ic = icons and M.icons or 0
+        local function bar(h) return math.max(12, math.floor((h - M.icons) * hk / 100 + 0.5)) + ic end
+        L.row, L.tank, L.icons = bar(M.row), bar(M.tank), ic
+        RD.deckSized[key] = L
+    end
+    return L
+end
+--- The strip on top: the alert boxes' height, or just room for the switches button.
+RD.DECK_HEAD_BARE = 16
+function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc") or (RD.Sw("rip") and RD.RipKnown())) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+
+--- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
+function RD.TotemWideW()
+    local C = RD.CON
+    return 2 * (C.pad + 4 + 2 * RD.TIMER_MIN + C.toolGap) + 3 * RD.SYS_PX + 2 * C.toolGap
+end
+--- The narrowest the boxes' area may be (16 Nov 2026, Arn: "the side by side view i gave you with ellesmere was about the
+--- size he likes ... we gotta be able to go down to that size even if it means we stack the totem timers"): Ellesmere's
+--- party frames, about 130 px; under RD.TotemWideW the totems stack, the tools wrap, the top row splits.
+RD.NARROW_INNER = 118
+function RD.FloorInner() return RD.NARROW_INNER end
+--- The width the player dragged this view to (Shift + the corner grip), never under the floor; nil = the view's own.
+function RD.DeckWidth()
+    local t = db().deckW
+    local w = type(t) == "table" and tonumber(t[RD.Compact() and "eng" or "deck"]) or nil
+    if not w then return nil end
+    return math.max(RD.FloorInner(), math.floor(w + 0.5))
+end
+function RD.SetDeckWidth(w)
+    local d = db()
+    d.deckW = type(d.deckW) == "table" and d.deckW or {}
+    d.deckW[RD.Compact() and "eng" or "deck"] = w and math.max(RD.FloorInner(), math.floor(w + 0.5)) or nil
+end
 
 --- The console's class: the one chosen, or the smallest that holds everyone in `units` (a raid's slot is its group and
 --- place, so the highest slot says how many must fit). Answers the class and its number.
@@ -1550,7 +1866,10 @@ function RD.ConsoleTier(units)
     for i in pairs(units or RD.units or {}) do if type(i) == "number" and i > hi then hi = i end end
     local need = #RD.CON_TIERS
     for k, t in ipairs(RD.CON_TIERS) do if hi <= t.n then need = k break end end
-    local k = math.min(#RD.CON_TIERS, math.max(tonumber(db().tier) or 1, need))
+    -- THE GROUP DECIDES (Arn, 15 Nov: "5 man 10 man 20man 40 man rules to apply automatically ... we can get rid of the
+    -- button"): a picked size counts only behind the retired disc's suite door
+    local picked = RD.FORCE_DISC and tonumber(db().tier) or 1
+    local k = math.min(#RD.CON_TIERS, math.max(picked, need))
     return RD.CON_TIERS[k], k
 end
 
@@ -1863,16 +2182,185 @@ end
 
 -- the tools row: every tool from both rails, centred across `W`, at `y`
 local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.rations, RD.chaff, RD.res } end
-local function toolsRow(W, y)
+-- THE DECK'S TOOLS: NO SQUARE ROUND EACH, ONE BLUE BOX ROUND THE MANA (Arn, 15 Nov: "im not liking the blue outline, lets
+-- just go with dim and very bright when needed if we are going to outline we outline the box mana stuff blue"): the
+-- icons alone, dim or bright; Mana Tide, the potion, Mana Spring and the drink inside one blue outline.
+RD.MANA_BOX_COL = { 0.30, 0.62, 1.00, 0.9 }
+local function toolsRow(W, y, deck)
     local tools = CON_TOOLS()
     local n, gap = #tools, RD.CON.toolGap
     local w = n * RD.SYS_PX + (n - 1) * gap
     local x0 = (W - w) / 2 + RD.SYS_PX / 2
+    local xs = {}
     for k, b in ipairs(tools) do
         local x = x0 + (k - 1) * (RD.SYS_PX + gap)
-        at(square("tool" .. k, RD.SYS_PX), x, y)
+        xs[b] = x
+        if not deck then at(square("tool" .. k, RD.SYS_PX), x, y) end
         at(b, x, y)
     end
+    local mb = RD.manaBox
+    if deck and xs[RD.tide] and xs[RD.fuel] then
+        if not mb then
+            mb = CreateFrame("Frame", nil, RD.conLayer)
+            mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
+            RD.manaBox = mb
+        end
+        local l, r = xs[RD.tide] - RD.SYS_PX / 2 - 2, xs[RD.fuel] + RD.SYS_PX / 2 + 2
+        mb:SetSize(r - l, RD.SYS_PX + 4)
+        mb:ClearAllPoints()
+        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -y)
+        mb:Show()
+    elseif mb then
+        mb:Hide()
+    end
+end
+
+--- THE DECK'S TOOLS, WRAPPED (16 Nov 2026): as many to a line as fit across the window, centred, line under line; the blue
+--- box round the mana four only while they share a line. `top` = the first line's top. Answers the height taken, with
+--- the gap under it.
+RD.TOOL_KEYS = { "shield", "tide", "potion", "reserve", "fuel", "rations", "chaff", "res" }
+RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
+function RD.DeckTools(W, top)
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local per = math.max(1, math.floor((W - 2 * C.pad + gap) / (S + gap)))
+    -- every tool, in its order - NOT only the shown ones (Arn, 16 Nov: "all the buttons for food are gone" after a /reload:
+    -- at the first layout the game has not shown them yet, so a "shown only" list placed none); a narrow window (Arn's
+    -- shot: "the mana thing did not center"): the mana four on a line of their own, centred in their box, the rest under
+    local all, mana, rest = {}, {}, {}
+    for _, k in ipairs(RD.TOOL_KEYS) do
+        local b = RD[k]
+        if b then
+            all[#all + 1] = b
+            if RD.MANA_KEYS[k] then mana[#mana + 1] = b else rest[#rest + 1] = b end
+        end
+    end
+    local lines = {}
+    local function wrap(list)
+        local i = 1
+        while i <= #list do
+            local l = {}
+            for k = i, math.min(#list, i + per - 1) do l[#l + 1] = list[k] end
+            lines[#lines + 1] = l
+            i = i + per
+        end
+    end
+    if per >= #all then lines[1] = all else wrap(mana) wrap(rest) end
+    local xs, ys = {}, {}
+    for l, line in ipairs(lines) do
+        local cnt = #line
+        local x0 = (W - (cnt * S + (cnt - 1) * gap)) / 2 + S / 2
+        local cy = top + (l - 1) * (S + C.gap) + S / 2
+        for k, b in ipairs(line) do
+            xs[b], ys[b] = x0 + (k - 1) * (S + gap), cy
+            at(b, xs[b], cy)
+            if b.swHidden then b.swHidden = nil b:Show() end   -- the tools switch back on: the ones it hid
+        end
+    end
+    local nLines = math.max(1, #lines)
+    local mb = RD.manaBox
+    if not mb then
+        mb = CreateFrame("Frame", nil, RD.conLayer)
+        mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
+        RD.manaBox = mb
+    end
+    if xs[RD.tide] and xs[RD.fuel] and ys[RD.tide] == ys[RD.fuel] then
+        local l, r = xs[RD.tide] - S / 2 - 2, xs[RD.fuel] + S / 2 + 2
+        mb:SetSize(r - l, S + 4)
+        mb:ClearAllPoints()
+        mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (l + r) / 2, -ys[RD.tide])
+        mb:Show()
+    else
+        mb:Hide()
+    end
+    return nLines * (S + C.gap)
+end
+--- The tools row switched off: every tool button out of sight (RD.ArmTools shows them again at the next layout).
+function RD.HideTools()
+    for _, b in ipairs(CON_TOOLS()) do
+        if b and b:IsShown() then b.swHidden = true b:Hide() end   -- remembered: only these come back (Arn: the empty blue box)
+    end
+    if RD.manaBox then RD.manaBox:Hide() end
+end
+
+--[[ ATTENTION OUTLINES (16 Nov 2026, Arn: "I'm missing clicking on icons that are only lit 100% for example food ... I
+  miss it because I think it's still some time left. How about at 10% of whatever makes it light up is left it gets a red
+  box outline ... if it is ever 100% bright red outline, cascade after that half 50% amber"). A box round a deck icon:
+  RED = needed now (lit full, a buff missing or under RD.ATTN_RED_LEFT of its time, mana under the tool's own point), AMBER
+  = getting close (a buff under half its time, mana under twice the tool's point). A cooling tool gets none: red always
+  means "click me now". Its own switch (attn); the deck only. ]]
+RD.ATTN_RED = { 1.00, 0.15, 0.15, 1 }
+RD.ATTN_AMBER = { 1.00, 0.70, 0.15, 1 }
+RD.ATTN_RED_LEFT = 0.10
+RD.ATTN_AMBER_LEFT = 0.50
+RD.attnCurves = {}
+function RD.AttnOn() return RD.Deck and RD.Deck() and RD.Sw and RD.Sw("attn") end
+function RD.Attn(b)
+    if not b then return nil end
+    if b.attn then return b.attn end
+    local f = CreateFrame("Frame", nil, b)
+    f:SetPoint("TOPLEFT", b, "TOPLEFT", -2, 2)
+    f:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 2, -2)
+    if f.SetFrameLevel and b.GetFrameLevel then
+        local lvl = b:GetFrameLevel()
+        if type(lvl) == "number" then f:SetFrameLevel(lvl + 8) end
+    end
+    f.edges = edge(f, RD.ATTN_RED, 2)
+    f:Hide()
+    b.attn = f
+    return f
+end
+--- A plain colour ("red", "amber") or nil (no outline).
+function RD.AttnSet(b, which)
+    if not b then return false end
+    if not (which and RD.AttnOn()) then
+        if b.attn then b.attn:Hide() end
+        return false
+    end
+    local f = RD.Attn(b)
+    local c = (which == "amber") and RD.ATTN_AMBER or RD.ATTN_RED
+    for _, e in ipairs(f.edges) do e:SetVertexColor(c[1], c[2], c[3], c[4]) end
+    f:Show()
+    return true
+end
+--- A buff's time left (a fraction, nil = missing) as an outline: red under 10% or missing, amber under half.
+function RD.AttnLeft(left)
+    if left == nil or left <= RD.ATTN_RED_LEFT then return "red" end
+    if left <= RD.ATTN_AMBER_LEFT then return "amber" end
+    return nil
+end
+--- A mana tool's outline as a curve on your mana: red under its own point, amber under twice it, nothing above.
+function RD.AttnCurve(at)
+    at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.95))
+    local key = math.floor(at * 100 + 0.5)
+    if RD.attnCurves[key] then return RD.attnCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local Rd, A, x = RD.ATTN_RED, RD.ATTN_AMBER, key / 100
+    local amb = math.min(x * 2, 0.95)
+    pcall(c.AddPoint, c, 0.00, CreateColor(Rd[1], Rd[2], Rd[3], 1))
+    pcall(c.AddPoint, c, x, CreateColor(Rd[1], Rd[2], Rd[3], 1))
+    if amb > x + 0.01 then
+        pcall(c.AddPoint, c, x + 0.0001, CreateColor(A[1], A[2], A[3], 1))
+        pcall(c.AddPoint, c, amb, CreateColor(A[1], A[2], A[3], 1))
+    end
+    pcall(c.AddPoint, c, amb + 0.0001, CreateColor(A[1], A[2], A[3], 0))
+    pcall(c.AddPoint, c, 1.00, CreateColor(A[1], A[2], A[3], 0))
+    RD.attnCurves[key] = c
+    return c
+end
+
+--- A deck button's light: very bright when needed, dim otherwise (Arn: "dim and very bright when needed") - while it wears
+--- a real icon in the deck; anywhere else, as before: shown or not.
+--- DIMMER AND GREY WHILE IT WAITS (15 Nov 2026, Arn: "grounding totem dimmed too like the food until needed then bright"):
+--- at 30% a bright purple icon still read as lit. A waiting icon is RD.ICON_FADED (20%) and greyed; lit, full colour.
+function RD.LitAlpha(b, lit)
+    if b and b.food and b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, not lit) end
+    if b and b ~= RD.rations then RD.AttnSet(b, lit and "red" or nil) end   -- lit full: the red box (the food has its own)
+    if lit then return 1 end
+    if RD.Deck and RD.Deck() and b and b.iconTex then return RD.ICON_FADED end
+    return 0
 end
 
 -- THE TOTEMS' LINE under the tools (11 Nov): only the ones you know (RD.ArmTotems), centred; answers the height it took
@@ -1953,6 +2441,686 @@ function RD.ConsoleLayoutWide(T, order)
     return { W = W, H = H, tier = T, cells = cells, placed = placed, rows = { kick = yk, pet = yp, tools = yt } }
 end
 
+--[[ THE FLIGHT DECK (15 Nov 2026, dev/FLIGHTDECK.md, Arn's layout B; "its own contained box" like the radar and the
+  engineer's view). The engineer's own boxes - each a secure pip with its health bar (Engineer.lua), its kick square (the
+  bogey: their target casting) and its cure chips - placed by the deck's arithmetic (FG.DeckPlace): the tank row and the
+  outlined target box on top, then rows of five, then the tools row and the totems under them, the black box under all.
+  The kick and the cures hang inside each box's right end, over the bar (their own clicks). Empty places are hidden: the
+  deck grows down instead. Out of a fight only, like every layout here. ]]
+-- TALLER, THE ICONS UNDER THE BAR (Arn, 15 Nov: "lets go taller and put the kick dispells under"): a box is the name's
+-- line on top, the health bar the whole width, and a row of icons under it (`icons` tall) - the kick at its left, the cures
+-- at its right. The tank row taller still, so the target box's two cells are not squished under its label.
+-- NARROW AND TALL (Arn, 15 Nov: "also taller 9:16 just a number throwing out there i hate moving mouse lef and right"):
+-- five to a row still, each box thinner and taller - the deck about 320 wide instead of 450; a full raid comes out near
+-- 9:16, a party (two rows) stays wider than tall.
+-- boxTop = boxIn: the target box's label sits ABOVE the box (Arn, 15 Nov: "there is plenty of space to write target of
+-- target up there so the boxes can be the same size of the tank"), so its two cells stand the tank row's full height
+-- ONE ICON SIZE (Arn, 15 Nov: "the interrupt section under the frames lets make it the same size icons as everything
+-- else keep things uniform" - he picked wider boxes): the kick and the cures at the tool buttons' own 22 px, so a box is 74
+-- wide (kick + two cures) and a little taller for the bar's room; the deck about 400 wide.
+RD.DECK = { cell = 74, row = 58, tank = 70, gap = 3, boxIn = 2, boxTop = 2, chip = 22, kick = 22, icons = 24 }
+-- THE ENGINEER'S VIEW (Arn, 15 Nov: his cousin "already thought it took too much space" - "we dont go wider we can go
+-- taller ... as little empty space as possible"): the same deck, narrower and taller boxes, 2 px apart
+RD.DECK_SMALL = { cell = 58, row = 56, tank = 62, gap = 2, boxIn = 2, boxTop = 2, chip = 20, kick = 20, icons = 22,
+                  -- the 9:16 engineer (FG.EngPlace): one narrow width; a party's rows, then a raid's short ones
+                  w = 218, top = 66, row2 = 70, pet2 = 44, rtank = 46, rhead = 13, rtgt = 40, row5 = 34, pet5 = 28, short = 10,
+                  pw = 100, rw = 39 }                -- the box widths a wider drag keeps (party, raid)
+-- THE FLOOR (Arn, 15 Nov: "the minimum is that bottom row ... the four totems and the call recall"): the totem row -
+-- CALL / BRING / RECALL in the middle, two timers each side at least RD.TIMER_MIN wide (an icon and "5m") - is the
+-- narrowest the window goes; the mockup showed the timers overlapping below it
+RD.TIMER_MIN = 34
+RD.DECK_BOX_COL = { 0.62, 0.66, 0.74, 0.85 }       -- the target pair's header + line: quiet grey (the cyan clashed, Arn 15 Nov)
+RD.DECK_LINE_UP = 2                                 -- the line's gap above the two boxes
+RD.DECK_LABEL_H = 12                                -- the band the header and its line take above a top-row pair
+RD.DECK_HEADER = false                              -- the header is gone: the boxes' own names say it (RD.BoxName)
+RD.BOX_WORD = { target = "TARGET", targettarget = "ITS TARGET" }   -- the name line while nobody is there
+
+--- A target-pair box's name line: the real name (a hidden one handed over untouched), else what the box is for.
+function RD.BoxName(unit)
+    local cs = RD.Callsign(unit)
+    if NS.Secret and NS.Secret(cs) then return cs end
+    if (cs == nil or cs == "") and RD.BOX_WORD[unit] then return RD.BOX_WORD[unit] end
+    return cs
+end
+RD.DECK_HEAD = 26                                   -- the deck's alert strip (LOS / RANGE / OVER/H boxes 22 tall)
+RD.DECK_TAG = { font = "Fonts\\ARIALN.TTF", size = 9, col = { 0.86, 1.00, 0.90, 1 }, x = 4, y = -4 }   -- the callsign on each box
+
+--- A box's plate: the whole box - its two sides and the middle - drawn dark with a thin edge, under the pip and the icons.
+function RD.DeckPlate(sp)
+    local p = sp.deckPlate
+    if not p then
+        p = CreateFrame("Frame", nil, RD.conLayer)
+        p.bg = p:CreateTexture(nil, "BACKGROUND")
+        p.bg:SetAllPoints(p)
+        p.bg:SetColorTexture(0, 0, 0, 0.35)
+        p.edgeHold = CreateFrame("Frame", nil, p)        -- the edges on their own frame: a hidden "enemy?" sets its alpha
+        p.edgeHold:SetAllPoints(p)
+        p.edges = edge(p.edgeHold, RD.DIM, 1.5)
+        sp.deckPlate = p
+    end
+    return p
+end
+
+--- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals across the TOP
+--- of the whole box (Arn, 15 Nov: "run the name across the whole box" - in the middle alone it was "CHA..."); the box's
+--- icons sit under that line, so the name never covers them. Plain only - a hidden name shows nothing, never a guess.
+RD.DECK_NAME_BAND = 9                              -- the top line the name owns
+--- A HIDDEN NAME IS STILL SHOWN (Arn, 15 Nov, the target box empty of names: "names here too"): in a dungeon the game hides
+--- an enemy's name - a secret - and a secret may not be cut or put in capitals, but a font string takes it untouched, so it
+--- is handed over as it is (the game writes it whole). Only a plain name becomes the first-word capitals callsign.
+function RD.Callsign(unit)
+    if type(unit) ~= "string" then return "" end
+    local ok, n = pcall(GetUnitName, unit, false)
+    if not ok or n == nil then return "" end
+    if NS.Secret and NS.Secret(n) then return n end
+    if type(n) ~= "string" or n == "" then return "" end
+    return ((n:match("^(%S+)")) or n):upper()
+end
+function RD.DeckTag(sp, w)
+    local t = sp.deckTag
+    local plate = RD.DeckPlate(sp)
+    if not t then
+        t = CreateFrame("Frame", nil, plate)          -- on the plate: the whole box, not the middle alone (takes no click)
+        t:SetAllPoints(plate)
+        t.text = t:CreateFontString(nil, "OVERLAY")
+        t.text:SetFont(RD.DECK_TAG.font, RD.DECK_TAG.size, "OUTLINE")
+        t.text:SetPoint("TOPLEFT", t, "TOPLEFT", RD.DECK_TAG.x, RD.DECK_TAG.y)   -- clear of the edge (Arn's shot, 16 Nov)
+        t.text:SetJustifyH("LEFT")
+        local c = RD.DECK_TAG.col
+        t.text:SetTextColor(c[1], c[2], c[3], c[4])
+        sp.deckTag = t
+    end
+    t:SetFrameLevel(sp.heal:GetFrameLevel() + 5)            -- over the bar and the icons (they sit below its line)
+    if w then t.text:SetWidth(math.max(8, w - 6)) end
+    t.text:SetText(RD.BoxName(sp.unit))
+    t:SetShown(RD.Sw("names"))                              -- the names switch
+    return t
+end
+
+--- THE KICK, AS ITS SPELL (15 Nov 2026, Arn: "the red interrupt button use the actual spell icon with red outline or red
+--- slight pulse"): in the deck the kick button's face carries your interrupt's own icon (FG.KickIcon - Earth Shock for a
+--- shaman) inside a thin red rim, in place of the drawn red triangle. The face shows only while their target casts, and
+--- the button's red pulse is the radar's own (k.beat), so nothing new runs.
+function RD.DeckKick(sp)
+    local k = sp and sp.bogey
+    if not (k and k.face) then return false end
+    if not k.deckIcon then
+        k.deckIcon = k.face:CreateTexture(nil, "OVERLAY", nil, 5)
+        k.deckIcon:SetPoint("TOPLEFT", k, "TOPLEFT", 1, -1)
+        k.deckIcon:SetPoint("BOTTOMRIGHT", k, "BOTTOMRIGHT", -1, 1)
+        if k.deckIcon.SetTexCoord then k.deckIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        k.deckRim = edge(k.face, RD.COL.bogey, 1.5)
+    end
+    k.deckIcon:SetTexture((NS.FG and NS.FG.KickIcon and NS.FG.KickIcon()) or nil)
+    k.deckIcon:Show()
+    for _, t in ipairs(k.deckRim) do t:Show() end
+    for _, l in ipairs(k.lines or {}) do l:Hide() end    -- the drawn triangle steps aside
+    return true
+end
+
+--- Out of the deck: every box's plate and callsign away (the radar and the engineer's view draw neither); the kick back
+--- to its drawn triangle.
+function RD.DeckClear()
+    for _, t in ipairs(RD.timers or {}) do t:Hide() end   -- the totem timers are the deck's alone
+    if RD.manaBox then RD.manaBox:Hide() end              -- and the mana group's outline
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.deckPlate then sp.deckPlate:Hide() end
+        if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
+        local k = sp.bogey
+        if k and k.deckIcon then
+            k.deckIcon:Hide()
+            for _, t in ipairs(k.deckRim or {}) do t:Hide() end
+            for _, l in ipairs(k.lines or {}) do l:Show() end
+        end
+    end
+end
+
+--- The deck's order: the tanks first (the radar's own answer, RD.LogicBand; nobody named = one guessed, RD.GuessTank),
+--- then everyone else in place order (a raid's place is its group and spot), the empty places last. Answers the order
+--- and how many of it are tanks.
+function RD.DeckOrder(units, n)
+    local tanks, rest, empty, present = {}, {}, {}, {}
+    for i = 1, n do if units[i] then present[i] = true end end
+    for i = 1, n do
+        local u = units[i]
+        if not u then
+            empty[#empty + 1] = i
+        else
+            local okMe, me = false, nil
+            if u == "player" then okMe, me = true, true elseif UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
+            if not (okMe and plain(me) == true) and RD.LogicBand(u) == "tank" then tanks[#tanks + 1] = i
+            else rest[#rest + 1] = i end
+        end
+    end
+    if #tanks == 0 then
+        -- NOBODY NAMED: THE MOST HEALTH (Arn, 15 Nov: "as a fallback can we do it so if there is no tank in the group the one
+        -- with the most health goes up there") - the biggest max health, read plain out of a fight, never you; only when no
+        -- health can be read, the class guess (RD.GuessTank)
+        local g = RD.MostHealth(rest, units) or RD.GuessTank(present, units)
+        -- ALONE: YOU (Arn, 15 Nov, solo with an empty tank row: "no party we go up there")
+        if not g and #rest == 1 then g = rest[1] end
+        if g then
+            tanks[1] = g
+            for k, i in ipairs(rest) do if i == g then table.remove(rest, k) break end end
+        end
+    end
+    local order = {}
+    for _, i in ipairs(tanks) do order[#order + 1] = i end
+    for _, i in ipairs(rest) do order[#order + 1] = i end
+    for _, i in ipairs(empty) do order[#order + 1] = i end
+    return order, #tanks
+end
+
+--- The target box's two boxes repainted (a target change: the client re-points "target" / "targettarget" by itself; the
+--- colours are ours to redo). Nothing when the deck is off.
+function RD.PaintDeckBox()
+    if not RD.Deck() then return false end
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.unit and sp.slot and sp.slot.box then
+            RD.PaintHeal(sp)
+            if sp.deckTag then sp.deckTag.text:SetText(RD.BoxName(sp.unit)) end    -- the new target's callsign, or the box's word
+        end
+    end
+    return true
+end
+
+--- Of these places, the one whose person has the most max health (plain; never you), or nil when none can be read.
+function RD.MostHealth(places, units)
+    local best, bestHp
+    for _, i in ipairs(places or {}) do
+        local u = units[i]
+        if u and u ~= "player" then
+            local okMe, me = false, nil
+            if UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
+            local ok, mx = pcall(UnitHealthMax, u)
+            mx = ok and plain(mx) or nil
+            if not (okMe and plain(me) == true) and type(mx) == "number" and mx > 0 and (not bestHp or mx > bestHp) then
+                best, bestHp = i, mx
+            end
+        end
+    end
+    return best
+end
+
+--- The deck's places: no pet; then the target box's two (no kick of their own). THE KICK ON EVERYONE (Arn: "a small
+--- interrupt button next to everyone like their cure and dispell buttons only show up when needed"). Measured in a 40: one
+--- look is 344 calls with all 40 kicks, 274 with five - the engineer's range on 40 boxes is most of it (its view pays that
+--- today); a kick is about two calls.
+function RD.DeckSlots(T, nPets)
+    local M, out = RD.DeckM(), {}
+    for i = 1, T.n + 2 + (nPets or 0) do
+        local crew = i <= T.n
+        out[i] = { b = 0, rh = 0, rc = 0, rb = crew and 0 or nil, ph = M.row - 8, pc = M.chip, pb = M.kick, own = false,
+                   nopet = true, console = true, group = math.ceil(i / 5), pos = (i - 1) % 5 + 1, deck = true,
+                   box = (not crew and i <= T.n + 2) or nil, petBox = (i > T.n + 2) or nil }
+        if i > T.n + 2 then out[i].rb = nil end              -- a pet box: no kick of its own
+        if not RD.Sw("kicks") then out[i].rb = nil end       -- kicks switched off: no kick button anywhere
+    end
+    return out
+end
+
+--[[ PETS ARE PEOPLE TOO (Arn, 15 Nov: "hunter pets should be counted as party members but never go in the top tank spot,
+  and indicated by that paw icon"). Out of a fight, the pets that are out: yours and your party's (in a raid, your own
+  group's), each its own box after the people - never in the tank row (the tank row only ever takes the crew) - with a paw
+  on its name line. A pet called or sent away re-lays the deck (UNIT_PET; in a fight it waits for the fight's end). ]]
+function RD.DeckPets(units, n)
+    local out = {}
+    for i = 1, n do
+        local u = units[i]
+        local mine = (not RD.raid) or math.ceil(i / 5) == (RD.ownGroup or 1)
+        local pet = u and mine and RD.PetOf(u)
+        if pet then
+            local ok, there = pcall(UnitExists, pet)
+            if ok and plain(there) == true then out[#out + 1] = pet end
+        end
+    end
+    return out
+end
+
+-- the paw: the game's own paw print (Track Beasts' icon, asked by its spell id; its file path if the client will not say)
+RD.PAW_SPELL = 1494
+function RD.DeckPaw(sp, on)
+    local plate = sp and sp.deckPlate
+    if not plate then return false end
+    local p = sp.deckPaw
+    if not on then if p then p:Hide() end return false end
+    if not p then
+        p = plate:CreateTexture(nil, "OVERLAY", nil, 6)
+        local tex
+        if C_Spell and C_Spell.GetSpellTexture then
+            local ok, t = pcall(C_Spell.GetSpellTexture, RD.PAW_SPELL)
+            if ok then tex = t end
+        end
+        p:SetTexture(tex or "Interface\\Icons\\Ability_Tracking")
+        if p.SetTexCoord then p:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        p:SetSize(RD.DECK_NAME_BAND + 2, RD.DECK_NAME_BAND + 2)
+        p:SetPoint("TOPRIGHT", plate, "TOPRIGHT", -2, -1)
+        sp.deckPaw = p
+    end
+    p:Show()
+    return true
+end
+
+--- The units the deck's places hold: the crew's own (a copy - RD.units stays the group), then "target" and "targettarget".
+function RD.DeckUnits(units, n, pets)
+    local out = {}
+    for i = 1, n do out[i] = units[i] end
+    out[n + 1], out[n + 2] = "target", "targettarget"
+    for k, p in ipairs(pets or {}) do out[n + 2 + k] = p end
+    return out
+end
+
+function RD.DeckLayout(T, order)
+    local f, C, M = RD.frame, RD.CON, RD.DeckSized(RD.DeckM())
+    local SW = RD.Sw
+    local nT = math.min(RD.deckTanks or 0, T.n)
+    local crew = {}
+    for k = nT + 1, T.n do
+        local i = order[k]
+        if i and RD.units and RD.units[i] then crew[#crew + 1] = i end
+    end
+    local firstPet = #crew + 1
+    for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
+    local place
+    local dw = RD.DeckWidth()
+    if RD.Compact() then
+        place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
+    else
+        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"))
+    end
+    local W = C.pad * 2 + place.w                    -- the tools wrap and the totems stack to fit (RD.DeckTools / DeckTotemRow)
+    RD.deckInnerW = place.w
+    -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
+    -- 15 Nov, a screenshot: "TARGET - ITS TARGET" was drawn over the alert boxes)
+    local band = (RD.DECK_HEADER and place.target and place.target.y == 0) and RD.DECK_LABEL_H or 0
+    local x0, y0 = (W - place.w) / 2, C.pad + RD.DeckHead() + band
+    local placed = {}
+    -- THE ICONS UNDER THE BAR (15 Nov 2026). The kick and the cures are secure buttons that keep their click while unseen
+    -- (a secure button's mouse may not change in a fight) - laid over the bar they ate the heal (Arn: "the middle part of
+    -- the healing frame cast the cure disease"). First they went to the box's sides; then (Arn: "lets go taller and put the
+    -- kick dispells under") into a ROW UNDER THE BAR: the heal pip - your binds, the name, the bar - takes the box's whole
+    -- width above, the icon row the bottom `icons` px, the kick at its left, the cures at its right. Nothing overlaps.
+    local function put(i, r, kick)
+        local sp = RD.spokes[i]
+        if not (sp and r) then return end
+        local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
+        local plate = RD.DeckPlate(sp)
+        plate:SetSize(r.w, r.h)
+        at(plate, left + r.w / 2, cy)
+        plate:Show()
+        placed[i] = r
+        -- A SHORT BOX (the engineer's raid rows): the bar takes the box's whole height, the icons a thin column at its
+        -- right end - kick at the foot, cures above it - never over the bar (a secure icon keeps its click unseen)
+        local is = r.short and (M.short or 10) or nil
+        local ih = is and 0 or M.icons
+        local ph = is and (r.h - 2) or (r.h - ih - 1)            -- the pip: the bar's height
+        local pw = is and (r.w - 3 - is) or (r.w - 2)            -- and its width
+        local ks = is or math.min(M.kick, ih - 2)
+        local cs = is or math.min(M.chip, ih - 2)
+        local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
+        sp.heal:SetSize(pw, ph)
+        at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
+        sp.heal:Show()
+        settle(sp)
+        local lvl = sp.heal:GetFrameLevel()
+        local colX = right - 1 - (is or 0) / 2                    -- a short box's icon column
+        local footY = y0 + r.y + r.h - 1 - (is or 0) / 2
+        kick = kick and SW("kicks")
+        if sp.bogey and not SW("kicks") then sp.bogey:Hide() end     -- switched off: disarmed in RD.DeckSlots, out of sight
+        if kick and sp.bogey then
+            sp.bogey:SetSize(ks, ks)
+            if is then at(sp.bogey, colX, footY) else at(sp.bogey, left + 2 + ks / 2, icy) end
+            sp.bogey:SetFrameLevel(lvl + 3)
+            RD.DeckKick(sp)                                   -- your interrupt's own icon, red-rimmed
+        end
+        RD.MakeCastStrip(sp)                                  -- the mini cast bar, made here, out of a fight
+        RD.PlaceCastStrip(sp, ih > 0 and { left + 1, y0 + r.y + r.h - ih, right - 1, y0 + r.y + r.h - 1 } or nil)
+        local x = right - 2
+        local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
+        for _, c in ipairs(sp.cures or {}) do
+            if not SW("cures") then
+                if c.box:IsShown() then c.swHidden = true c.box:Hide() end
+                if c.container and c.container.Hide then c.container:Hide() end
+            elseif c.swHidden then
+                c.swHidden = nil
+                c.box:Show()
+                if c.container and c.container.Show then c.container:Show() end
+            end
+            c.box:SetSize(cs, cs)
+            if is then
+                at(c.box, colX, cyCol)
+                cyCol = cyCol - is - 1
+            else
+                at(c.box, x - cs / 2, icy)
+                x = x - cs - 2
+            end
+            c.box:SetFrameLevel(lvl + 3)
+            if c.holder then c.holder:SetFrameLevel(lvl + 4) end
+            if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
+        end
+        RD.DeckTag(sp, r.w)                               -- the name across the whole box
+    end
+    for k = 1, nT do put(order[k], place.tanks[k], true) end
+    for r, i in ipairs(crew) do
+        put(i, place.rest[r], r < firstPet)
+        RD.DeckPaw(RD.spokes[i], r >= firstPet)
+    end
+    for k = 1, nT do RD.DeckPaw(RD.spokes[order[k]], false) end
+    for i = T.n + 1, T.n + 2 do if RD.spokes[i] then RD.DeckPaw(RD.spokes[i], false) end end
+    -- the empty places: out of sight (the deck grows down instead of keeping holes)
+    for k = 1, T.n do
+        local i = order[k]
+        local sp = i and RD.spokes[i]
+        if sp and not placed[i] then
+            sp.heal:Hide()
+            if sp.bogey then sp.bogey:Hide() end
+            if sp.deckPlate then sp.deckPlate:Hide() end
+        end
+    end
+    -- the target pair: no outline (Arn, 15 Nov: "the colors clash too much ... maybe just the header text with a line above
+    -- them"), a thin line over the two boxes with their job written on it, in the deck's quiet grey
+    local box = RD.deckBox
+    if not box then
+        box = CreateFrame("Frame", nil, RD.conLayer)
+        local c = RD.DECK_BOX_COL
+        box.line = box:CreateTexture(nil, "OVERLAY")
+        box.line:SetColorTexture(c[1], c[2], c[3], c[4])
+        box.line:SetHeight(1)
+        box.line:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 0, RD.DECK_LINE_UP)
+        box.line:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", 0, RD.DECK_LINE_UP)
+        box.label = box:CreateFontString(nil, "OVERLAY")
+        box.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 7, "")
+        box.label:SetPoint("BOTTOMLEFT", box.line, "TOPLEFT", 1, 2)   -- over the line, in the strip above the top row
+        box.label:SetTextColor(c[1], c[2], c[3], 1)
+        box.label:SetText("TARGET · ITS TARGET")
+        RD.deckBox = box
+    end
+    -- NO HEADER ANY MORE (Arn, 15 Nov night: "instead of the bar up top that says target and its target we just pretend
+    -- thats the name and put it in that place"): the two boxes' own name lines say TARGET / ITS TARGET while nobody is
+    -- there (RD.BoxName); the line and its words stay built, hidden
+    box.line:Hide()
+    box.label:Hide()
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", f, "TOPLEFT", x0 + place.box.x, -(y0 + place.box.y))
+    box:SetSize(place.box.w, place.box.h)
+    box:Show()
+    if place.target then
+        put(T.n + 1, place.target, false)
+        put(T.n + 2, place.tot, false)
+    else                                              -- the target pair switched off: out of sight, nothing to click
+        for i = T.n + 1, T.n + 2 do
+            local sp = RD.spokes[i]
+            if sp then
+                sp.heal:Hide()
+                if sp.deckPlate then sp.deckPlate:Hide() end
+                if sp.deckTag then sp.deckTag:Hide() end
+                if sp.castStrip then sp.castStrip:SetAlpha(0) end
+            end
+        end
+    end
+    -- the deck of buttons under the crew: the tools (wrapped to fit), then the totems and their timers (stacked to fit)
+    local y = y0 + place.h + C.gap
+    if SW("tools") then y = y + RD.DeckTools(W, y) else RD.HideTools() end
+    y = y + RD.DeckTotemRow(W, y)
+    local H = y - C.gap + C.pad
+    f:SetSize(W, H)
+    return { W = W, H = H, tier = T, placed = placed, place = place, deck = true, rows = { tools = yt } }
+end
+
+--[[ THE TOTEMS' TIMERS (15 Nov 2026, Arn: "we have a lot of room on the totem class utility row, can we add 4 boxes can be
+  long to acommodate 5:00 timer for the totems, with a icon of what totem it is in this order grey air blue water brown
+  earth and red fire"). On the deck's totem row: CALL, BRING, RECALL at its left, then four long boxes to its right edge,
+  air / water / earth / fire, each edged in its element's colour, the standing totem's icon at its left and the GAME'S own
+  countdown beside it (a Cooldown fed GetTotemDuration's object - the client counts and writes the number, in a fight too;
+  out of a fight the plain start/length). The icon from GetTotemInfo, handed to the texture untouched (secret or not).
+  Shown for anyone who has totems (the totem buttons armed, RD.ArmTotems); repainted on PLAYER_TOTEM_UPDATE. ]]
+RD.TOTEM_TIMERS = {                                -- the game's totem slots: 1 fire, 2 earth, 3 water, 4 air
+    { slot = 4, col = { 0.72, 0.74, 0.80, 1 } },   -- air: grey
+    { slot = 3, col = { 0.25, 0.55, 1.00, 1 } },   -- water: blue
+    { slot = 2, col = { 0.62, 0.42, 0.22, 1 } },   -- earth: brown
+    { slot = 1, col = { 1.00, 0.32, 0.26, 1 } },   -- fire: red
+}
+--[[ A CLICK DROPS IT AGAIN (Arn, 15 Nov: "will it remember what [totem icon timer] and i click it will it be able to drop
+  it, we drop the totem first out of combat and make a macro in it"). Each box is a secure button: out of a fight the
+  standing totem's NAME is plain, so it is remembered for its slot (db().totemSlots, kept across a reload) and the box's
+  click becomes `/cast <that totem>` - which then works in a fight too. Under the live icon, the remembered totem's icon,
+  dim: an empty slot still shows what a click drops. A totem swapped in mid-fight is learned when the fight ends (the
+  names are secret in one). ]]
+RD.TIMER_DIM = 0.45
+RD.TIMER_FULL = 600                                 -- seconds under which the timer shows minutes:seconds (a totem lasts 300)
+RD.TIMER_SHORT = 60                                 -- the engineer's view: "5m", then plain seconds (Arn: "just 5m or 00")
+function RD.TotemTimer(k)
+    RD.timers = RD.timers or {}
+    local t = RD.timers[k]
+    if t then return t end
+    local spec = RD.TOTEM_TIMERS[k]
+    t = CreateFrame("Button", nil, RD.conLayer, "SecureActionButtonTemplate")
+    if t.RegisterForClicks then t:RegisterForClicks("AnyDown") end
+    t.bg = t:CreateTexture(nil, "BACKGROUND")
+    t.bg:SetAllPoints(t)
+    t.bg:SetColorTexture(0, 0, 0, 0.4)
+    t.edges = edge(t, spec.col, 1.5)
+    t.base = t:CreateTexture(nil, "BORDER")                 -- the remembered totem, dim
+    t.base:SetPoint("TOPLEFT", t, "TOPLEFT", 2, -2)
+    t.base:SetPoint("BOTTOMLEFT", t, "BOTTOMLEFT", 2, 2)
+    if t.base.SetTexCoord then t.base:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    t.base:SetAlpha(RD.TIMER_DIM)
+    t.icon = t:CreateTexture(nil, "ARTWORK")                -- the standing totem, the game's own icon
+    t.icon:SetPoint("TOPLEFT", t, "TOPLEFT", 2, -2)
+    t.icon:SetPoint("BOTTOMLEFT", t, "BOTTOMLEFT", 2, 2)
+    if t.icon.SetTexCoord then t.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    t:SetScript("OnEnter", function(self)
+        if not self.totem and not combat() then RD.LearnTimers() end   -- not learned yet: try now (out of a fight)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(self.totem and self.totem:upper() or "TOTEM TIMER")
+        GameTooltip:AddLine(self.totem and "Click: drop it again." or "Drop a totem out of a fight: this box remembers it.",
+            1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    t:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    local okCd, cd = pcall(CreateFrame, "Cooldown", nil, t, "CooldownFrameTemplate")
+    if okCd and cd then
+        cd:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 2, 0)
+        cd:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2)
+        if cd.SetDrawSwipe then cd:SetDrawSwipe(false) end          -- the number only: a long box takes no round swipe
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+        -- THE FULL TIME, 4:59 (Arn, 15 Nov: "can we do a full timer 0:00"): the client writes "4m" above its abbreviation
+        -- threshold; raised past a totem's 5 minutes, it writes minutes and seconds the whole way (still the client's
+        -- number, so it holds in a fight). Not every client has the setting: then it stays "4m".
+        if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TIMER_FULL) end
+        t.cd = cd
+    end
+    t.slot = spec.slot
+    RD.timers[k] = t
+    return t
+end
+
+--- A standing totem's name is its CREATURE's, rank and all ("Mana Spring Totem II"); the spell has no numeral. Off it comes,
+--- and /cast picks your highest rank (16 Nov 2026, Arn: "water and earth totem still not drop when click" - his water and
+--- earth were rank 2, air and fire rank 1).
+function RD.TotemSpell(name)
+    if type(name) ~= "string" then return nil end
+    local bare = name:gsub("%s+[IVX]+$", "")
+    return bare ~= "" and bare or nil
+end
+
+--- Out of a fight: learn the standing totem's name for each slot (kept), and arm each box's click with its remembered one.
+function RD.LearnTimers()
+    if combat() or RD.inFight then return false end
+    local d = db()
+    d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
+    for _, t in ipairs(RD.timers or {}) do
+        local okI, _, name = pcall(GetTotemInfo, t.slot)
+        name = okI and plain(name) or nil
+        if type(name) == "string" and name ~= "" then d.totemSlots[t.slot] = RD.TotemSpell(name) end
+        local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
+        t.totem = want
+        t:SetAttribute("type1", want and "macro" or nil)
+        t:SetAttribute("macrotext1", want and ("/cast " .. want) or nil)
+        local tex
+        if want and C_Spell and C_Spell.GetSpellTexture then
+            local ok, x = pcall(C_Spell.GetSpellTexture, want)
+            if ok then tex = x end
+        end
+        pcall(t.base.SetTexture, t.base, tex)
+    end
+    return true
+end
+
+--- One timer box from its slot: the icon untouched, the game's own countdown (or nothing for an empty slot).
+function RD.PaintTimer(t)
+    if not (t and t:IsShown()) then return false end
+    local okI, _, _, start, dur, icon = pcall(GetTotemInfo, t.slot)
+    pcall(t.icon.SetTexture, t.icon, okI and icon or nil)
+    local cd = t.cd
+    if not cd then return okI end
+    local obj
+    if GetTotemDuration then
+        local ok, o = pcall(GetTotemDuration, t.slot)
+        if ok then obj = o end
+    end
+    if obj and cd.SetCooldownFromDurationObject and pcall(cd.SetCooldownFromDurationObject, cd, obj) then return true end
+    local st, d = nil, nil
+    if okI then
+        st = plain(start)
+        d = plain(dur)
+    end
+    if type(st) == "number" and type(d) == "number" and d > 0 and cd.SetCooldown then
+        cd:SetCooldown(st, d)
+    elseif cd.Clear then
+        cd:Clear()
+    end
+    return true
+end
+function RD.PaintTimers()
+    for _, t in ipairs(RD.timers or {}) do RD.PaintTimer(t) end
+end
+
+--[[ WHERE THE NUMBER GOES (16 Nov 2026, Arn's screenshots: "3m" drawn over the totem's icon in a narrow window). The
+  client centres its countdown in the Cooldown frame and writes it at its own size, so a strip narrower than the number
+  spills over the icon. With room (RD.TIMER_ROOM) the number stays beside the icon; without, it sits ON the icon, small
+  and outlined, the way an action button shows its cooldown. ]]
+RD.TIMER_ROOM = 22                                  -- px beside the icon a "4:59" / "3m" needs
+RD.TIMER_FONT = 10                                  -- the number's size when it sits on the icon
+function RD.TimerSpot(t, tw)
+    local cd = t and t.cd
+    if not cd then return nil end
+    local room = (tonumber(tw) or 0) - (RD.SYS_PX - 4) - 6
+    local on = room < RD.TIMER_ROOM
+    cd:ClearAllPoints()
+    if on then
+        cd:SetPoint("TOPLEFT", t.icon, "TOPLEFT", 0, 0)
+        cd:SetPoint("BOTTOMRIGHT", t.icon, "BOTTOMRIGHT", 0, 0)
+    else
+        cd:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 2, 0)
+        cd:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2)
+    end
+    -- the client's own number: a smaller font on the icon, its own beside it
+    if cd.GetRegions then
+        for _, reg in ipairs({ cd:GetRegions() }) do
+            if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" and reg.SetFont then
+                if not t.numFont and reg.GetFont then t.numFont = { reg:GetFont() } end
+                local f = t.numFont or {}
+                if on then
+                    pcall(reg.SetFont, reg, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", RD.TIMER_FONT, "OUTLINE")
+                elseif f[1] then
+                    pcall(reg.SetFont, reg, f[1], f[2], f[3])
+                end
+            end
+        end
+    end
+    t.numOnIcon = on
+    return on
+end
+
+--- The deck's totem row: the totem buttons you know at its left, then the four timers to its right edge. Answers the height
+--- it took (0 = no totems: nothing shown).
+function RD.DeckTotemRow(W, top)
+    local list = {}
+    for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
+    for k = 1, 3 do if RD.conSquares and RD.conSquares["totem" .. k] then RD.conSquares["totem" .. k]:Hide() end end
+    for k = 1, #RD.TOTEM_TIMERS do if RD.timers and RD.timers[k] then RD.timers[k]:Hide() end end
+    if #list == 0 then return 0 end
+    local wantB, wantT = RD.Sw("totems"), RD.Sw("timers")
+    if not wantB then for _, b in ipairs(list) do b:Hide() end end
+    if not (wantB or wantT) then return 0 end
+    -- STACKED (16 Nov 2026, Arn: "even if it means we stack the totem timers / call move recall / air water / earth fire"):
+    -- narrower than the one-line row, or with one of the two switched off - the buttons on a line, then two timers a line
+    if not (wantB and wantT) or W < RD.TotemWideW() then return RD.DeckTotemStack(W, top, list, wantB, wantT) end
+    local y = top - RD.SYS_PX - RD.CON.gap + RD.SYS_PX / 2   -- the one-line row's own reckoning: `y` = the row above's middle
+    -- SPLIT DOWN THE MIDDLE (Arn, 15 Nov: "totem bar can we split totem down the middle and put the call recall and bring
+    -- in the center"): air and water on the left, CALL / BRING / RECALL in the middle, earth and fire on the right - each
+    -- pair of timers stretched over its half. No square round the buttons (the deck's icons are dim or bright alone).
+    local C, gap = RD.CON, RD.CON.toolGap
+    local y6 = y + RD.SYS_PX + C.gap
+    local bw = #list * RD.SYS_PX + (#list - 1) * gap
+    local bl = (W - bw) / 2                              -- the buttons' left edge, centred
+    for k, b in ipairs(list) do
+        at(b, bl + RD.SYS_PX / 2 + (k - 1) * (RD.SYS_PX + gap), y6)
+    end
+    local sideGap = 4
+    local leftW = bl - sideGap - C.pad                  -- each half's room for its two timers
+    local tw = math.floor((leftW - gap) / 2)
+    local starts = { C.pad, C.pad + tw + gap, bl + bw + sideGap, bl + bw + sideGap + tw + gap }   -- air, water | earth, fire
+    for k = 1, #RD.TOTEM_TIMERS do
+        local t = RD.TotemTimer(k)
+        t:SetSize(tw, RD.SYS_PX)
+        t:ClearAllPoints()
+        t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", starts[k], -(y6 - RD.SYS_PX / 2))
+        t.icon:SetWidth(RD.SYS_PX - 4)
+        t.base:SetWidth(RD.SYS_PX - 4)
+        RD.TimerSpot(t, tw)
+        -- the engineer's view: "5m", then seconds (Arn: "no 0:00 timer just 5m or 00"); the deck: 4:59 the whole way
+        local cd = t.cd
+        if cd and cd.SetCountdownAbbrevThreshold then
+            pcall(cd.SetCountdownAbbrevThreshold, cd, RD.Compact() and RD.TIMER_SHORT or RD.TIMER_FULL)
+        end
+        t:Show()
+    end
+    RD.LearnTimers()                                   -- each box's remembered totem, and its click
+    RD.PaintTimers()
+    return RD.SYS_PX + C.gap
+end
+
+--- The totems stacked: CALL / BRING / RECALL centred on a line (if on), then air + water, then earth + fire (if on), each
+--- pair across the whole width. Answers the height taken, with the gap under it.
+function RD.DeckTotemStack(W, top, list, wantB, wantT)
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local y = top
+    if wantB then
+        local bw = #list * S + (#list - 1) * gap
+        local bl = (W - bw) / 2
+        for k, b in ipairs(list) do at(b, bl + S / 2 + (k - 1) * (S + gap), y + S / 2) end
+        y = y + S + C.gap
+    end
+    if wantT then
+        local inner = W - 2 * C.pad
+        local tw = math.floor((inner - gap) / 2)
+        for k = 1, #RD.TOTEM_TIMERS do
+            local t = RD.TotemTimer(k)
+            local line, col = math.ceil(k / 2), (k - 1) % 2       -- air, water | earth, fire
+            local w = (col == 0) and tw or (inner - tw - gap)
+            t:SetSize(w, S)
+            t:ClearAllPoints()
+            t:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", C.pad + col * (tw + gap), -(y + (line - 1) * (S + C.gap)))
+            t.icon:SetWidth(S - 4)
+            t.base:SetWidth(S - 4)
+            RD.TimerSpot(t, w)
+            if t.cd and t.cd.SetCountdownAbbrevThreshold then
+                pcall(t.cd.SetCountdownAbbrevThreshold, t.cd, (w < 60) and RD.TIMER_SHORT or RD.TIMER_FULL)
+            end
+            t:Show()
+        end
+        y = y + 2 * (S + C.gap)
+        RD.LearnTimers()
+        RD.PaintTimers()
+    end
+    return y - top
+end
+
 --- Put everything on the grid. Out of a fight only (RD.Arm calls it). Answers the grid.
 function RD.ConsoleLayout()
     local f = RD.frame
@@ -1965,8 +3133,14 @@ function RD.ConsoleLayout()
     end
     RD.conLayer:Show()
     for _, q in pairs(RD.conSquares or {}) do q:Hide() end
+    if RD.deckBox then RD.deckBox:Hide() end
+    RD.DeckClear()                                   -- the deck puts back the ones it places
     local T = RD.ConsoleTier()
     local order = RD.conOrder or {}
+    if RD.Deck() then
+        RD.conGrid = RD.DeckLayout(T, order)
+        return RD.conGrid
+    end
     if T.n > 5 then
         RD.conGrid = RD.ConsoleLayoutWide(T, order)
         return RD.conGrid
@@ -2018,6 +3192,8 @@ function RD.RadarLayout()
         if h then b:ClearAllPoints() b:SetPoint(h[1], h[2], h[3], h[4], h[5]) end
     end
     if RD.conLayer then RD.conLayer:Hide() end
+    if RD.deckBox then RD.deckBox:Hide() end          -- the deck's target box goes with the console's layer
+    RD.DeckClear()
     return true
 end
 
@@ -2031,7 +3207,7 @@ function RD.ApplyView()
     vis(RD.toolRail, not con)
     vis(RD.gaugeRail, not con)
     vis(RD.defRail, not con)
-    vis(RD.bbRail, not con)
+    vis(RD.bbRail, not con or (RD.Deck() and RD.Sw("bb")))   -- the deck keeps the black box (Arn: "dont forget my black box"), unless switched off
     vis(RD.gauge, not con)
     -- the tape's pieces that hang on the radar frame itself: the regen readout, its chevron, the ramjet
     local g = RD.gauge
@@ -2056,28 +3232,31 @@ function RD.PlaceViewButton()
         b:SetSize(RD.SYS_PX, RD.SYS_PX)
         if c then c:SetPoint("BOTTOM", b, "TOP", 0, 4) c:SetSize(RD.SYS_PX, RD.SYS_PX) end
     end
+    if c then c:SetShown(not RD.Deck()) end                -- the deck and the engineer size themselves: no size button
     RD.PaintViewButton()
 end
 
 function RD.PaintViewButton()
     local b = RD.viewBtn
     if not b then return end
-    local con = RD.Console()
-    -- no words on the radar: a drawn sign of where the click goes - four small squares (the engineer's console), a ring
-    -- (the radar)
+    -- since 15 Nov the two sides are the DECK and the engineer's view (the radar disc retired): a drawn sign of where the
+    -- click goes - four small squares (the engineer's view), a ring (back to the deck)
+    local con = RD.EngineerView() == true
     for _, t in ipairs(b.grid) do t:SetAlpha(con and 0 or 1) end
     for _, l in ipairs(b.ring) do l:SetAlpha(con and 1 or 0) end
-    b.tip = con and { "ENGINEER VIEW", "Click: back to the radar.  Out of a fight." }
-            or { "RADAR", "Click: the engineer's view - the same buttons on a plain grid (for anyone who would rather not "
-                 .. "have the radar).  Out of a fight." }
+    b.tip = con and { "ENGINEER VIEW", "Click: back to the deck.  Out of a fight." }
+            or { "DECK", "Click: the engineer's view - the same buttons on a plain grid.  Out of a fight." }
+    if RD.Deck() and not con then                     -- one window since 16 Nov: the button opens its switches
+        b.tip = { "SWITCHES", "Click: what this window shows - names, kicks, cures, totems, the black box..." }
+    end
     local c = RD.classBtn
     if c then
         local T, k = RD.ConsoleTier()
         for j, t in ipairs(c.dots) do t:SetAlpha(j <= k and 1 or 0.18) end
         local nk = k % #RD.CON_TIERS + 1
         local nT = RD.CON_TIERS[nk]
-        c.tip = { T.name .. " (" .. T.n .. ")", "Click: " .. nT.name .. " (" .. nT.n .. ") - the next class of ship, in any "
-                  .. "group (a preview; a class too small for your group is skipped).  Out of a fight." }
+        c.tip = { T.name, "Click: " .. nT.name .. " - the next group size, in any group (a preview; a size too small "
+                  .. "for your group is skipped).  Out of a fight." }
     end
 end
 
@@ -2167,7 +3346,14 @@ function RD.BuildViewButton(f)
     b.hl:SetAllPoints(b)
     b.hl:SetTexture(RD.WHITE)
     b.hl:SetVertexColor(c[1], c[2], c[3], 0.22)
-    b:SetScript("OnClick", function() RD.ToggleView() end)
+    b:SetScript("OnClick", function(self)
+        if RD.Deck() and not RD.EngineerView() then RD.ToggleSwitches() return end
+        RD.ToggleView()
+        -- the tooltip says where the NEXT click goes: written again at once (Arn's screenshot, 15 Nov: still "DECK - click:
+        -- the engineer's view" while the engineer's view showed)
+        local onEnter = self.GetScript and self:GetScript("OnEnter")
+        if onEnter and GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then onEnter(self) end
+    end)
     b:SetScript("OnEnter", function(self)
         local tip = self.tip
         if not (tip and GameTooltip) then return end
@@ -2180,6 +3366,253 @@ function RD.BuildViewButton(f)
     RD.viewBtn = b
     RD.PlaceViewButton()
     return b
+end
+
+--[[ THE SWITCHES PANEL (16 Nov 2026). Beside the window, from its switches button: BARE / LEAN / FULL on top, then a row
+  per switch in its group. Every row glows on hover (wash + left bar, the family rule) and is scaled up for a small window.
+  A click switches it; in a fight it is saved and laid out when the fight ends (the row says so). Esc closes it. ]]
+RD.SW_ROW_H = 18
+RD.SW_W = 210
+local function swWash(row, on)
+    if row.wash then row.wash:SetShown(on) end
+    if row.bar then row.bar:SetShown(on) end
+end
+function RD.BuildSwitches()
+    if RD.swPanel then return RD.swPanel end
+    local c = RD.PHOS
+    local p = CreateFrame("Frame", "BiSHealingSwitches", UIParent)
+    p:SetFrameStrata("DIALOG")
+    p:SetScale(1.2)
+    p:SetClampedToScreen(true)
+    p:EnableMouse(true)
+    p.bg = p:CreateTexture(nil, "BACKGROUND")
+    p.bg:SetAllPoints(p)
+    local P = RD.PLATE or { 0.05, 0.04, 0.09 }
+    p.bg:SetColorTexture(P[1], P[2], P[3], 0.97)
+    p.edges = edge(p, { c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 1 }, 1)
+    local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    p.title = p:CreateFontString(nil, "OVERLAY")
+    p.title:SetFont(font, 11, "")
+    p.title:SetTextColor(c[1], c[2], c[3], 1)
+    p.title:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -7)
+    p.title:SetText("SWITCHES")
+    p.note = p:CreateFontString(nil, "OVERLAY")
+    p.note:SetFont(font, 9, "")
+    p.note:SetTextColor(1, 0.75, 0.3, 1)
+    p.note:SetPoint("LEFT", p.title, "RIGHT", 8, 0)
+    local close = CreateFrame("Button", nil, p)
+    close:SetSize(14, 14)
+    close:SetPoint("TOPRIGHT", p, "TOPRIGHT", -4, -4)
+    close.x = close:CreateFontString(nil, "OVERLAY")
+    close.x:SetFont(font, 11, "")
+    close.x:SetPoint("CENTER")
+    close.x:SetText("x")
+    close.hl = close:CreateTexture(nil, "HIGHLIGHT")
+    close.hl:SetAllPoints(close)
+    close.hl:SetColorTexture(c[1], c[2], c[3], 0.22)
+    close:SetScript("OnClick", function() p:Hide() end)
+    -- the three presets
+    p.presets = {}
+    local pw = math.floor((RD.SW_W - 16 - 8) / 3)
+    for k, name in ipairs(RD.SW_ORDER) do
+        local b = CreateFrame("Button", nil, p)
+        b:SetSize(pw, 18)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + (k - 1) * (pw + 4), -24)
+        b.edges = edge(b, { c[1] * 0.5, c[2] * 0.5, c[3] * 0.5, 1 }, 1)
+        b.text = b:CreateFontString(nil, "OVERLAY")
+        b.text:SetFont(font, 10, "")
+        b.text:SetPoint("CENTER")
+        b.text:SetText(RD.SW_WORD[name])
+        b.hl = b:CreateTexture(nil, "HIGHLIGHT")
+        b.hl:SetAllPoints(b)
+        b.hl:SetColorTexture(c[1], c[2], c[3], 0.25)
+        b.preset = name
+        b:SetScript("OnClick", function() RD.SwPreset(name) end)
+        p.presets[name] = b
+    end
+    -- THE SLIDERS: the width (the same as Shift + drag on the corner) and the boxes' height. Laid out again at most every
+    -- RD.WIDTH_EVERY seconds while dragging, and once more when let go. Right-click one: back to its own.
+    p.sliders = {}
+    local function slider(key, label, y, lo, hi, step, get, set, unit)
+        local s = CreateFrame("Slider", nil, p)
+        s:SetOrientation("HORIZONTAL")
+        s:SetSize(RD.SW_W - 16 - 56 - 44, 12)
+        s:SetPoint("TOPLEFT", p, "TOPLEFT", 64, y - 4)
+        s:SetMinMaxValues(lo, hi)
+        s:SetValueStep(step)
+        if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+        s:EnableMouse(true)
+        s.track = s:CreateTexture(nil, "BACKGROUND")
+        s.track:SetPoint("LEFT") s.track:SetPoint("RIGHT") s.track:SetHeight(3)
+        s.track:SetColorTexture(c[1] * 0.4, c[2] * 0.4, c[3] * 0.4, 1)
+        local th = s:CreateTexture(nil, "OVERLAY")
+        th:SetColorTexture(1, 0.31, 0.66, 1)
+        th:SetSize(6, 12)
+        s:SetThumbTexture(th)
+        s.label = s:CreateFontString(nil, "OVERLAY")
+        s.label:SetFont(font, 9, "")
+        s.label:SetTextColor(0.85, 0.85, 0.9, 1)
+        s.label:SetPoint("RIGHT", s, "LEFT", -6, 0)
+        s.label:SetText(label)
+        s.value = s:CreateFontString(nil, "OVERLAY")
+        s.value:SetFont(font, 9, "")
+        s.value:SetTextColor(c[1], c[2], c[3], 1)
+        s.value:SetPoint("LEFT", s, "RIGHT", 6, 0)
+        s.get, s.set, s.unit, s.last = get, set, unit, 0
+        local function apply(self, now)
+            if combat() or RD.inFight then return end
+            if not now and (GetTime() - self.last) < RD.WIDTH_EVERY then self.dirty = true return end
+            self.last, self.dirty = GetTime(), nil
+            if RD.Active() then RD.Arm() end
+        end
+        s:SetScript("OnValueChanged", function(self, v, user)
+            if self.painting then return end
+            v = math.floor((tonumber(v) or 0) / step + 0.5) * step
+            self.value:SetText(v .. self.unit)
+            if user == false then return end
+            self.set(v)
+            apply(self, false)
+        end)
+        s:SetScript("OnMouseUp", function(self, button)
+            if button == "RightButton" then self.set(nil) RD.PaintSwitches() end
+            apply(self, true)
+            RD.PaintSwitches()
+        end)
+        s:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(label)
+            GameTooltip:AddLine("Drag to change it.  Right-click: back to its own.  Out of a fight.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        s:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        p.sliders[key] = s
+        return s
+    end
+    slider("width", "WIDTH", -48, RD.FloorInner(), 800, 2,
+        function() return RD.DeckWidth() or tonumber(RD.deckInnerW) or 382 end,
+        function(v) RD.SetDeckWidth(v) end, " px")
+    slider("height", "BOX HEIGHT", -66, RD.BOX_H_MIN, RD.BOX_H_MAX, RD.BOX_H_STEP,
+        function() return RD.BoxHeight() end,
+        function(v) RD.SetBoxHeight(v) end, "%")
+    -- a row per switch, under its group's word
+    p.rows = {}
+    local y, group = -88, nil
+    for _, s in ipairs(RD.SW) do
+        if s.group ~= group then
+            group = s.group
+            local h = p:CreateFontString(nil, "OVERLAY")
+            h:SetFont(font, 8, "")
+            h:SetTextColor(1, 0.7, 0.28, 1)
+            h:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 3)
+            h:SetText(group)
+            y = y - 14
+        end
+        local row = CreateFrame("Button", nil, p)
+        row:SetPoint("TOPLEFT", p, "TOPLEFT", 4, y)
+        row:SetSize(RD.SW_W - 8, RD.SW_ROW_H)
+        row.wash = row:CreateTexture(nil, "BACKGROUND")
+        row.wash:SetAllPoints(row)
+        row.wash:SetColorTexture(c[1], c[2], c[3], 0.14)
+        row.wash:Hide()
+        row.bar = row:CreateTexture(nil, "ARTWORK")
+        row.bar:SetPoint("TOPLEFT", row, "TOPLEFT")
+        row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT")
+        row.bar:SetWidth(2)
+        row.bar:SetColorTexture(1, 0.31, 0.66, 1)
+        row.bar:Hide()
+        row.box = CreateFrame("Frame", nil, row)
+        row.box:SetSize(11, 11)
+        row.box:SetPoint("LEFT", row, "LEFT", 6, 0)
+        row.box.edges = edge(row.box, { c[1] * 0.7, c[2] * 0.7, c[3] * 0.7, 1 }, 1)
+        row.box.fill = row.box:CreateTexture(nil, "ARTWORK")
+        row.box.fill:SetPoint("TOPLEFT", row.box, "TOPLEFT", 2, -2)
+        row.box.fill:SetPoint("BOTTOMRIGHT", row.box, "BOTTOMRIGHT", -2, 2)
+        row.box.fill:SetColorTexture(c[1], c[2], c[3], 1)
+        row.text = row:CreateFontString(nil, "OVERLAY")
+        row.text:SetFont(font, 10, "")
+        row.text:SetPoint("LEFT", row.box, "RIGHT", 7, 0)
+        row.text:SetText(s.name)
+        row.key = s.key
+        row:SetScript("OnClick", function() RD.SetSw(s.key, not RD.Sw(s.key)) end)
+        row:SetScript("OnEnter", function(self)
+            swWash(self, true)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(s.name:upper())
+                GameTooltip:AddLine(s.tip, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
+        p.rows[#p.rows + 1] = row
+        y = y - RD.SW_ROW_H
+    end
+    local reset = CreateFrame("Button", nil, p)
+    reset:SetSize(RD.SW_W - 16, 18)
+    reset:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 6)
+    reset.edges = edge(reset, { 1, 0.7, 0.28, 0.6 }, 1)
+    reset.text = reset:CreateFontString(nil, "OVERLAY")
+    reset.text:SetFont(font, 10, "")
+    reset.text:SetTextColor(1, 0.75, 0.3, 1)
+    reset.text:SetPoint("CENTER")
+    reset.text:SetText("RESET")
+    reset.hl = reset:CreateTexture(nil, "HIGHLIGHT")
+    reset.hl:SetAllPoints(reset)
+    reset.hl:SetColorTexture(1, 0.7, 0.28, 0.22)
+    reset:SetScript("OnClick", function() RD.SwReset() end)
+    reset:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("RESET")
+        GameTooltip:AddLine("Everything on, the window's own width, boxes and window at 100%.  Out of a fight.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    reset:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    p.reset = reset
+    y = y - 6 - 18
+    p:SetSize(RD.SW_W, -y + 8)
+    p:Hide()
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingSwitches") end   -- Esc closes it
+    RD.swPanel = p
+    return p
+end
+--- The panel's ticks, the matching preset lit, and the fight note.
+function RD.PaintSwitches()
+    local p = RD.swPanel
+    if not p then return false end
+    local c = RD.PHOS
+    for _, row in ipairs(p.rows) do
+        local on = RD.Sw(row.key)
+        row.box.fill:SetShown(on)
+        row.text:SetTextColor(on and 1 or 0.55, on and 1 or 0.55, on and 1 or 0.6, 1)
+    end
+    local now = RD.SwPresetNow()
+    for name, b in pairs(p.presets) do
+        local lit = name == now
+        b.text:SetTextColor(lit and c[1] or 0.8, lit and c[2] or 0.8, lit and c[3] or 0.85, 1)
+        for _, e in ipairs(b.edges) do e:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0.35) end
+    end
+    p.note:SetText((combat() or RD.inFight) and "after this fight" or "")
+    for _, s in pairs(p.sliders or {}) do
+        local v = s.get()
+        s.painting = true
+        s:SetValue(v)
+        s.painting = nil
+        s.value:SetText(math.floor(v + 0.5) .. s.unit)
+    end
+    return true
+end
+--- The switches button: open the panel beside the window, or close it.
+function RD.ToggleSwitches()
+    local p = RD.BuildSwitches()
+    if p:IsShown() then p:Hide() return false end
+    p:ClearAllPoints()
+    local f = RD.frame
+    if f then p:SetPoint("TOPLEFT", f, "TOPRIGHT", 6, 0) else p:SetPoint("CENTER") end
+    RD.PaintSwitches()
+    p:Show()
+    return true
 end
 
 --- Where the hull reaches: the top-left of the gauge rail, the bottom-right of the bottom rail (or of the tool rail
@@ -2200,7 +3633,14 @@ function RD.FitWide()
     if RD.Console and RD.Console() and NS.EN and NS.EN.Gauge then NS.EN.Gauge(true)
     elseif RD.gauge and type(w) == "number" and w > 0 then RD.SizeGauge(w) end
     local b = RD.bbRail
-    if b and RD.toolRail then
+    if b and RD.Deck and RD.Deck() then
+        -- THE FLIGHT DECK: the black box hangs straight under the deck, as wide as it (Arn's screenshot, 15 Nov: it sat on
+        -- the radar's old left rail, off to the side, under BiS Tools' box)
+        local gap = RD.RAIL_GAP
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 0, -gap)
+        b:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", 0, -gap)
+    elseif b and RD.toolRail then
         local gap = RD.RAIL_GAP
         b:ClearAllPoints()
         b:SetPoint("TOPLEFT", RD.toolRail, "BOTTOMLEFT", 0, -gap)
@@ -2212,10 +3652,12 @@ function RD.FitHull()
     local h, f = RD.hull, RD.frame
     if not (h and f) then return end
     if RD.Console and RD.Console() then             -- the console: the hull is its own small square
+        -- the flight deck's hull holds its black box too (one contained box), and other addons dock below it
+        local bottom = (RD.Deck and RD.Deck() and RD.BBRail()) or f
         h:ClearAllPoints()
         h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-        h:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
-        RD.FitEdgeFrame(f, f)
+        h:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 0, 0)
+        RD.FitEdgeFrame(f, bottom)
         RD.FitEdges(h)
         return
     end
@@ -2431,7 +3873,7 @@ function RD.ApplyShip(ship)
         plate(sh.plate)
         for _, t in ipairs(sh.cover or {}) do plate(t) end
     end
-    plate(RD.washHole)
+    -- (the last-charge stencil is the buff's own icon now, never painted the plate's dark)
     -- the scope: rings, cross and ticks at the ship's line, dimmed; the brackets; you in the middle in its accent
     local L, k = ship.line, RD.SCOPE_DIM
     for _, l in ipairs(RD.scopeLines or {}) do l:SetVertexColor(L[1] * k, L[2] * k, L[3] * k, 0.85) end
@@ -2797,7 +4239,7 @@ end
 --- Where a slot's pet sits, and how big: a party's beside its owner (turned clockwise), yours below you, a raid's own
 --- group nearer the middle on its owner's bearing. nil = no pet here (a raid's other groups).
 function RD.PetSpot(s)
-    if not s then return nil end
+    if not s or s.nopet then return nil end                -- the deck's places carry no pet (yet)
     local P = RD.PET
     if s.self then
         return math.sin(P.selfB) * P.selfR, math.cos(P.selfB) * P.selfR, RD.raid and P.raidPx or P.px
@@ -2852,6 +4294,7 @@ end
 --- Your binds changed (FM.Apply): every pip and pet in use takes them. Out of a fight only (secure writes).
 function RD.ApplyBinds()
     if combat() then return 0 end
+    if RD.BounceMap then RD.BounceMap() end           -- out of a fight: which party/raid tokens name which box
     local n = 0
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.unit and sp.heal then RD.BindsOn(sp.heal) n = n + 1 end
@@ -2897,7 +4340,9 @@ local function armPet(sp, unit, s)
         p:SetAttribute("unit", nil)
         p:SetAttribute("type1", nil)
         p:Hide()
-        sp.petUnit, sp.petTex = nil, nil
+        -- the size goes with the paw (15 Nov 2026): kept, a pet coming back at the same size found no paw and was never drawn
+        for _, t in ipairs(sp.petTex or {}) do t:Hide() end
+        sp.petUnit, sp.petTex, sp.petPx = nil, nil, nil
         return nil
     end
     p:SetSize(px, px)
@@ -2986,6 +4431,7 @@ local function armCures(sp, unit)
         c.box:SetAttribute("unit", unit)
         c.box:EnableMouse(true)
         c.cure = cure.name
+        RD.DriveCure(c, unit)
         -- the client's marker: a diamond in the cure's colour, only while there is something to cure. Built once per
         -- place and cure; a new unit in the same place is only told who to watch.
         local key = cure.name .. ":" .. math.floor(cx + 0.5) .. ":" .. math.floor(cy + 0.5) .. ":" .. px
@@ -3021,11 +4467,30 @@ local function armCures(sp, unit)
                             local part = button[k]
                             if type(part) == "table" and part.Hide then pcall(part.Hide, part) end
                         end
+                        -- THE CURE'S OWN ICON, IN ITS DEBUFF'S COLOUR (15 Nov 2026, Arn: "when it lights up it lights up with
+                        -- its icon the same size as the other stuff but with its color - poison green, disease brownish,
+                        -- magic blue"): the cure spell's icon filling the marker, a rim in the debuff type's colour - drawn
+                        -- by the client only while such a debuff is on them (it was a small diamond in that colour)
+                        local tex
+                        if C_Spell and C_Spell.GetSpellTexture then
+                            local okT, t = pcall(C_Spell.GetSpellTexture, cure.name)
+                            if okT then tex = t end
+                        end
                         local d = button:CreateTexture(nil, "OVERLAY")
-                        d:SetTexture(RD.WHITE)
-                        d:SetPoint("CENTER") d:SetSize(px * 0.72, px * 0.72)
-                        d:SetVertexColor(col[1], col[2], col[3], col[4])
-                        if d.SetRotation then d:SetRotation(math.pi / 4) end
+                        d:SetPoint("CENTER") d:SetSize(px - 2, px - 2)
+                        if tex then
+                            d:SetTexture(tex)
+                            if d.SetTexCoord then d:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+                        else
+                            d:SetTexture(RD.WHITE)                    -- no icon from the client: the old coloured diamond
+                            d:SetSize(px * 0.72, px * 0.72)
+                            d:SetVertexColor(col[1], col[2], col[3], col[4])
+                            if d.SetRotation then d:SetRotation(math.pi / 4) end
+                        end
+                        local rim = CreateFrame("Frame", nil, button)
+                        rim:SetSize(px, px)
+                        rim:SetPoint("CENTER")
+                        edge(rim, col, 1.5)
                         if button.EnableMouse then pcall(button.EnableMouse, button, false) end
                         if button.SetMouseClickEnabled then pcall(button.SetMouseClickEnabled, button, false) end
                         -- the GCD sweep on the marker: drawn only while the client draws the marker
@@ -3035,6 +4500,27 @@ local function armCures(sp, unit)
             end
         end
     end
+end
+
+--- THE TARGET BOX'S CURES (15 Nov 2026, Arn's screenshot + probe: a green diamond in the box with no target at all). The
+--- client's marker does not redraw when "target" / "targettarget" changes to someone else or to nobody, so the last
+--- target's poison stayed up. The grid's answer (Auras.lua FA.DRIVE): the CLIENT shows the cure button - and here the
+--- marker's holder too - only while that token is someone you can help, a state driver that works in a fight. Any other
+--- unit: the driver comes off and both show as before.
+function RD.DriveCure(c, unit)
+    local cond = NS.FA and NS.FA.DRIVE and NS.FA.DRIVE[unit or ""] or nil
+    if c.driven == cond then return end
+    for _, fr in ipairs({ c.box, c.holder }) do
+        if fr then
+            if cond and RegisterStateDriver then
+                RegisterStateDriver(fr, "visibility", cond)
+            elseif c.driven and UnregisterStateDriver then
+                UnregisterStateDriver(fr, "visibility")
+                fr:Show()
+            end
+        end
+    end
+    c.driven = cond
 end
 
 --- Your watched self buff (Water Shield): the red lights while it is NOT on you. The client's own icon arriving (its
@@ -3072,6 +4558,8 @@ end
 --- With no orange under it the stencil is plate on plate - nothing to see.
 RD.ART = "Interface\\AddOns\\" .. (ADDON or "BiSHealing") .. "\\Art\\"
 RD.WASH_OVER = 3
+RD.SHIELD_RING = 3                                  -- the last charge's orange outline, px round the icon
+RD.SHIELD_UP_DIM = 0.4                              -- the buff's icon while it is up: quiet
 function RD.WashText(px, rgb)
     return ("|TInterface\\Buttons\\WHITE8X8:%d:%d:0:0:8:8:0:8:0:8:%d:%d:%d|t"):format(px, px, rgb[1], rgb[2], rgb[3])
 end
@@ -3104,10 +4592,26 @@ function RD.ShieldWash(button)
         local lvl = clip:GetFrameLevel()
         if type(lvl) == "number" then hole:SetFrameLevel(lvl + 2) end
     end
+    -- THE STENCIL IS THE ICON NOW (15 Nov 2026): the buff's own icon, dim, inset a few pixels - so while it is up the button
+    -- is that icon, quiet on the dark cover (nothing asking for a click); on the last charge the orange square under it
+    -- shows only in the ring round it - an orange outline. (It was the symbol cut out of the plate: an orange symbol.)
+    local inset = RD.SHIELD_RING
+    -- A SOLID BACK UNDER THE ICON (16 Nov 2026, Arn: "the amber outline still covers the whole icon when it's one charge
+    -- left ... can we change the amber to an outline so it does not block the water shield icon"): the icon is dim, so the
+    -- orange square showed through it; on the plate's own dark the orange is left only in the ring round it - an outline
+    local back = hole:CreateTexture(nil, "BACKGROUND")
+    back:SetPoint("TOPLEFT", hole, "TOPLEFT", inset, -inset)
+    back:SetPoint("BOTTOMRIGHT", hole, "BOTTOMRIGHT", -inset, inset)
+    local P = RD.PLATE or { 0.05, 0.04, 0.09 }
+    back:SetColorTexture(P[1], P[2], P[3], 1)
+    RD.washBack = back
     local t = hole:CreateTexture(nil, "ARTWORK")
-    t:SetAllPoints(hole)
-    t:SetTexture(RD.ART .. "gyrohole")
-    t:SetVertexColor(RD.PLATE[1], RD.PLATE[2], RD.PLATE[3], 1)
+    t:SetPoint("TOPLEFT", hole, "TOPLEFT", inset, -inset)
+    t:SetPoint("BOTTOMRIGHT", hole, "BOTTOMRIGHT", -inset, inset)
+    if t.SetTexCoord then t:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    local sb = RD.shield
+    t:SetTexture((sb and sb.shieldTex) or nil)
+    t:SetVertexColor(1, 1, 1, RD.SHIELD_UP_DIM)
     RD.washHole = t
     return pcall(button.SetApplicationCount, button, fs, { formatter = RD.washFmt })
 end
@@ -3158,7 +4662,23 @@ local function armShield()
     -- same for every class)
     b.icon:Hide()
     for _, l in ipairs(b.ring or {}) do l:Hide() end        -- the gyro has its own ring
-    if not b.gyroRed then b.gyroRed = RD.Gyro(b.face, RD.SYS_PX, RD.COL.red, "ARTWORK") end
+    -- THE BUFF'S OWN ICON (15 Nov 2026, Arn: "the red water shield use the icon the classes use that use charges, water
+    -- shield priest inner fire"): under the client's cover, the spell's icon in a red rim - shown, breathing, exactly
+    -- while the buff is gone (the cover hides it whole while it is up). The drawn stabilizer symbol is retired.
+    if not b.shieldIcon then
+        b.shieldIcon = b.face:CreateTexture(nil, "ARTWORK")
+        b.shieldIcon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        b.shieldIcon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        if b.shieldIcon.SetTexCoord then b.shieldIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        b.shieldRim = edge(b.face, RD.COL.red, 1.5)
+    end
+    b.shieldTex = nil
+    if C_Spell and C_Spell.GetSpellTexture then
+        local okT, tx = pcall(C_Spell.GetSpellTexture, name)
+        if okT and tx ~= nil and not (NS.Secret and NS.Secret(tx)) then b.shieldTex = tx end
+    end
+    b.shieldIcon:SetTexture(b.shieldTex)
+    for _, t in ipairs(b.gyroRed or {}) do t:Hide() end      -- a copy built before: the old symbol stays away
     -- the plate: the dark the cover is painted in, so a covered pip looks like the plate alone
     if not b.plate then
         b.plate = b:CreateTexture(nil, "BACKGROUND")
@@ -3166,7 +4686,7 @@ local function armShield()
         b.plate:SetTexture(RD.WHITE)
         b.plate:SetVertexColor(RD.PLATE[1], RD.PLATE[2], RD.PLATE[3], 1)
     end
-    b.tip = { "STABILIZER", name .. " - click to cast it.  Dim green: on you.  Orange: the last charge.  Red: gone." }
+    b.tip = { name:upper(), "Click to cast it.  Dim green: on you.  Orange: the last charge.  Red: gone." }
     b.face:SetAlpha(1)
     if not b.breath and b.face.CreateAnimationGroup then
         local okA, g = pcall(b.face.CreateAnimationGroup, b.face)
@@ -3287,6 +4807,161 @@ local function armUse(b, id)
     b:SetAttribute("*macrotext1", id and ("/use item:" .. id) or nil)
     b:EnableMouse(id and true or false)
     b.item = id
+    if b == RD.rations then RD.FoodIcon(id) end
+end
+
+--- THE FOOD'S OWN ICON on the rations button (15 Nov 2026, Arn: "put the food icon on the H or Fork" - "not always fish just
+--- the food we are eating" - "pre 60 its exp at 60 its the buff food"). Whatever RD.FoodWanted picked - BiS Tools' XP food
+--- while you level, else the food that gives Well Fed - shows its icon on the button's face, where the drawn fork was; no
+--- icon from the client keeps the fork. The face's alpha (food wanted, out of a fight) still decides whether it shows.
+--- THE DRINK AND THE POTION TOO (Arn: "same with the drink put the actual drink i am about to drink"): RD.ItemIcon on any
+--- item button - the item it would use, its icon over the drawn sign (the fork, or a tool's pieces), which steps aside.
+--- REAL ICONS ON EVERY BUTTON (Arn, 15 Nov: "yes use the real icons on all of them"). One helper: a texture the size of the
+--- button on its face (so the face's alpha - lit or not - still decides whether it shows), and the drawn sign steps aside:
+--- the tool's pieces, the rations' fork, the small icon and ring a totem or the res wore. nil = the drawn sign back.
+function RD.RealIcon(b, tex)
+    if not (b and b.face) then return false end
+    if tex ~= nil and NS.Secret and NS.Secret(tex) then tex = nil end
+    if not b.food then
+        b.food = b.face:CreateTexture(nil, "OVERLAY")
+        b.food:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        b.food:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        if b.food.SetTexCoord then b.food:SetTexCoord(0.08, 0.92, 0.08, 0.92) end   -- the icon's own border trimmed
+    end
+    if tex then b.food:SetTexture(tex) b.food:Show() else b.food:Hide() end
+    for _, l in ipairs(b.fork or b.pieces or {}) do if tex then l:Hide() else l:Show() end end
+    -- no ring round a real icon (Arn: "im not liking the blue outline") - the rations' cyan ring was left round its food;
+    -- a totem's or the res's ring and small icon come back only when it has no icon
+    for _, l in ipairs(b.ring or {}) do if tex then l:Hide() elseif b.ringIcon then l:Show() end end
+    if b.icon and tex then b.icon:Hide() elseif b.icon and b.ringIcon then b.icon:Show() end
+    b.iconTex = tex
+    return tex ~= nil
+end
+function RD.ItemIcon(b, id)
+    local iconOf = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
+    local tex
+    if id and iconOf then
+        local ok, t = pcall(iconOf, id)
+        if ok then tex = t end
+    end
+    return RD.RealIcon(b, tex)
+end
+function RD.SpellIcon(b, spell)
+    local tex
+    if spell and C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, spell)
+        if ok then tex = t end
+    end
+    return RD.RealIcon(b, tex)
+end
+function RD.FoodIcon(id) return RD.ItemIcon(RD.rations, id) end
+
+--- An item tool's icon, lit by the client like its pieces were: full where the tool's own curve says it helps (below
+--- `at` on your mana), faded above - white, so the icon keeps its own colours.
+RD.ICON_FADED = 0.2                                  -- a waiting icon: clearly dim (Arn, 15 Nov)
+RD.iconCurves = {}
+--- A RAMP, NOT A SWITCH (15 Nov 2026, Arn: "mana potion starts getting less dim the closer we get to zero mana 100% bright
+--- at 10% mana" - "mana tide full brightness at 25% mana" - "if water restores 800 mana over 24 seconds when i am out of
+--- combat it should light up to 100% when i am at 1600 mana needed"): dim above the tool's own point `at` (where it starts
+--- to help), brightening linearly as your mana falls, full at `full` and below. The client evaluates it.
+RD.FULL_AT = { potion = 0.10, tide = 0.25, reserve = 0.15 }
+--- Where a tool is full bright: its fixed point, or - the drink - missing TWICE what one drink restores.
+function RD.FullFor(b)
+    if not b then return nil end
+    if b.kind == "drink" and type(b.at) == "number" then return math.max(0.02, 2 * b.at - 1) end
+    return RD.FULL_AT[b.kind or ""]
+end
+function RD.IconCurve(at, full)
+    at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.98))
+    full = tonumber(full)
+    local key = math.floor(at * 100 + 0.5) .. ":" .. (full and math.floor(full * 100 + 0.5) or "-")
+    if RD.iconCurves[key] then return RD.iconCurves[key] end
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c or not c.AddPoint then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
+    local x, F = math.floor(at * 100 + 0.5) / 100, RD.ICON_FADED
+    if full and full < x then
+        pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, full, CreateColor(1, 1, 1, 1))     -- full and below: bright
+        pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, F))        -- the ramp, from where it starts to help
+        pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    else
+        pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, x, CreateColor(1, 1, 1, 1))
+        pcall(c.AddPoint, c, x + 0.0001, CreateColor(1, 1, 1, F))
+        pcall(c.AddPoint, c, 1.00, CreateColor(1, 1, 1, F))
+    end
+    RD.iconCurves[key] = c
+    return c
+end
+
+--[[ THE DIM IS THE TIME LEFT (15 Nov 2026, Arn: "all these should be totally dimmed out like the food, and then 100%
+  bright when the buff is gone, actually lets cascade it, when its 50% left 50% dim, 20% left 80% undimmed" - "lets use
+  the dimness as its duration for the food buff and such"). A buff button's brightness = 1 - the buff's time left (as a
+  share of its whole), never below RD.BUFF_DIM_FLOOR: fresh = all but gone, half left = half bright, gone = full. Read
+  OUT OF A FIGHT (a buff's time is plain then) - Well Fed, and the charge shield over its cover; in a fight they keep
+  where they were (the shield still turns red the moment it is gone, the client's own). ]]
+RD.BUFF_DIM_FLOOR = 0.05
+function RD.BuffLeft(name)
+    if combat() or RD.inFight or type(name) ~= "string" then return nil end
+    local find = AuraUtil and AuraUtil.FindAuraByName
+    if not find then return nil end
+    local ok, n, _, _, _, dur, exp = pcall(find, name, "player", "HELPFUL")
+    if not ok then return nil end
+    -- HIDDEN IS NOT GONE (Arn, 16 Nov: "red outline on watershield i have 3 charges"): right after a fight the game can
+    -- still hide aura names (the totem-name row in solved.md); a secret answer = unknown, never "missing"
+    if NS.Secret and NS.Secret(n) then return nil end
+    if n == nil then return 0 end                                -- gone
+    dur, exp = plain(dur), plain(exp)
+    if type(dur) ~= "number" or dur <= 0 or type(exp) ~= "number" then return 1 end   -- no timer: as fresh
+    local now = (GetTime and GetTime()) or 0
+    return math.max(0, math.min(1, (exp - now) / dur))
+end
+function RD.CascadeAlpha(left)
+    if left == nil then return nil end
+    return math.max(RD.BUFF_DIM_FLOOR, 1 - left)
+end
+
+--- The food the button shows: the food you want now, else - Well Fed still on you - the food that would renew it (its
+--- icon fading with the buff's time). The second answer: wanted now (full bright).
+function RD.FoodShown()
+    local want = RD.FoodWanted()
+    if want then return want, true end
+    if RD.WellFed() == true then return RD.BestItem("Food", "well fed"), false end
+    return nil, false
+end
+
+--- Out of a fight, every few seconds: the food's and the shield's fade from their buffs' time left.
+function RD.PaintBuffDims()
+    if combat() or RD.inFight then return false end
+    local r = RD.rations
+    if r and r.face then
+        local a = 0
+        local left
+        if r.item then
+            left = 0
+            if not r.wanted then left = RD.BuffLeft("Well Fed") or 0 end
+            a = RD.CascadeAlpha(left) or 1
+        end
+        r.face:SetAlpha(a)
+        RD.AttnSet(r, r.item and RD.AttnLeft(left) or nil)     -- red under 10% of Well Fed (or none), amber under half
+        if r.food and r.food.SetDesaturated then pcall(r.food.SetDesaturated, r.food, false) end
+    end
+    local sh = RD.shield
+    if RD.washHole and sh and sh.shieldName then
+        local left = RD.BuffLeft(sh.shieldName)
+        if left and left > 0 then RD.washHole:SetVertexColor(1, 1, 1, RD.CascadeAlpha(left)) end
+    end
+    -- your shield: the red box when it is missing (or nearly out of time); its LAST CHARGE has its own amber ring (the
+    -- client's square, RD.ShieldWash), so no time-based amber here on top of it
+    if sh and sh.shieldName then
+        -- nil = the game will not say (a fight hides buff times), NOT missing: no box then (Arn, 16 Nov: "red outline on
+        -- watershield i have 3 charges"); 0 = gone, out of a fight, where the reminder matters (before the pull)
+        local sl = RD.BuffLeft(sh.shieldName)
+        RD.AttnSet(sh, (sl ~= nil and sl <= RD.ATTN_RED_LEFT) and "red" or nil)
+    end
+    return true
 end
 
 --- HOW MUCH MANA A TOOL GIVES BACK, from its own words (out of a fight, plain): "Restores 1350 to 2250 mana" -> the
@@ -3350,6 +5025,630 @@ local function toolTip(b, title, what)
     b.tip = { title, what .. ".  " .. where .. "." .. (b.restOnly and "  Out of a fight only." or "") }
 end
 
+--[[ THE MANA TIDE PING (16 Nov 2026, Arn: "every time i drop it" - "a ping can be a ping and we use that, not on the way
+  assist attack or warning" - assist "will make the tanks think i need help"). The button's own click drops the totem
+  and then pings at your feet, the game's plain ping, so the whole group (BiS or not) sees where it stands. A click while
+  it is down pings again: "stand close". An addon may not ping by itself (C_Ping.SendMacroPing is forbidden, measured
+  14 Nov); a /ping inside a secure button's macro is the player's own click. ]]
+--- AND THE SECOND CLICK PINGS THE TOTEM ITSELF (Arn, 16 Nov: "clicking once to drop and clicking the same place but now
+--- its a small target frame of the totem so it pings where its at" - he had pinged it on Ellesmere's target frame with
+--- the totem targeted: "Mana Tide Totem II"). One macro, both clicks: /target finds the standing totem (the first click's
+--- totem does not exist yet, so the ping falls to you, at the same spot), pings it, and goes back to your target - only
+--- when it really got the totem (a friendly that is not in your group); left on it with no target before, it clears.
+--- Every line is a secure slash command run by your own click, so it works in a fight.
+--- One spec per button that behaves like Mana Tide: the real one, and the Grounding Totem stand-in for testing (Arn, 16 Nov:
+--- "its a 5 min cool down so i dont want to sit there waiting lets do grounding totem"). `life` = how long the totem
+--- stands (the tag's seconds), `len` = its cooldown (the chat line), `key` = its slot in RD.readyAt (our clock).
+local function val(v) if type(v) == "function" then return v() end return v end
+RD.TIDE_SPEC = { spell = RD.TIDE, key = "tide", word = "MANA TIDE",
+                 life = function() return RD.WATER.tide end,
+                 len = function() return (RD.cdLen and RD.cdLen.tide) or RD.COOLS.tide end }
+RD.TEST_SPEC = { spell = "Grounding Totem", key = "groundTest", word = "GROUNDING", life = 45, len = 15 }
+
+--- NO PING ON THE FIRST CLICK (Arn, 16 Nov: "dont need to ping first click"): only a standing totem, targeted, is pinged.
+function RD.TideMacroFor(spell)
+    return "/cast " .. spell .. "\n/target " .. spell .. "\n/ping [@target,help,noparty,noraid]"
+        .. "\n/targetlasttarget [help,noparty,noraid]\n/cleartarget [help,noparty,noraid]"
+end
+function RD.TideMacro() return RD.TideMacroFor(RD.TIDE) end
+
+--[[ MANA TIDE FOR BIS USERS (16 Nov 2026, Arn: "yes for bis users too"). Your cast sends TIDE over the shared BiS channel;
+  every BiS Healing deck in the group shows "MANA TIDE" and the totem's seconds on YOUR box (yours too, at once). The
+  channel holds messages through the game's chat lockdown, so in a fight it can land a little late. ]]
+RD.TIDE_COL = { 0.35, 0.85, 1.00, 1 }
+function RD.TideSay(spec)
+    spec = spec or RD.TIDE_SPEC
+    local life = val(spec.life)
+    RD.TideHeard(UnitName and plain((UnitName("player"))) or nil, life, true, spec.word)
+    local lib = _G.LibBiSComm
+    if lib and lib.Send then pcall(lib.Send, lib, "BiSHealing", "TIDE", life, spec.word) end
+end
+--- Does this deck box's unit carry this name? (whole "Name Surname" or the first name; a realm is cut off)
+function RD.BoxIsNamed(unit, who)
+    if type(unit) ~= "string" or type(who) ~= "string" then return false end
+    who = who:gsub("%-.*$", "")
+    local okW, whole = pcall(GetUnitName, unit, false)
+    whole = okW and plain(whole) or nil
+    if whole and whole == who then return true end
+    local okF, first = pcall(UnitName, unit)
+    first = okF and plain(first) or nil
+    return first ~= nil and (first == who or first == who:match("^(%S+)"))
+end
+--- A Mana Tide heard (or yours): the tag on that person's box for `secs`, saying `word` (MANA TIDE unless told).
+function RD.TideHeard(who, secs, mine, word)
+    secs = math.max(1, math.min(tonumber(secs) or RD.WATER.tide, 60))
+    word = (type(word) == "string" and word ~= "" and #word <= 12) and word:upper() or "MANA TIDE"
+    for _, i in ipairs(RD.conOrder or {}) do
+        local sp = RD.spokes and RD.spokes[i]
+        local u = sp and sp.unit
+        if u and ((mine and u == "player") or RD.BoxIsNamed(u, who)) and sp.deckPlate and sp.deckPlate:IsShown() then
+            RD.TideTag(sp, secs, word)
+            return sp
+        end
+    end
+    return nil
+end
+function RD.TideTag(sp, secs, word)
+    local t = sp.tideTag
+    if not t then
+        t = CreateFrame("Frame", nil, sp.deckPlate)
+        -- UNDER THE NAME (Arn's shot, 16 Nov: on a narrow box "CHAINHEAL GROUNDING 34" ran together - "we can just move
+        -- it under the name"): the line below the callsign, from the same left edge
+        t:SetPoint("TOPLEFT", sp.deckPlate, "TOPLEFT", RD.DECK_TAG.x, RD.DECK_TAG.y - RD.DECK_TAG.size - 3)
+        t:SetSize(80, 11)
+        t.text = t:CreateFontString(nil, "OVERLAY")
+        t.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+        t.text:SetPoint("LEFT", t, "LEFT", 0, 0)
+        t.text:SetJustifyH("LEFT")
+        local c = RD.TIDE_COL
+        t.text:SetTextColor(c[1], c[2], c[3], c[4])
+        t:SetScript("OnUpdate", function(self, e)
+            self.acc = (self.acc or 0) + (tonumber(e) or 0)
+            if self.acc < 0.25 then return end
+            self.acc = 0
+            local left = math.ceil((self.untilAt or 0) - GetTime())
+            if left <= 0 then self:Hide() return end
+            if left ~= self.shown then self.shown = left self.text:SetText(self.word .. " " .. left) end
+        end)
+        sp.tideTag = t
+    end
+    local lvl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+    if type(lvl) == "number" then t:SetFrameLevel(lvl + 7) end      -- over the bar and the name line
+    t.word = word or "MANA TIDE"
+    t.untilAt, t.shown, t.acc = GetTime() + secs, math.ceil(secs), 0
+    t.text:SetText(t.word .. " " .. math.ceil(secs))
+    t:Show()
+    return t
+end
+--[[ MANA TIDE IN THE PARTY'S CHAT (16 Nov 2026, Arn: "i want the cool down to put it in the chat when i click it" - the
+  action bar's own ping writes "[Mana Tide Totem (Rank 2)] is ready!", which only the game can send). Our own line, as
+  cooldown addons do: when it goes down, its link and "down - ready again in 5:00"; a click while it is cooling, the time
+  left. Party or raid only (alone: nothing), one line per RD.TIDE_CHAT_GAP seconds. The time is OUR clock of your cast
+  (RD.readyAt[key]), never the client's cooldown object. ]]
+RD.TIDE_CHAT_GAP = 3
+local function mmss(s)
+    s = math.max(0, math.floor(s + 0.5))
+    return string.format("%d:%02d", math.floor(s / 60), s % 60)
+end
+function RD.TideLink(spec)
+    spec = spec or RD.TIDE_SPEC
+    local link
+    if C_Spell and C_Spell.GetSpellLink then
+        local ok, l = pcall(C_Spell.GetSpellLink, spec.spell)
+        if ok then link = plain(l) end
+    end
+    return type(link) == "string" and link or ("[" .. spec.spell .. "]")
+end
+function RD.TideChatLine(cooling, spec)
+    spec = spec or RD.TIDE_SPEC
+    local now = GetTime()
+    if cooling then
+        local left = (RD.readyAt[spec.key] or 0) - now
+        if left <= 0 then return nil end
+        return RD.TideLink(spec) .. " - " .. mmss(left) .. " cooldown"
+    end
+    return RD.TideLink(spec) .. " down - ready again in " .. mmss(val(spec.len))
+end
+function RD.TideChat(cooling, spec)
+    local now = GetTime()
+    if RD.tideChatAt and now - RD.tideChatAt < RD.TIDE_CHAT_GAP then return nil end
+    local chan = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY" or nil)
+    if not chan then return nil end
+    local line = RD.TideChatLine(cooling, spec)
+    if not line then return nil end
+    RD.tideChatAt = now
+    local ok, err = pcall(SendChatMessage, line, chan)
+    RD.tideChatErr = (not ok) and tostring(err) or nil
+    return ok and line or nil
+end
+--- A click on the button while it is cooling: the time left in chat (the drop itself is said on the cast).
+function RD.TideClicked(spec)
+    spec = spec or RD.TIDE_SPEC
+    local left = (RD.readyAt[spec.key] or 0) - GetTime()
+    if left > 1 then return RD.TideChat(true, spec) end
+    return nil
+end
+
+--[[ THE TEST BUTTON (16 Nov 2026): a small button left of the deck, Grounding Totem in Mana Tide's shoes - the same macro
+  (drop + ping, the next click pings the standing totem), the same chat lines, the same tag for BiS users, with a 15 s
+  cooldown instead of 5 min. `/bish alpha radar tidetest` shows or hides it (out of a fight); never saved. ]]
+function RD.BuildTideTest()
+    if RD.tideTest then return RD.tideTest end
+    local f = RD.frame
+    if not f or combat() then return nil end
+    local spec = RD.TEST_SPEC
+    local b = CreateFrame("Button", "BiSHealingTideTest", f, "SecureActionButtonTemplate")
+    if b.RegisterForClicks then b:RegisterForClicks("AnyDown") end
+    b:SetSize(RD.SYS_PX + 6, RD.SYS_PX + 6)
+    b:SetPoint("TOPRIGHT", f, "TOPLEFT", -6, 0)
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetAllPoints(b)
+    b.bg:SetColorTexture(0, 0, 0, 0.6)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+    b.icon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+    if b.icon.SetTexCoord then b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, spec.spell)
+        if ok then pcall(b.icon.SetTexture, b.icon, t) end
+    end
+    b.edges = edge(b, { 1, 0.7, 0.28, 1 }, 1.5)
+    b.label = b:CreateFontString(nil, "OVERLAY")
+    b.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+    b.label:SetPoint("TOP", b, "BOTTOM", 0, -2)
+    b.label:SetTextColor(1, 0.75, 0.3, 1)
+    b.label:SetText("TEST")
+    local okCd, cd = pcall(CreateFrame, "Cooldown", nil, b, "CooldownFrameTemplate")
+    if okCd and cd then cd:SetAllPoints(b.icon) b.cd = cd end
+    b:SetAttribute("*type1", "macro")
+    b:SetAttribute("*macrotext1", RD.TideMacroFor(spec.spell))
+    b:HookScript("PostClick", function() RD.TideClicked(RD.TEST_SPEC) end)
+    b:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("TEST: " .. spec.spell:upper())
+        GameTooltip:AddLine("Works like the Mana Tide button: click drops it and pings; click again while it stands pings the totem. "
+            .. "Chat line and the BiS tag too. /bish alpha radar tidetest hides it.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    b:Hide()
+    RD.tideTest = b
+    return b
+end
+function RD.ToggleTideTest()
+    if combat() or RD.inFight then (NS.Print or print)("test button: out of a fight only") return nil end
+    local b = RD.BuildTideTest()
+    if not b then return nil end
+    b:SetShown(not b:IsShown())
+    return b:IsShown()
+end
+--- Our cast of the test spell while the test button shows: its clock, its sweep, the tag and the chat line.
+function RD.TideTestCast(name, now)
+    local b, spec = RD.tideTest, RD.TEST_SPEC
+    if not (b and b:IsShown() and name == spec.spell) then return false end
+    local len = val(spec.len)
+    RD.readyAt[spec.key] = now + len
+    if b.cd and b.cd.SetCooldown then pcall(b.cd.SetCooldown, b.cd, now, len) end
+    RD.TideSay(spec)
+    RD.TideChat(false, spec)
+    return true
+end
+
+--[[ THE RIPTIDE TRACKER (16 Nov 2026, Arn: "for sham healer rip tide is crucial need a riptide marker on who i riptided and
+  on top in los row a riptide duration, the riptide icon will serve as not enough time left to cast another chain heal
+  mark ... the bar size should be 6 icons long and when its the last icon that means if i cast a chain the buff will be
+  gone by the time it lands"). OUR clock, never the aura (auras go secret in a fight): your Riptide cast (OnCast) starts
+  it, on the box you clicked (RD.lastClick within RD.RIP_CLICK s), else the one under the mouse (a wheel turn), else the
+  name the game said you aimed at (UNIT_SPELLCAST_SENT, when plain). It lasts RD.RIP_LEN (read off the spell's own words
+  out of a fight, else 15 s). The bar: RD.RIP_SEGS segments of one Chain Heal each; it drains, and the last segment holds
+  the Riptide icon, lit once the time left is under one Chain Heal (EN.RipPaint). ]]
+RD.RIPTIDE = "Riptide"
+RD.RIP_LEN = 15
+RD.RIP_SEGS = 6
+RD.RIP_CLICK = 1.5
+RD.rips = {}                                         -- unit -> until (GetTime), at most a couple standing at once
+function RD.RipKnown()
+    local FM = NS.FM
+    return (FM and FM.Ranks and #FM.Ranks(RD.RIPTIDE) > 0) and true or false
+end
+--- Riptide's length, off its own words out of a fight ("... over 15 sec"); kept.
+function RD.RipLength()
+    if RD.ripLenRead then return RD.RIP_LEN end
+    if combat() then return RD.RIP_LEN end
+    if C_Spell and C_Spell.GetSpellDescription then
+        local ok, d = pcall(C_Spell.GetSpellDescription, RD.RIPTIDE)
+        d = ok and plain(d) or nil
+        local n = type(d) == "string" and tonumber(d:match("over ([%d%.]+) sec")) or nil
+        if n and n > 3 and n < 60 then RD.RIP_LEN = n RD.ripLenRead = true end
+    end
+    return RD.RIP_LEN
+end
+--- The game's word on whom your last spell went to (UNIT_SPELLCAST_SENT), when it is plain.
+function RD.RipSent(target)
+    if type(target) == "string" and not (NS.Secret and NS.Secret(target)) and target ~= "" then
+        RD.sentTarget, RD.sentAt = target, GetTime()
+    end
+end
+--- Your Riptide went out: whose box, and its clock.
+function RD.RipCast(now)
+    now = now or GetTime()
+    local sp
+    if RD.lastClick and RD.lastClickAt and now - RD.lastClickAt <= RD.RIP_CLICK then sp = RD.lastClick end
+    sp = sp or RD.over
+    if not (sp and sp.unit) and RD.sentTarget and RD.sentAt and now - RD.sentAt <= RD.RIP_CLICK then
+        for _, i in ipairs(RD.conOrder or {}) do
+            local s = RD.spokes and RD.spokes[i]
+            if s and s.unit and RD.BoxIsNamed(s.unit, RD.sentTarget) then sp = s break end
+        end
+    end
+    local unit = sp and sp.unit
+    if not unit then return nil end
+    RD.rips[unit] = now + RD.RipLength()
+    RD.ripLast = { unit = unit, at = now, untilAt = RD.rips[unit] }
+    RD.RipMarks()
+    if NS.EN and NS.EN.RipPaint then NS.EN.RipPaint() end
+    return unit
+end
+--- The marks on the boxes: a Riptide icon top-right on whoever has one of yours standing.
+function RD.RipMarks()
+    local now = GetTime()
+    for u, t in pairs(RD.rips) do if t <= now then RD.rips[u] = nil end end
+    local on = RD.Deck() and RD.Sw("rip")
+    for _, sp in ipairs(RD.spokes or {}) do
+        local has = on and sp.unit and RD.rips[sp.unit] and sp.deckPlate and sp.deckPlate:IsShown()
+        if has and not sp.ripMark then
+            -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the
+            -- health bar, which lives in the pip; the callsign's road: a child frame lifted over the pip, RD.DeckTag)
+            local hold = CreateFrame("Frame", nil, sp.deckPlate)
+            hold:SetAllPoints(sp.deckPlate)
+            local hl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+            if type(hl) == "number" and hold.SetFrameLevel then hold:SetFrameLevel(hl + 6) end
+            sp.ripHold = hold
+            local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
+            m:SetSize(14, 14)
+            m:SetPoint("TOPRIGHT", sp.deckPlate, "TOPRIGHT", -3, -3)
+            if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+            if C_Spell and C_Spell.GetSpellTexture then
+                local ok, t = pcall(C_Spell.GetSpellTexture, RD.RIPTIDE)
+                if ok then pcall(m.SetTexture, m, t) end
+            end
+            sp.ripMark = m
+        end
+        if sp.ripMark then sp.ripMark:SetShown(has and true or false) end
+    end
+end
+
+--[[ THE CHAIN HEAL BOUNCE PROBE (16 Nov 2026, Arn: "after I cast chain heal see a chain heal line on the three targets it
+  bounced to? A 3 bounce is a gold line, 3 bounce and 3 crits get a celebration, 1 bounce a buzzer"). Before drawing
+  anything: does the game tell an addon who was healed? UNIT_COMBAT (unit, "HEAL", "CRITICAL"/"", amount, school) is
+  what unit frames show heal numbers from. Armed by hand (`/bish alpha radar bounce on`, it fires for every hit on every
+  unit, so never left on), it records - as KINDS only (plain / hidden / nil), nothing compared - each event within
+  RD.BOUNCE_WINDOW s of your last Chain Heal, and `/bish alpha radar bounce` prints the last ones. ]]
+RD.BOUNCE_WINDOW = 1.5
+RD.BOUNCE_BEFORE = 0.5
+RD.bounceLog = {}
+RD.bounceRing = {}
+--- Your Chain Heal went out: a fresh log, opened with whatever landed in the half second before (marked "before").
+function RD.BounceStart(now)
+    RD.bounceLog = {}
+    for _, e in ipairs(RD.bounceRing) do
+        if now - e.t <= RD.BOUNCE_BEFORE then
+            RD.bounceLog[#RD.bounceLog + 1] = string.format("-%.2fs before %s", now - e.t, e.d)
+        end
+    end
+    RD.bounceRing = {}
+end
+local function kindOf(v)
+    if v == nil then return "nil" end
+    if NS.Secret and NS.Secret(v) then return "hidden" end
+    return tostring(v)
+end
+function RD.BounceArm(on)
+    local f = RD.bounceFrame
+    if on and not f then
+        f = CreateFrame("Frame")
+        f:SetScript("OnEvent", function(_, _, unit, action, flag, amount)
+            local now = GetTime()
+            local d = string.format("%s %s %s amount=%s", kindOf(unit), kindOf(action), kindOf(flag),
+                (amount == nil and "nil") or ((NS.Secret and NS.Secret(amount)) and "hidden" or "plain"))
+            -- THE LAST HALF SECOND BEFORE (Arn's first run, 16 Nov: two heals at +0.00, the first target missing - its
+            -- heal can arrive in the same frame BEFORE our cast event, so the cast keeps what came just before it)
+            local ring = RD.bounceRing
+            if #ring >= 12 then table.remove(ring, 1) end
+            ring[#ring + 1] = { t = now, d = d }
+            local at = RD.chainAt
+            if not at or now < at or now - at > RD.BOUNCE_WINDOW then return end
+            local log = RD.bounceLog
+            if #log >= 24 then table.remove(log, 1) end
+            log[#log + 1] = string.format("+%.2fs %s", now - at, d)
+        end)
+        RD.bounceFrame = f
+    end
+    if not f then return false end
+    if on then pcall(f.RegisterEvent, f, "UNIT_COMBAT") else f:UnregisterAllEvents() end
+    RD.bounceOn = on and true or false
+    return RD.bounceOn
+end
+function RD.BounceStatus()
+    local P = NS.Print or print
+    P("chain heal bounces: probe %s, last Chain Heal %s ago, %d events:", RD.bounceOn and "ON" or "off",
+        RD.chainAt and string.format("%.1fs", GetTime() - RD.chainAt) or "never", #RD.bounceLog)
+    for _, l in ipairs(RD.bounceLog) do P("  %s", l) end
+    return #RD.bounceLog
+end
+
+--[[ THE CHAIN HEAL PATH (16 Nov 2026, Arn picked B, the lightning, off https://claude.ai/artifact/X85oCkn5UgGfgauC6iPfEH; "you
+  pick sounds"). The probe measured it live: UNIT_COMBAT names each bounce (unit, "HEAL", "CRITICAL"/"") PLAINLY, only the
+  amount is hidden; every bounce lands in ONE frame, the first one often just BEFORE our cast event; the same person also
+  comes as target / targettarget / softfriend / nameplateN, and other heals mix in a little before or after. So:
+  LEAN: UNIT_COMBAT is registered only from your Chain Heal's UNIT_SPELLCAST_SENT (instant ones too) and lets ITSELF go on
+    the first event after the landing (never from a timer); while it listens, anything but a group token's HEAL costs one
+    check. Each group HEAL goes into a short ring.
+  JUDGE: at the landing (UNIT_SPELLCAST_SUCCEEDED, RD.OnCast) a C_Timer a moment later takes the heals within
+    RD.BOUNCE_SAME of it, group tokens only (player / partyN / raidN), one per box (RD.BounceSpoke; aliases mapped out of a
+    fight, RD.BounceMap), the box you clicked first, then in the order the game told us.
+  DRAW (RD.BounceDraw): a jagged bolt box to box on its own layer over the deck - gold 3, amber 2 - a star on each crit,
+    sparkling when all 3 crit; one box: a red flashing outline. Fades over RD.BOUNCE_HOLD.
+  SOUNDS (own switch, SFX): all 3 crit = the quest-complete fanfare; one box = the quest-failed buzz. Nothing for 2 or 3. ]]
+RD.BOUNCE_SAME = 0.06
+RD.BOUNCE_HOLD = 1.5
+RD.BOUNCE_COL = { [3] = { 1.00, 0.83, 0.30 }, [2] = { 1.00, 0.65, 0.15 }, [1] = { 1.00, 0.30, 0.30 } }
+RD.BOUNCE_FANFARE = (SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE) or 878
+RD.BOUNCE_BUZZ = (SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED) or 847
+RD.BOUNCE_SEGS = 6
+RD.bnc = { ring = {} }
+RD.bounceAlias = {}
+function RD.BounceOn() return RD.Deck() and RD.Sw("bounce") end
+local function groupToken(u)
+    if type(u) ~= "string" or (NS.Secret and NS.Secret(u)) then return false end
+    return u == "player" or u:find("^party%d$") ~= nil or u:find("^raid%d+$") ~= nil
+end
+RD.BounceGroupToken = groupToken
+--- Out of a fight: "player" and party1-4 point at whichever box holds them (a raid's boxes hold raidN).
+function RD.BounceMap()
+    local m = {}
+    if UnitIsUnit then
+        for _, sp in ipairs(RD.spokes or {}) do
+            local u = sp.unit
+            if u then
+                for _, a in ipairs({ "player", "party1", "party2", "party3", "party4" }) do
+                    if a ~= u then
+                        local ok, same = pcall(UnitIsUnit, a, u)
+                        if ok and not (NS.Secret and NS.Secret(same)) and same == true then m[a] = sp end
+                    end
+                end
+            end
+        end
+    end
+    RD.bounceAlias = m
+    return m
+end
+--- The box a group token names, or nil.
+function RD.BounceSpoke(u)
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.unit == u and sp.deckPlate and sp.deckPlate:IsShown() then return sp end
+    end
+    local sp = RD.bounceAlias[u]
+    if sp and sp.deckPlate and sp.deckPlate:IsShown() then return sp end
+    return nil
+end
+local bounceEv = CreateFrame("Frame")
+RD.bounceEv = bounceEv
+bounceEv:SetScript("OnEvent", function(self, _, unit, action, flag)
+    local b, now = RD.bnc, GetTime()
+    if (b.landedAt and now - b.landedAt > 0.25) or (not b.landedAt and now - (b.armedAt or 0) > 6) then
+        self:UnregisterAllEvents()                    -- done (or the cast never landed): let go, on an event
+        b.listening = false
+        return
+    end
+    if (NS.Secret and NS.Secret(action)) or action ~= "HEAL" or not groupToken(unit) then return end
+    local ring = b.ring
+    if #ring >= 16 then table.remove(ring, 1) end
+    ring[#ring + 1] = { t = now, u = unit, crit = not (NS.Secret and NS.Secret(flag)) and flag == "CRITICAL" }
+end)
+--- UNIT_SPELLCAST_SENT: a Chain Heal is on its way - listen from now.
+function RD.BounceSent(spellID)
+    if not RD.BounceOn() or (NS.Secret and NS.Secret(spellID)) or type(spellID) ~= "number" then return false end
+    local ok, name = false, nil
+    if C_Spell and C_Spell.GetSpellName then ok, name = pcall(C_Spell.GetSpellName, spellID) end
+    if not ok or (NS.Secret and NS.Secret(name)) or name ~= "Chain Heal" then return false end
+    local b = RD.bnc
+    b.armedAt, b.landedAt, b.ring = GetTime(), nil, {}
+    if not b.listening then
+        pcall(bounceEv.RegisterEvent, bounceEv, "UNIT_COMBAT")
+        b.listening = true
+    end
+    return true
+end
+--- Your Chain Heal landed (UNIT_SPELLCAST_SUCCEEDED): judge it a moment later, when every bounce is in.
+function RD.BounceLanded(now)
+    local b = RD.bnc
+    if not (b.armedAt and RD.BounceOn()) then return false end
+    b.landedAt = now or GetTime()
+    if C_Timer and C_Timer.After then C_Timer.After(RD.BOUNCE_SAME, RD.BounceJudge) else RD.BounceJudge() end
+    return true
+end
+--- The boxes it landed on, in order (the one you clicked first), and the crits. Draws; answers the count.
+function RD.BounceJudge()
+    local b = RD.bnc
+    local at = b.landedAt
+    if not at then return 0 end
+    local path, crit, seen = {}, {}, {}
+    local function add(sp, c)
+        if not sp then return end
+        if not seen[sp] then seen[sp] = true path[#path + 1] = sp end
+        if c then crit[sp] = true end
+    end
+    local hits = {}
+    for _, e in ipairs(b.ring) do
+        if math.abs(e.t - at) <= RD.BOUNCE_SAME then hits[#hits + 1] = { sp = RD.BounceSpoke(e.u), crit = e.crit } end
+    end
+    local first = RD.lastClick and RD.lastClickAt and at - RD.lastClickAt <= 4 and RD.lastClick or nil
+    for _, h in ipairs(hits) do if h.sp == first then add(first, h.crit) end end
+    for _, h in ipairs(hits) do add(h.sp, h.crit) end
+    b.armedAt = nil
+    while #path > 3 do table.remove(path) end
+    local crits = 0
+    for _, sp in ipairs(path) do if crit[sp] then crits = crits + 1 end end
+    b.last = { n = #path, crits = crits, at = at }
+    if #path > 0 then                                 -- a fight feature's first deploy: a slip never breaks your casts
+        local okD, err = pcall(RD.BounceDraw, path, crit)
+        if not okD then RD.bounceErr = err end
+    end
+    return #path
+end
+-- the layer, its lines, stars and the red outline: built on first use, kept
+local function bounceLayer()
+    local fx = RD.bounceFx
+    if fx then return fx end
+    fx = CreateFrame("Frame", nil, RD.conLayer or RD.frame or UIParent)
+    fx:SetAllPoints(RD.conLayer or RD.frame or UIParent)
+    if fx.SetFrameLevel and fx.GetParent and fx:GetParent().GetFrameLevel then
+        local lvl = fx:GetParent():GetFrameLevel()
+        if type(lvl) == "number" then fx:SetFrameLevel(lvl + 40) end
+    end
+    fx.lines, fx.dots, fx.stars = {}, {}, {}
+    fx.red = CreateFrame("Frame", nil, fx)
+    fx.red.edges = edge(fx.red, { 1, 0.3, 0.3, 1 }, 3)
+    fx.red:Hide()
+    fx:Hide()
+    RD.bounceFx = fx
+    return fx
+end
+local function bounceLine(fx, i)
+    local l = fx.lines[i]
+    if not l then
+        l = fx:CreateLine(nil, "OVERLAY")
+        if l.SetTexture then l:SetTexture("Interface\\Buttons\\WHITE8X8") end
+        fx.lines[i] = l
+    end
+    return l
+end
+local function bounceStar(fx, i)
+    local s = fx.stars[i]
+    if not s then
+        s = fx:CreateTexture(nil, "OVERLAY", nil, 7)
+        s:SetTexture("Interface\\Cooldown\\star4")
+        if s.SetBlendMode then s:SetBlendMode("ADD") end
+        s:SetVertexColor(1, 0.85, 0.35, 1)
+        fx.stars[i] = s
+    end
+    return s
+end
+--- A box's middle, on the layer's own coordinates (from its bottom-left).
+local function middleOf(fx, sp)
+    local p = sp.deckPlate
+    if not (p and p.GetCenter) then return nil end
+    local cx, cy = p:GetCenter()                      -- not `p and p:GetCenter()`: `and` keeps only the first answer
+    local ox, oy = fx:GetLeft(), fx:GetBottom()
+    if type(cx) ~= "number" or type(cy) ~= "number" or type(ox) ~= "number" or type(oy) ~= "number" then return nil end
+    return cx - ox, cy - oy
+end
+function RD.BounceDraw(path, crit)
+    local fx = bounceLayer()
+    local n = #path
+    local col = RD.BOUNCE_COL[math.min(n, 3)]
+    for _, l in ipairs(fx.lines) do l:Hide() end
+    for _, s in ipairs(fx.stars) do s:Hide() end
+    fx.red:Hide()
+    local li = 0
+    if n >= 2 then
+        for i = 1, n - 1 do
+            local x1, y1 = middleOf(fx, path[i])
+            local x2, y2 = middleOf(fx, path[i + 1])
+            if x1 and x2 then
+                local dx, dy = x2 - x1, y2 - y1
+                local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+                local px, py = x1, y1
+                for s = 1, RD.BOUNCE_SEGS do
+                    local f = s / RD.BOUNCE_SEGS
+                    local qx, qy = x1 + dx * f, y1 + dy * f
+                    if s < RD.BOUNCE_SEGS then           -- the jag: alternately off the straight line, a little random
+                        local off = ((s % 2 == 1) and 1 or -1) * (4 + math.random() * 5)
+                        qx, qy = qx - dy / len * off, qy + dx / len * off
+                    end
+                    for layer = 1, 2 do                  -- a wide soft glow, then a thin bright core
+                        li = li + 1
+                        local l = bounceLine(fx, li)
+                        l:SetStartPoint("BOTTOMLEFT", fx, px, py)
+                        l:SetEndPoint("BOTTOMLEFT", fx, qx, qy)
+                        if layer == 1 then
+                            l:SetThickness(6) l:SetVertexColor(col[1], col[2], col[3], 0.35)
+                        else
+                            l:SetThickness(1.6) l:SetVertexColor(1, 0.98, 0.88, 1)
+                        end
+                        l:Show()
+                    end
+                    px, py = qx, qy
+                end
+            end
+        end
+    else
+        local p = path[1].deckPlate
+        fx.red:ClearAllPoints()
+        fx.red:SetPoint("TOPLEFT", p, "TOPLEFT", -2, 2)
+        fx.red:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 2, -2)
+        fx.red:Show()
+    end
+    local si, crits = 0, 0
+    for _, sp in ipairs(path) do
+        if crit[sp] then
+            crits = crits + 1
+            si = si + 1
+            local s = bounceStar(fx, si)
+            s:ClearAllPoints()
+            s:SetPoint("CENTER", sp.deckPlate, "TOPRIGHT", -26, -9)
+            s:SetSize(18, 18)
+            s:Show()
+        end
+    end
+    local party = n >= 3 and crits >= 3
+    if RD.Sw("bsound") and PlaySound then
+        if party then pcall(PlaySound, RD.BOUNCE_FANFARE, "SFX")
+        elseif n == 1 then pcall(PlaySound, RD.BOUNCE_BUZZ, "SFX") end
+    end
+    fx.age, fx.party, fx.single, fx.nStars = 0, party, n == 1, si
+    fx:SetAlpha(0)
+    fx:Show()
+    fx:SetScript("OnUpdate", function(self, e)
+        self.age = self.age + (tonumber(e) or 0)
+        local a, t = self.age, RD.BOUNCE_HOLD
+        if a >= t then self:Hide() self:SetScript("OnUpdate", nil) return end
+        local alpha = (a < 0.08 and a / 0.08) or (a < 0.5 and 1) or (1 - (a - 0.5) / (t - 0.5))
+        if self.single and a < 0.6 and math.floor(a * 8) % 2 == 1 then alpha = alpha * 0.25 end   -- the red blinks
+        self:SetAlpha(alpha)
+        if self.party and a < 0.7 then                 -- all three crit: the stars swell and spin
+            for i = 1, self.nStars do
+                local s = self.stars[i]
+                s:SetSize(18 + a * 30, 18 + a * 30)
+                if s.SetRotation then s:SetRotation(a * 4) end
+            end
+        end
+    end)
+    return n
+end
+function RD.BounceStatus2()
+    local P = NS.Print or print
+    local l = RD.bnc.last
+    P("chain heal path: %s, sounds %s, listening %s, last: %s%s", RD.BounceOn() and "on" or "off", RD.Sw("bsound") and "on" or "off",
+        tostring(RD.bnc.listening == true), l and string.format("%d boxes, %d crits", l.n, l.crits) or "none yet",
+        RD.bounceErr and (" - draw error: " .. tostring(RD.bounceErr)) or "")
+    return l and l.n or 0
+end
+
+function RD.TideHook()
+    local lib = _G.LibBiSComm
+    if RD.tideHooked or not (lib and lib.RegisterHandler) then return false end
+    lib:RegisterHandler("BiSHealing", "TIDE", function(sender, secs, word) RD.TideHeard(sender, secs, false, word) end)
+    RD.tideHooked = true
+    if RD.tide and RD.tide.HookScript and not RD.tide.tideChatHooked then
+        RD.tide:HookScript("PostClick", function() RD.TideClicked() end)
+        RD.tide.tideChatHooked = true
+    end
+    return true
+end
+
 --- Arm one tool: its click (a macro written out of a fight) and its light point. `macro` nil = this tool is not here.
 local function armTool(b, macro, words, title, what)
     b:SetAttribute("*type1", macro and "macro" or nil)
@@ -3367,7 +5666,11 @@ function RD.ArmTools()
     if combat() or not RD.tide then return false end
     local FM = NS.FM
     local tide = FM and FM.Ranks and #FM.Ranks(RD.TIDE) > 0
-    armTool(RD.tide, tide and ("/cast " .. RD.TIDE) or nil, tide and describe(RD.TIDE), "MANA TIDE", RD.TIDE)
+    armTool(RD.tide, tide and RD.TideMacro() or nil, tide and describe(RD.TIDE), "MANA TIDE", RD.TIDE)
+    if RD.tide.HookScript and not RD.tide.tideChatHooked then           -- a click while cooling: the time left in chat
+        RD.tide:HookScript("PostClick", function() RD.TideClicked() end)
+        RD.tide.tideChatHooked = true
+    end
     local potion = RD.BestItem(RD.POTION)
     RD.potion.item = potion
     armTool(RD.potion, potion and ("/use item:" .. potion) or nil, itemWords(potion), "MANA POTION",
@@ -3375,8 +5678,12 @@ function RD.ArmTools()
     local drink = RD.BestItem("Drink")
     RD.fuel.item = drink
     armTool(RD.fuel, drink and ("/use item:" .. drink) or nil, itemWords(drink), "DRINK", "the best drink in your bags")
+    RD.ItemIcon(RD.potion, potion)                   -- the potion and the drink you would use, their own icons
+    RD.ItemIcon(RD.fuel, drink)
+    RD.SpellIcon(RD.tide, tide and RD.TIDE or nil)   -- Mana Tide and Mana Spring, their spells' own icons
+    RD.SpellIcon(RD.reserve, spring and RD.SPRING or nil)
     local spring = FM and FM.Ranks and #FM.Ranks(RD.SPRING) > 0
-    armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "RESERVE TANK",
+    armTool(RD.reserve, spring and ("/cast " .. RD.SPRING) or nil, spring and describe(RD.SPRING), "MANA SPRING",
             RD.SPRING .. " - the last resort: lights only when Mana Tide and your potion are spent (or not here)")
     -- the potion's use-spell, so our own clock knows it when you drink one in a fight
     local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
@@ -3414,8 +5721,9 @@ function RD.ArmChaff()
     b:SetAttribute("*macrotext1", macro)
     b:EnableMouse(macro and true or false)
     b.macro, b.spell = macro, spell
-    b.tip = spell and { "CHAFF", spell .. " - the catch-all: lights when an enemy on the radar casts and your interrupt "
-                        .. "(the flare on its bogey) is cooling.  No target needed." } or nil
+    b.tip = spell and { spell:upper(), "The catch-all: lights when an enemy casts and your interrupt is cooling.  "
+                        .. "No target needed." } or nil
+    RD.SpellIcon(b, spell)                            -- Grounding Totem's own icon
     if RD.defRail then
         -- ALWAYS SHOWN (Arn, 10 Nov: "lets always show the full square rail even if there is nothing there"): the
         -- panel is a closed square whether the chaff or the res is in it or not. ON THE RADAR ONLY (11 Nov, the
@@ -3553,6 +5861,9 @@ function RD.TotemSlotChanged(slot, now)
     if type(slot) ~= "number" or slot < 1 or slot > 4 then return false end
     now = now or (GetTime and GetTime()) or 0
     RD.slotSeen[slot] = now
+    if slot == RD.AIR_SLOT then                      -- Grounding: down right after your cast of it, gone on any other change
+        RD.groundUp = RD.groundCastAt ~= nil and (now - RD.groundCastAt) <= RD.TOTEM_CAST_WINDOW
+    end
     local down = (now - RD.lastTotemCast) <= RD.TOTEM_CAST_WINDOW
     RD.slotUp[slot] = down
     if down then
@@ -3616,12 +5927,8 @@ function RD.ArmTotems()
         b:SetAttribute("*type2", m2 and "macro" or nil)
         b:SetAttribute("*macrotext2", m2)
         b.macro, b.spell = m1, spell1
-        local tex = nil
-        if spell1 and C_Spell and C_Spell.GetSpellTexture then
-            local ok, t = pcall(C_Spell.GetSpellTexture, spell1)
-            tex = ok and t or nil
-        end
-        if b.icon then pcall(b.icon.SetTexture, b.icon, tex) end
+        b.ringIcon = true
+        RD.SpellIcon(b, spell1)                       -- the totem spell's own icon, the button's full size
         b:EnableMouse(m1 and true or false)
         if m1 then b:Show() else b:Hide() end
         b.tip = m1 and tip or nil
@@ -3653,9 +5960,9 @@ end
 function RD.PaintTotems(fight)
     if fight == nil then fight = RD.inFight or combat() end
     local c, t, r = RD.TotemLights(fight)
-    if RD.call then RD.call.face:SetAlpha(c and 1 or 0) end
-    if RD.tcall then RD.tcall.face:SetAlpha(t and 1 or 0) end
-    if RD.recall then RD.recall.face:SetAlpha(r and 1 or 0) end
+    if RD.call then RD.call.face:SetAlpha(RD.LitAlpha(RD.call, c)) end
+    if RD.tcall then RD.tcall.face:SetAlpha(RD.LitAlpha(RD.tcall, t)) end
+    if RD.recall then RD.recall.face:SetAlpha(RD.LitAlpha(RD.recall, r)) end
     RD.totemsWas = (c and 1 or 0) + (t and 2 or 0) + (r and 4 or 0)
     return c, t, r
 end
@@ -3712,12 +6019,8 @@ function RD.ArmRes()
     local unit = res and NS.FN and NS.FN.ResTarget and NS.FN.ResTarget() or nil
     if res ~= b.spell then
         b.spell = res
-        local tex = nil
-        if res and C_Spell and C_Spell.GetSpellTexture then
-            local ok, t = pcall(C_Spell.GetSpellTexture, res)
-            tex = ok and t or nil
-        end
-        if b.icon then pcall(b.icon.SetTexture, b.icon, tex) end
+        b.ringIcon = true
+        RD.SpellIcon(b, res)                          -- your res spell's own icon, the button's full size
     end
     local macro = unit and ("/cast [@" .. unit .. ",help] " .. res) or nil
     if macro ~= b.macro then
@@ -3728,7 +6031,7 @@ function RD.ArmRes()
     if unit ~= b.unit then b.losUntil = nil end
     b.unit = unit
     b:EnableMouse(unit and true or false)
-    b.face:SetAlpha(unit and 1 or 0)
+    b.face:SetAlpha(RD.LitAlpha(b, unit and true or false))
     local okN, name = pcall(GetUnitName, unit or "none", false)
     name = (unit and okN and plain(name)) or nil
     b.tip = unit and { "RES" .. (type(name) == "string" and (": " .. name) or ""),
@@ -3837,11 +6140,54 @@ function RD.PaintChaff(casting)
     local b = RD.chaff
     if not b then return false end
     if casting == nil then casting = RD.anyCast end
-    local lit = RD.ChaffLit(RD.inFight or combat(), casting)
+    local up = RD.GroundUp() and not RD.KnobOff("chaff")      -- its knob switches this light off too
+    local lit = up or RD.ChaffLit(RD.inFight or combat(), casting)
     local c = RD.CHAFF_COL
     for _, t in ipairs(b.pieces or {}) do t:SetVertexColor(c[1], c[2], c[3], lit and 1 or 0) end
-    b.face:SetAlpha(lit and 1 or 0)
+    b.face:SetAlpha(RD.LitAlpha(b, lit))
+    RD.GroundSweep(b, up)
     return lit
+end
+
+--[[ GROUNDING STANDING (15 Nov 2026, Arn: "when i drop grounding it does not show full bright with its duration sweep not
+  sure about the cooldown sweep"). While your Grounding Totem stands its button is lit, full colour, and the GAME's own
+  timer for the air slot (GetTotemDuration) runs a sweep across it; gone (it ate a spell, or ran out - the air slot's
+  change says so, in a fight too), it is dim with its cooldown (our own clock, from your cast) as the sweep, then waits
+  for the next enemy cast as before. ]]
+RD.AIR_SLOT, RD.GROUND_LIFE = 4, 45
+function RD.GroundUp(now)
+    now = now or (GetTime and GetTime()) or 0
+    return RD.groundUp == true and RD.groundCastAt ~= nil and (now - RD.groundCastAt) < RD.GROUND_LIFE
+end
+function RD.GroundSweep(b, up)
+    if not (b and b.face) then return false end
+    if not b.groundCd then
+        local ok, cd = pcall(CreateFrame, "Cooldown", nil, b.face, "CooldownFrameTemplate")
+        if not (ok and cd) then return false end
+        cd:SetAllPoints(b)
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
+        b.groundCd = cd
+    end
+    local cd, now = b.groundCd, (GetTime and GetTime()) or 0
+    if up then
+        local obj
+        if GetTotemDuration then
+            local ok, o = pcall(GetTotemDuration, RD.AIR_SLOT)
+            if ok then obj = o end
+        end
+        if obj and cd.SetCooldownFromDurationObject and pcall(cd.SetCooldownFromDurationObject, cd, obj) then return "up" end
+        if cd.SetCooldown then cd:SetCooldown(RD.groundCastAt, RD.GROUND_LIFE) end
+        return "up"
+    end
+    local ready, start = RD.readyAt.chaff or 0, RD.coolStart.chaff
+    if ready > now and start and cd.SetCooldown then
+        cd:SetCooldown(start, ready - start)
+        return "cooling"
+    end
+    if cd.Clear then cd:Clear() end
+    return false
 end
 
 --- THE COOLING DISCS, FROM OUR OWN CLOCK (8 Nov 2026, Arn: "this mana tide sweep shows up whenever i click anything"):
@@ -3914,12 +6260,23 @@ function RD.OnCast(unit, spellID)
     local ok, name = false, nil
     if getName then ok, name = pcall(getName, spellID) end
     name = ok and plain(name) or nil
+    RD.TideTestCast(name, now)                       -- the Grounding test button (Mana Tide's stand-in), when it shows
+    local sh = RD.shield                             -- your shield back on: its red box goes, mid-fight too
+    if name and sh and sh.shieldName == name then RD.AttnSet(sh, nil) end
+    if name == RD.RIPTIDE then RD.RipCast(now) end   -- the Riptide tracker: whose box, and its clock
+    if name == "Chain Heal" then                      -- the bounce probe's clock, and the bounce path
+        RD.chainAt = now
+        if RD.bounceOn then RD.BounceStart(now) end
+        RD.BounceLanded(now)
+    end
     local totem = RD.TotemCast(name, now)            -- the totem clock (CALL / BRING / RECALL)
     if totem then RD.PaintTotems() RD.PaintWaits(now) return totem end
     if name == RD.TIDE then
         RD.readyAt.tide, RD.coolStart.tide = now + RD.COOLS.tide, now
         RD.PaintWaits(now)
         RD.waterUntil = now + RD.WATER.tide
+        RD.TideSay()                                 -- BiS Healing users: MANA TIDE on your box in their deck
+        RD.TideChat(false)                           -- and the party's chat: down, ready again in 5:00
         return "tide"
     elseif name == RD.SPRING then
         RD.waterUntil = now + RD.WATER.spring
@@ -3938,6 +6295,7 @@ function RD.OnCast(unit, spellID)
     end
     if name and RD.chaff and name == RD.chaff.spell then
         RD.readyAt.chaff, RD.coolStart.chaff = now + (RD.cdLen.chaff or RD.COOLS.chaff), now
+        RD.groundCastAt, RD.groundUp = now, true        -- down from now (the air slot's change follows)
         RD.PaintChaff()
         return "chaff"
     end
@@ -4023,6 +6381,16 @@ function RD.Arm()
         for k, i in ipairs(order) do rankOf[i] = k end
         RD.conOrder = order
         slots = RD.ConsoleSlots(T, top, rankOf)
+        -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
+        -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
+        if RD.Deck() then
+            order, RD.deckTanks = RD.DeckOrder(units, T.n)
+            RD.conOrder = order
+            local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
+            RD.deckPets = #pets
+            slots = RD.DeckSlots(T, #pets)
+            units = RD.DeckUnits(units, T.n, pets)
+        end
         RD.slots = slots
         RD.ApplyShip(RD.SHIPS[T.ship] or RD.ShipFor(T.n))
     end
@@ -4051,7 +6419,7 @@ function RD.Arm()
             sp.bogey:EnableMouse(false)
             sp.kick, sp.paintTex = nil, nil
         end
-        armCures(sp, unit)
+        armCures(sp, (not (RD.Deck() and not RD.Sw("cures"))) and unit or nil)   -- cures switched off: none armed
         armPet(sp, unit, s)
         if s.rb then sp.bogey:Show() else sp.bogey:Hide() end
     end
@@ -4065,10 +6433,17 @@ function RD.Arm()
         armPet(sp, nil, nil)
         for _, fr in ipairs(sp.dims) do fr:Hide() end
         sp.los:SetAlpha(0)
+        -- the deck's own parts of a place no longer used (a pet sent away): its box, name, paw and cast bar
+        if sp.deckPlate then sp.deckPlate:Hide() end
+        if sp.deckTag then sp.deckTag:Hide() end
+        if sp.deckPaw then sp.deckPaw:Hide() end
+        if sp.castStrip then sp.castStrip:SetAlpha(0) end
     end
     armShield()
     RD.ArmTools()
-    armUse(RD.rations, RD.FoodWanted())
+    local foodItem, foodWanted = RD.FoodShown()
+    armUse(RD.rations, foodItem)
+    RD.rations.wanted = foodWanted
     RD.PickFuel()
     RD.PaintMe()                                     -- your role's sign in the middle (a role change lands here)
     if con then RD.ConsoleLayout() else RD.RadarLayout() end
@@ -4083,6 +6458,7 @@ end
 
 --- One spoke's heal pip, coloured by the client from their health.
 function RD.PaintHeal(sp)
+    RD.PaintOutline(sp)                              -- the deck's box edge: amber low, red very low (the client picks)
     if not (sp and sp.unit and sp.paintTex) then
         if sp and sp.heal then RD.HealFaces(sp.heal, 0) end
         return false
@@ -4134,7 +6510,15 @@ function RD.PaintQuiet()
     if RD.dims then RD.dims:SetAlpha(0) end
     -- the faint seats instead (Arn, 11 Nov): out of a fight only
     if RD.seatFrame then RD.seatFrame:SetAlpha(fight and 0 or 1) end
-    if RD.rations then RD.rations.face:SetAlpha((not fight and RD.rations.item) and 1 or 0) end
+    if RD.rations then
+        local r = RD.rations
+        if fight or not r.item then
+            r.face:SetAlpha(RD.LitAlpha(r, false) * (r.item and 1 or 0))   -- no food: nothing; in a fight: dim (no eating)
+            RD.AttnSet(r, nil)
+        else
+            RD.PaintBuffDims()                                                -- out of a fight: the buff's time left
+        end
+    end
     RD.PaintTools(fight)
     RD.PaintTotems(fight)
 end
@@ -4153,11 +6537,27 @@ function RD.PaintTools(fight)
                 local ok, col = pcall(UnitPowerPercent, "player", 0, true, c)
                 drew = ok and paint(b.pieces, col) or false
             end
+            -- an item tool showing its own icon (the drink, the potion): lit full / faded by its own white curve
+            if drew and b.iconTex and b.food then
+                local ic = RD.IconCurve(b.at, RD.FullFor(b))
+                local okI, icol = false, nil
+                if ic then okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic) end
+                if not (okI and paint({ b.food }, icol)) then b.food:SetVertexColor(1, 1, 1, RD.ICON_FADED) end
+            end
             local sw = b.cd and not b.cd.wait and RD.SwipeCurve(b.at)   -- a cooling disc keeps its own colour
             if drew and sw then
                 local okS, scol = pcall(UnitPowerPercent, "player", 0, true, sw)
                 swipeTo(b.cd, okS and scol or nil)
             end
+        end
+        -- the outline: red under its own point, amber under twice it (the client's curve); none while it cools
+        local ac = drew and RD.AttnOn() and not (b.cd and b.cd.wait) and RD.AttnCurve(b.at)
+        if ac then
+            local f = RD.Attn(b)
+            local okA, acol = pcall(UnitPowerPercent, "player", 0, true, ac)
+            if okA and paint(f.edges, acol) then f:Show() else f:Hide() end
+        elseif b.attn then
+            b.attn:Hide()
         end
         b.face:SetAlpha(drew and 1 or 0)
     end
@@ -4210,15 +6610,141 @@ local function bogeyAlpha(k, a, col)
 end
 RD.BogeyAlpha = bogeyAlpha
 
+-- THE MINI CAST BAR (Arn 15 Nov, a target frame's "Whirlwind 7.9": "can we show that as a mini mini cast bar along the
+-- bottom of the party member that is targeting him?"). In the deck only: a thin bar along the bottom of the box of whoever
+-- targets the caster, lit with the kick. The client runs it: the cast's own duration object handed untouched to
+-- SetTimerDuration (a channel drains, a cast fills), nothing read. Grey when the cast cannot be interrupted (the shield's
+-- flag through the client's ternary when secret), red otherwise.
+RD.CAST_STRIP_H = 3
+RD.CAST_COL = { 0.85, 0.15, 0.15 }       -- red: an enemy cast (Arn: "make the progress bar red to indicate a enemy cast")
+RD.CAST_SHIELDED = { 0.55, 0.57, 0.62 }
+
+--- Built OUT OF A FIGHT, from the deck's layout (Arn 15 Nov, "interrups dont show up now": built at the first cast, in a
+--- fight, it took the whole look down with it). A child of the secure pip, so it is made only while that is allowed.
+function RD.MakeCastStrip(sp)
+    local pip = sp and sp.heal
+    if not pip then return nil end
+    local b = sp.castStrip
+    if not b then
+        if combat() then return nil end
+        b = CreateFrame("StatusBar", nil, pip)
+        b:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        b:SetPoint("BOTTOMLEFT", pip, "BOTTOMLEFT", 1, 1)
+        b:SetPoint("BOTTOMRIGHT", pip, "BOTTOMRIGHT", -1, 1)
+        b:SetHeight(RD.CAST_STRIP_H)
+        local lvl = pip.GetFrameLevel and pip:GetFrameLevel()
+        if type(lvl) == "number" then b:SetFrameLevel(lvl + 4) end
+        b.bg = b:CreateTexture(nil, "BACKGROUND")
+        b.bg:SetAllPoints(b)
+        b.bg:SetColorTexture(0, 0, 0, 0.7)
+        b:SetAlpha(0)
+        sp.castStrip = b
+    end
+    return b
+end
+
+--[[ THE CAST BAR FILLS THE ICON ROW (16 Nov 2026, Arn's screenshot: "enemy cast bar gets a little lost how about we use the
+  whole bottom interrupt cure bar for it"). Where a box has the kick / cure row under its bar, the cast bar is that whole
+  row, under the kick and the cures (which stay on top and clickable); without the row (kicks and cures switched off, a
+  raid's short boxes) it stays the thin line under the health bar. `row` = left, top, right, bottom in the window's own
+  pixels from its top-left; nil = the thin line. Out of a fight (RD.DeckLayout). ]]
+function RD.PlaceCastStrip(sp, row)
+    local b = sp and sp.castStrip
+    if not b then return false end
+    b:ClearAllPoints()
+    if row and RD.frame then
+        b:SetPoint("TOPLEFT", RD.frame, "TOPLEFT", row[1], -row[2])
+        b:SetPoint("BOTTOMRIGHT", RD.frame, "TOPLEFT", row[3], -row[4])
+        sp.castRow = true
+    else
+        b:SetPoint("BOTTOMLEFT", sp.heal, "BOTTOMLEFT", 1, 1)
+        b:SetPoint("BOTTOMRIGHT", sp.heal, "BOTTOMRIGHT", -1, 1)
+        b:SetHeight(RD.CAST_STRIP_H)
+        sp.castRow = false
+    end
+    return sp.castRow
+end
+function RD.CastStrip(sp, lit)
+    if not RD.Sw("cast") then
+        if sp and sp.castStrip then sp.castStrip:SetAlpha(0) end
+        return false
+    end
+    local b = sp and sp.castStrip
+    if not b then return false end
+    if not lit or not RD.Deck() then b:SetAlpha(0) return false end
+    -- the thin line: over the box's health bar, whatever was built over the pip since; the icon row: UNDER the kick and the
+    -- cures (pip + 3), so they stay on top and take the click (a plain frame: allowed in a fight)
+    local pl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
+    if type(pl) == "number" then b:SetFrameLevel(pl + (sp.castRow and 2 or 8)) end
+    if not b.SetTimerDuration or not Enum or not Enum.StatusBarTimerDirection then return false end
+    local tok = sp.tok
+    local dir, dur = Enum.StatusBarTimerDirection.RemainingTime, nil
+    if UnitChannelDuration then
+        local ok, d = pcall(UnitChannelDuration, tok)
+        if ok and type(d) ~= "nil" then dur = d end
+    end
+    if dur == nil and UnitCastingDuration then
+        local ok, d = pcall(UnitCastingDuration, tok)
+        if ok and type(d) ~= "nil" then dur, dir = d, Enum.StatusBarTimerDirection.ElapsedTime end
+    end
+    if dur == nil then b:SetAlpha(0) return false end
+    local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
+    if not pcall(b.SetTimerDuration, b, dur, interp, dir) then b:SetAlpha(0) return false end
+    local A, G = RD.CAST_COL, RD.CAST_SHIELDED
+    -- never `x and flag or false`: in a fight the flag is a secret boolean and `and`/`or` test it (live 15 Nov, Radar:5087)
+    local ni = false
+    if NS.KG then ni = NS.KG.Protected(tok) end
+    if NS.Secret and NS.Secret(ni) then
+        local tern = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+        local drew = false
+        if tern then
+            local o1, r = pcall(tern, ni, G[1], A[1])
+            local o2, g = pcall(tern, ni, G[2], A[2])
+            local o3, bl = pcall(tern, ni, G[3], A[3])
+            drew = o1 and o2 and o3 and pcall(b.SetStatusBarColor, b, r, g, bl)
+        end
+        if not drew then b:SetStatusBarColor(A[1], A[2], A[3]) end
+    else
+        local c = (ni == true) and G or A
+        b:SetStatusBarColor(c[1], c[2], c[3])
+    end
+    b:SetAlpha(1)
+    return true
+end
+
+--- `/bish alpha deck strip`: what the mini cast bars are doing (Arn 15 Nov: the kick lit on a box, no bar under it).
+--- One line: how many are made, how many showing, the client's timer bar there or not, the last failure. Answers the line.
+function RD.StripStatus(rest)
+    if rest ~= "strip" then return nil end
+    local made, shown, timer = 0, 0, nil
+    for _, sp in ipairs(RD.spokes or {}) do
+        local b = sp.castStrip
+        if b then
+            made = made + 1
+            if b:GetAlpha() > 0 then shown = shown + 1 end
+            if timer == nil then timer = b.SetTimerDuration and true or false end
+        end
+    end
+    local enumOK = (Enum and Enum.StatusBarTimerDirection and Enum.StatusBarInterpolation) and true or false
+    local line = string.format("cast bars: %d made, %d showing, timer bar %s, enums %s, last failure: %s", made, shown,
+        tostring(timer), tostring(enumOK), tostring(RD.stripErr or "none"))
+    if NS.Print then NS.Print(line) end
+    return line
+end
+
 local function paintContact(sp, lit)
     local k = sp.bogey
     local col = lit and RD.COL.bogey or RD.CONTACT
     if lit then
         bogeyAlpha(k, 1, col)
         -- a cast you cannot interrupt wears a shield (Guard.lua, Arn 12 Nov)
-        if NS.KG then NS.KG.Paint(k.face, sp.tok, k.GetWidth and k:GetWidth()) end
+        if NS.KG then pcall(NS.KG.Paint, k.face, sp.tok, k.GetWidth and k:GetWidth()) end
+        -- the kick is lit FIRST; nothing the mini cast bar does can put it out (a failure is kept for /bish alpha)
+        local okS, err = pcall(RD.CastStrip, sp, true)
+        if not okS then RD.stripErr = err end
         return true
     end
+    if sp.castStrip then pcall(RD.CastStrip, sp, false) end
     bogeyAlpha(k, 0, col)
     -- ONLY WHEN IT CASTS (Arn, 8 Nov, four green triangles over a party on one mob: "why is it showing interrupt buttons
     -- when its not casting" - picked "only when casting"). The quiet green contact below is kept, switched off by
@@ -4281,6 +6807,7 @@ end
 -- when i click them ... like the bis grid in normal view"). No standing range mark any more (the red rim dashes asked
 -- the client about every spoke on every look): a heal that FAILS on the pip under the mouse flashes why, under it.
 local clickWords
+RD.SHORT_WORD = { RANGE = "RNG" }    -- the words as shown: three letters each, the boxes sized to them
 function RD.ClickWords()
     if clickWords then return clickWords end
     clickWords = {}
@@ -4309,7 +6836,7 @@ function RD.HeardError(msg)
     end
     local sp = RD.over
     if not (word and sp and sp.los and sp.unit) then return nil end
-    sp.los.word:SetText(word)
+    sp.los.word:SetText(RD.SHORT_WORD[word] or word)     -- RNG on screen, RANGE inside (Arn, 16 Nov: "LOS RNG OVH")
     if NS.EN and NS.EN.PlaceWord then NS.EN.PlaceWord(sp, word) end   -- the console: into its own header box
     sp.los:SetAlpha(1)
     if sp.losFade then sp.losFade:Stop() sp.losFade:Play() end
@@ -4432,11 +6959,12 @@ function RD.FuelTip()
     local FR = NS.FR
     local who = RD.fuelUnit == "boss1" and "the boss" or (RD.fuelUnit == "target" and "your target, when it is hostile")
                 or "nothing - no boss, no hostile target"
+    -- plain words (Arn, 15 Nov: "remove references to airplane stuff like fuel chaff call it what it is now")
     return {
-        "The bright bar: your mana, filling left to right.  Red past it: the boss's health you are behind by.  Magenta mark: the boss.",
-        ("Hot pulsing band: BINGO - the boss more than %d%% ahead of your mana.  Drink, potion, Mana Tide (the column)."):format(RD.BINGO * 100),
-        "RAMJET, at the right end: the % is your mana regen now (100% out of a fight).  The five dashes: seconds left of the five second rule - lay off the throttle (hold your casts) till they are gone and the ramjet kicks in, 100%.  The cyan chevron: the ramjet running (dim: only your while-casting share).",
-        "Racing: " .. who .. ".  " .. ((FR and FR.Text) and FR.Text() or ""),
+        "The bright bar: your mana, filling left to right.  Red past it: how far the boss's health is ahead of your mana.  Magenta mark: the boss.",
+        ("Pulsing band: the boss is more than %d%% ahead of your mana - drink, potion, Mana Tide."):format(RD.BINGO * 100),
+        "At the right end: your mana regen now (100% out of a fight).  The five dashes: seconds left of the five-second rule - hold your casts till they are gone and your full regen comes back.  The cyan arrow: regen running (dim: only your while-casting share).",
+        "Compared with: " .. who .. ".  " .. ((FR and FR.Text) and FR.Text() or ""),
     }
 end
 
@@ -4549,9 +7077,11 @@ local function startTicker()
         n = n + 1
         if n >= RD.FOOD_EVERY and not combat() and RD.rations then
             n = 0
-            local want = RD.FoodWanted()
+            local want, wanted = RD.FoodShown()
+            RD.rations.wanted = wanted
             if want ~= RD.rations.item then armUse(RD.rations, want) RD.PaintQuiet() end
             RD.PaintShield()                -- and the shield, in case an aura change went unheard
+            RD.PaintBuffDims()              -- the food's and the shield's fade: their buffs' time left
         end
     end)
 end
@@ -4562,6 +7092,7 @@ end
 --- Bring the radar in or out to match the switch. Out of a fight only; asked in one, it waits.
 function RD.Apply()
     RD.DashStamp()                                   -- the old alpha switch, once, into the look
+    RD.SwStamp()                                     -- the engineer's view, once, into the switches
     local want = RD.On()
     if combat() then
         if want ~= RD.Active() then RD.pending = true end
@@ -4589,6 +7120,41 @@ function RD.Command(rest)
     local word, arg = tostring(rest or ""):match("^%s*(%S+)%s*(.-)%s*$")
     word = word and word:lower() or ""
     local P = NS.Print or print
+    if word == "strip" then return RD.StripStatus("strip") end
+    if word == "tot" and NS.EN and NS.EN.FoldStatus then return NS.EN.FoldStatus() end
+    if word == "box" and NS.EN and NS.EN.BoxStatus then return NS.EN.BoxStatus() end
+    if word == "cc" and NS.EN and NS.EN.LossStatus then return NS.EN.LossStatus() end
+    if word == "mana" and NS.EN and NS.EN.ManaStatus then return NS.EN.ManaStatus() end
+    if word == "bounce" then
+        if arg == "on" or arg == "off" then
+            local on = RD.BounceArm(arg == "on")
+            P("chain heal bounce probe: %s - cast Chain Heal on a hurt group, then /bish alpha radar bounce", on and "ON" or "off")
+            return on
+        end
+        RD.BounceStatus2()                            -- the path's own line first
+        return RD.BounceStatus()
+    end
+    if word == "rip" then
+        local l = RD.ripLast
+        local line = string.format("riptide: known %s, length %ss, last on %s, %s left", tostring(RD.RipKnown()), tostring(RD.RipLength()),
+            tostring(l and l.unit or "nobody yet"), l and string.format("%.1f", math.max(0, l.untilAt - GetTime())) or "-")
+        P(line)
+        if NS.FM and NS.FM.SeqInfo then P(NS.FM.SeqInfo()) end   -- what the Riptide + heal bind's list is built from
+        return line
+    end
+    if word == "over" and NS.OV and NS.OV.Status then return NS.OV.Status() end
+    if word == "tidetest" then
+        local on = RD.ToggleTideTest()
+        P("test button (Grounding Totem as Mana Tide): %s", on == nil and "not now" or (on and "shown, left of the deck" or "hidden"))
+        return on
+    end
+    if word == "sw" then
+        local k, v = arg:lower():match("^(%S*)%s*(%S*)$")
+        if k == "" then return RD.ToggleSwitches() end
+        local done = RD.SW_PRESETS[k] and RD.SwPreset(k) or RD.SetSw(k, v ~= "off")
+        P("switches: %s %s", k, tostring(done or "unknown - names, edges, pets, target, kicks, cures, cast, alerts, fuel, tools, totems, timers, bb"))
+        return done
+    end
     if word == "heal" then
         if arg == "" or arg:lower() == "default" then
             db().heal = nil
@@ -4634,7 +7200,7 @@ function RD.Command(rest)
             if not (b and b.macro) then return name .. " none" end
             return ("%s %s%%%s"):format(name, math.floor((b.at or 0) * 100 + 0.5), b.guess and " (guess)" or "")
         end
-        P("radar fuel: racing %s.  lights at: %s, %s, %s", RD.fuelUnit or "nothing", tool(RD.tide, "tide"),
+        P("mana bar: compared with %s.  lights at: %s, %s, %s", RD.fuelUnit or "nothing", tool(RD.tide, "tide"),
           tool(RD.potion, "potion"), tool(RD.fuel, "drink"))
         -- THE SHIELD PIP, SAID PLAINLY (Arn, 8 Nov: "no water shield icon"): what it watches, whether the client took the
         -- marker, and what it last handed over - so the next screenshot says which part is missing
@@ -4659,25 +7225,50 @@ for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENAB
                      "BAG_UPDATE_DELAYED", "UI_ERROR_MESSAGE", "PLAYER_TARGET_CHANGED", "UNIT_TARGET",
                      "PLAYER_ROLES_ASSIGNED", "SPELL_UPDATE_COOLDOWN", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "UNIT_MAXPOWER",
                      "PLAYER_LEVEL_UP", "UNIT_PET", "INCOMING_RESURRECT_CHANGED", "UNIT_CONNECTION",
-                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD" }) do
+                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD", "ADDON_RESTRICTION_STATE_CHANGED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
 if ev.RegisterUnitEvent then pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player") end
+-- whom your spell went to (the Riptide tracker's last way to tell, when no deck box was clicked): yours only
+local sentEv = CreateFrame("Frame")
+if sentEv.RegisterUnitEvent then pcall(sentEv.RegisterUnitEvent, sentEv, "UNIT_SPELLCAST_SENT", "player") end
+sentEv:SetScript("OnEvent", function(_, _, _, target, _, spellID)
+    RD.RipSent(target)
+    RD.BounceSent(spellID)                            -- a Chain Heal on its way: the bounce path starts listening
+end)
 ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
-    if event == "PLAYER_LOGIN" then RD.Apply() return end
+    if event == "PLAYER_LOGIN" then RD.TideHook() RD.Apply() return end
     -- THE LOADING WINDOW (11 Nov 2026): a /reload in a fight lets secure frames be armed while the loading events are
     -- handed out, the lockdown back right after - armed NOW, never left for a later tick (Grid.lua, FG.Start)
     if event == "PLAYER_ENTERING_WORLD" then
         if RD.Active() and not combat() then RD.Arm() end
         return
     end
+    -- THE NAMES COME BACK A LITTLE AFTER THE FIGHT (16 Nov 2026, Arn: "when i click the water or earth totem its not
+    -- dropping them again"): at PLAYER_REGEN_ENABLED the totems' names can still be hidden (solved.md 14 Oct, "data stays
+    -- partly secret after combat ends") - the lift is this event; the boxes learn then
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        if not combat() then RD.LearnTimers() end
+        return
+    end
+    if event == "PLAYER_TOTEM_UPDATE" then                      -- the deck's four timers: the game's own countdowns
+        RD.LearnTimers()                                         -- out of a fight: the totem dropped, remembered for its box
+        RD.PaintTimers()
+    end
     if event == "PLAYER_TOTEM_UPDATE" and (RD.inFight or combat()) then
         if RD.TotemSlotChanged(a1) and RD.Active() then RD.PaintTotems() end   -- a fight: the slot number only
+        RD.PaintChaff()                                          -- Grounding: still standing, or gone
         return
     end
     if event == "PLAYER_TOTEM_UPDATE" then
         if RD.ReadTotems() ~= nil and RD.Active() then RD.PaintTotems() end   -- out of a fight only (plain slots)
+        -- out of a fight the air slot's own name says whether your Grounding stands, and since when
+        local okG, _, gname, gstart = pcall(GetTotemInfo, RD.AIR_SLOT)
+        if okG then gname, gstart = plain(gname), plain(gstart) else gname, gstart = nil, nil end
+        RD.groundUp = (RD.chaff and RD.chaff.spell and gname == RD.chaff.spell) and true or false
+        if RD.groundUp and type(gstart) == "number" and gstart > 0 then RD.groundCastAt = gstart end
+        RD.PaintChaff()
         return
     end
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
@@ -4705,6 +7296,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
             RD.ArmTools()                  -- the numbers are plain again: each tool re-learns where it lights
             RD.PaintQuiet() RD.PaintShield() RD.PickFuel() RD.PaintFuel()
         end
+        RD.LearnTimers()                   -- a totem swapped in the fight: its box learns it now
         return
     end
     if not RD.Active() then return end
@@ -4734,6 +7326,8 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         -- an owner called or sent away a pet: the client's watch shows or hides the pip; we repaint its colour
         if NS.Secret and NS.Secret(a1) then return end
         for _, sp in ipairs(RD.spokes) do if sp.unit == a1 then RD.PaintPet(sp) end end
+        -- the deck: a pet is a box of its own - called or sent away, the deck is laid out again (after the fight, in one)
+        if RD.Deck() then if combat() then RD.pending = true else RD.Arm() end end
     elseif event == "UNIT_POWER_UPDATE" or event == "UNIT_MAXPOWER" then
         if a1 == "player" then
             -- a bigger or smaller pool between pulls (gear, a buff): the tools re-learn where they light
@@ -4743,16 +7337,19 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     elseif event == "UNIT_AURA" then
         if a1 == "player" then RD.PaintShield() end
         if a1 == "player" and not combat() then
-            local want = RD.FoodWanted()
+            local want, wanted = RD.FoodShown()
+            RD.rations.wanted = wanted
             if want ~= RD.rations.item then armUse(RD.rations, want) RD.PaintQuiet() end
+            RD.PaintBuffDims()
         end
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         RD.KickCooldown()
         RD.Sweeps()
     elseif event == "UNIT_TARGET" then
-        if a1 == "target" then RD.PaintCross() end      -- your target picked someone else: the amber mark moves
+        if a1 == "target" then RD.PaintCross() RD.PaintDeckBox() end   -- your target picked someone else: the amber mark moves
     elseif event == "PLAYER_TARGET_CHANGED" then
         RD.PaintCross()
+        RD.PaintDeckBox()                                -- the deck's target box: who is in it now
         RD.Look()
         RD.PickFuel() RD.PaintBoss()
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
