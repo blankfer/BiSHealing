@@ -15943,6 +15943,34 @@ do
                     ok(n1 == 5 and n2 == 7 and n3 == EN.SYN.maxSquares and math.abs(sh3 - 1 / EN.SYN.maxSquares) < 1e-9,
                        "the squares: as many casts as fit (Arn) - 5 at 2.6 s, 7 at 2 s, a 30 s Vigil drawn as " .. EN.SYN.maxSquares, n1, n2, n3)
                 end
+                -- DEAD / OFFLINE / AFK ACROSS THE BAR (Arn: "big letter across the health bar dead dark red offline grey afk white")
+                do
+                    local keepConn, keepAfk = _G.UnitIsConnected, _G.UnitIsAFK
+                    local u = tsp.unit
+                    STATE.dead[u] = true
+                    EN.Paint(tsp)
+                    local fs = tsp.en and tsp.en.status
+                    ok(fs and fs:IsShown() and fs:GetText() == "DEAD" and fs.__color and fs.__color[1] > 0.6 and fs.__color[2] < 0.2,
+                       "dead: DEAD across the bar in dark red", fs and fs:GetText())
+                    STATE.dead[u] = nil
+                    _G.UnitIsConnected = function(x) return x ~= u end
+                    EN.Paint(tsp)
+                    ok(fs:IsShown() and fs:GetText() == "OFFLINE" and fs.__color[1] == EN.STATUS.OFFLINE[1], "offline: OFFLINE in grey")
+                    STATE.dead[u] = true
+                    EN.Paint(tsp)
+                    ok(fs:GetText() == "OFFLINE", "offline wins over dead (a corpse that logged out)")
+                    STATE.dead[u] = nil
+                    _G.UnitIsConnected = keepConn
+                    _G.UnitIsAFK = function(x) return x == u end
+                    fire(EN.events, "PLAYER_FLAGS_CHANGED", u)
+                    ok(fs:IsShown() and fs:GetText() == "AFK" and fs.__color[1] == 1 and fs.__color[3] == 1, "AFK: in white, the moment they go")
+                    _G.UnitIsAFK = function() return secret() end
+                    EN.Paint(tsp)
+                    ok(not fs:IsShown(), "AFK hidden by the game mid-fight: no stale word")
+                    _G.UnitIsAFK = keepAfk
+                    EN.Paint(tsp)
+                    ok(not fs:IsShown(), "back: the bar alone")
+                end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
                 RD.lastClick, RD.over = nil, nil
                 ok(RD.RipCast(GetTime()) == nil, "nobody clicked or under the mouse, no name: no guess")

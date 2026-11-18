@@ -5483,7 +5483,12 @@ RD.SWIFTMEND, RD.SWIFT_CD = "Swiftmend", 15
     it, the next out-of-fight read (RD.CueSeed) takes the mark away.
   - two paladins, two druids: each addon tracks its OWN casts only (the aura reads ask for yours: "HELPFUL|PLAYER"). ]]
 function RD.CueDead(unit)
-    if not (unit and UnitIsDeadOrGhost) then return false end
+    if not unit then return false end
+    if UnitIsConnected then                             -- (offline: nobody there to heal either - 17 Nov, the status words)
+        local okC, c = pcall(UnitIsConnected, unit)
+        if okC and plain(c) == false then return true end
+    end
+    if not UnitIsDeadOrGhost then return false end
     local ok, d = pcall(UnitIsDeadOrGhost, unit)
     return ok and plain(d) == true
 end

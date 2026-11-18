@@ -1047,7 +1047,58 @@ function EN.Paint(sp)
     -- target box's two units can be a foe; the grid's own road, a secret answer goes through the client's curve
     if (unit == "target" or unit == "targettarget") and FG and FG.PaintHostile then FG.PaintHostile(e, unit, c) end
     e.box:Show()
+    EN.PaintStatus(sp)
     return true
+end
+
+--[[ DEAD / OFFLINE / AFK ACROSS THE BAR (17 Nov 2026, Arn: "do our frames show as dead afk and offline?" - the grid did, the
+  deck only darkened a dead bar - "yes add it to the deck big letter across the health bar dead dark red offline grey
+  afk white"). The grid's own answer (FG.StatusWord: OFFLINE wins over DEAD, AFK last - the one that can go secret
+  mid-fight, then it simply is not shown), one word big across the box's health bar, under the heal cue's layer.
+  Repainted with the box (EN.Paint) and when someone logs out or in (UNIT_CONNECTION) or goes AFK (PLAYER_FLAGS_CHANGED). ]]
+EN.STATUS = {
+    DEAD = { 0.78, 0.10, 0.10 },
+    OFFLINE = { 0.62, 0.62, 0.66 },
+    AFK = { 1, 1, 1 },
+    size = 0.72, min = 9, max = 22,
+}
+--- The word for a box: DEAD, OFFLINE, AFK or nil (a res on its way still reads DEAD).
+function EN.StatusOf(unit)
+    local FG = NS.FG
+    local w = FG and FG.StatusWord and FG.StatusWord(unit)
+    if type(w) ~= "string" then return nil end
+    if w:find("^rez") then return "DEAD" end
+    return EN.STATUS[w] and w or nil
+end
+function EN.PaintStatus(sp)
+    local e = sp and sp.en
+    if not e then return nil end
+    local word = sp.unit and EN.StatusOf(sp.unit) or nil
+    if not e.status and not word then return nil end
+    if not e.status then
+        local S = EN.STATUS
+        local fs = e.box:CreateFontString(nil, "OVERLAY", nil, 7)
+        local h = e.box.GetHeight and e.box:GetHeight()
+        local px = math.floor(math.max(S.min, math.min(S.max, (type(h) == "number" and h > 0 and h or 20) * S.size)))
+        fs:SetFont("Fonts\\ARIALN.TTF", px, "THICKOUTLINE")
+        fs:SetPoint("CENTER", e.box, "CENTER", 0, 0)
+        e.status = fs
+    end
+    local fs = e.status
+    if fs.word ~= word then
+        fs.word = word
+        fs:SetText(word or "")
+        local c = word and EN.STATUS[word]
+        if c then fs:SetTextColor(c[1], c[2], c[3], 1) end
+        if word then fs:Show() else fs:Hide() end
+    end
+    return word
+end
+--- Everyone's word again (someone logged out or in, went AFK or came back).
+function EN.PaintStatusAll()
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        if sp.en and sp.en.box:IsShown() then EN.PaintStatus(sp) end
+    end
 end
 
 --- Heals on their way into the box's incoming bar, untouched, on their max (asked here when not handed). True = drawn.
@@ -1285,9 +1336,16 @@ EN.events = ev
 pcall(ev.RegisterEvent, ev, "UNIT_IN_RANGE_UPDATE")
 pcall(ev.RegisterEvent, ev, "LOSS_OF_CONTROL_ADDED")      -- yours: the loss of control box (EN.LossPaint)
 pcall(ev.RegisterEvent, ev, "LOSS_OF_CONTROL_UPDATE")
+pcall(ev.RegisterEvent, ev, "UNIT_CONNECTION")            -- logged out / back: OFFLINE across their bar (EN.PaintStatus)
+pcall(ev.RegisterEvent, ev, "PLAYER_FLAGS_CHANGED")       -- AFK on / off
 ev:SetScript("OnEvent", function(_, event, unit)
     if event == "LOSS_OF_CONTROL_ADDED" or event == "LOSS_OF_CONTROL_UPDATE" then
         if console() then EN.LossPaint() end
+        return
+    end
+    if event == "UNIT_CONNECTION" or event == "PLAYER_FLAGS_CHANGED" then
+        if console() then EN.PaintStatusAll() end
+        if NS.RD and NS.RD.RipMarks then NS.RD.RipMarks() end   -- (offline: no heal cue on them)
         return
     end
     if not console() or secret(unit) then return end
