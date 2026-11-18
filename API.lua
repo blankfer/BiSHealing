@@ -80,6 +80,15 @@
 --          only); nil, "not shown" otherwise. ONLY for SetPoint against it: never change it, show
 --          it, hide it or parent to it.
 --
+-- SINCE VERSION 3 (18 Nov 2026 - BiS Tools' combo; Arn: "I click something and it changes the totems on my deck")
+--   BiSHealingAPI.SetTotems(set)
+--       set = { fire = "Flametongue Totem", earth = "Strength of Earth Totem", air = "Grace of Air Totem",
+--               water = ... } (or slot numbers 1 fire, 2 earth, 3 water, 4 air; false clears one; one left out is left
+--       alone). The deck's four totem boxes drop these from their next click. OUT OF A FIGHT ONLY.
+--       -> true; or nil, "not ready" / "in a fight" / "no totems".
+--   BiSHealingAPI.Totems()
+--       -> { fire = name, earth = name, water = name, air = name } - what each box drops now (nil where none).
+--
 -- EVENTS (since version 1). Each callback is pcalled: a listener's error stays its own.
 --   "BiSHealing_BindsChanged"  fn(event) - the player changed a bind (dropped, cleared, stepped a
 --                              rank, ticked a trinket tab). Ask Binds() for the new ones.
@@ -89,7 +98,7 @@
 local _, NS = ...
 NS = NS or {}
 
-local API = { major = 1, version = 2 }
+local API = { major = 1, version = 3 }
 BiSHealingAPI = API
 
 local EVENTS = { BiSHealing_BindsChanged = true, BiSHealing_TankChanged = true, BiSHealing_Shown = true }
@@ -248,6 +257,25 @@ function API.RadarEdge()
     if not (RD and RD.hull and f and try(RD.Active) and try(f.IsShown, f)) then return nil, "not shown" end
     -- a FRAME, never the hull texture: a frame holding secure buttons may not be pinned to a texture (12 Nov 2026)
     return RD.edgeFrame or f, (RD.EDGE_N or 0) * (RD.EDGE_PX or 0), f
+end
+
+function API.SetTotems(set)
+    local d, why = ready()
+    if not d then return nil, why end
+    local RD = NS.RD
+    if not (RD and RD.SetTotems) then return nil, "not ready" end
+    local ok, a, b = pcall(RD.SetTotems, set)
+    if not ok then return nil, "failed" end
+    return a, b
+end
+
+function API.Totems()
+    local d, why = ready()
+    if not d then return nil, why end
+    local R = type(d.radar) == "table" and d.radar or {}         -- (the deck keeps its boxes in the radar's table)
+    local out, slots = {}, type(R.totemSlots) == "table" and R.totemSlots or {}
+    for name, slot in pairs({ fire = 1, earth = 2, water = 3, air = 4 }) do out[name] = plain(slots[slot]) end
+    return out
 end
 
 function API.Tank()

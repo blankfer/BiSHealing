@@ -1255,7 +1255,7 @@ end
 -- ready" - and nothing throws, and nothing is created by being asked.
 do
     local A = _G.BiSHealingAPI
-    ok(type(A) == "table" and A.major == 1 and A.version == 2, "BiSHealingAPI is there, major 1 version 2")
+    ok(type(A) == "table" and A.major == 1 and A.version == 3, "BiSHealingAPI is there, major 1 version 3")
     ok(A.Look() == nil and A.RadarEdge() == nil, "version 2's Look and RadarEdge: nil before login too")
     ok(NS.FG and NS.FG.anchor == nil, "(the grid is not started yet, as before PLAYER_LOGIN)")
     local hadDB = _G.BiSHealingDB
@@ -15396,6 +15396,27 @@ do
         STATE.inCombat = false
         RD.LearnTimers()
         ok(w.totem == "Healing Stream Totem", "and learned when the fight ends")
+        -- A SET SENT IN (Arn: "I click something and it changes the totems on my BiS Healing deck - out of combat of course")
+        local keepGTI = _G.GetTotemInfo
+        _G.GetTotemInfo = function(slot)                    -- (the standing totem went down a minute ago)
+            local a1, a2, a3, a4, a5 = keepGTI(slot)
+            if a3 and a3 > 0 then a3 = a3 - 60 end
+            return a1, a2, a3, a4, a5
+        end
+        local okS = BiSHealingAPI.SetTotems({ water = "Mana Spring Totem", fire = "Flametongue Totem" })
+        ok(okS and w.totem == "Mana Spring Totem" and timers[4].totem == "Flametongue Totem"
+           and timers[4]:GetAttribute("macrotext1") == "/cast Flametongue Totem",
+           "BiSHealingAPI.SetTotems: the boxes drop the sent totems - the one standing from before does not undo it", w.totem)
+        RD.LearnTimers()
+        ok(w.totem == "Mana Spring Totem", "a later look at the standing totems keeps the sent pick")
+        local tt = BiSHealingAPI.Totems()
+        ok(tt and tt.water == "Mana Spring Totem" and tt.fire == "Flametongue Totem", "BiSHealingAPI.Totems: what each box drops")
+        STATE.inCombat = true
+        local okF, why = BiSHealingAPI.SetTotems({ air = "Grace of Air Totem" })
+        ok(okF == nil and why == "in a fight", "in a fight: refused, nothing changes")
+        STATE.inCombat = false
+        _G.GetTotemInfo = keepGTI
+        NS.DB().radar.totemSetAt = nil
         for k = 1, 4 do TOTEMS[k] = keepT[k] end
         STATE.totemName[3] = nil
         NS.DB().radar.totemSlots = nil
