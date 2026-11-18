@@ -1,5 +1,10 @@
 # BiS Healing
 
+## 1.7.1
+
+- **Fixed: after a res, the deck could still say DEAD and try to res you.** A box that switched to "every click resurrects" while someone lay dead now gives your binds back as soon as they stand up (and when a fight starts), and the DEAD word goes.
+- **Easier to drag:** the deck's grab band now reaches up over the mana strip at the top.
+
 ## 1.7.0
 
 - **Heal cues: who to heal, with what, at a glance.** The middle of a person's health bar is kept for one thing - a white-edged icon that says heal this person now, with this:
