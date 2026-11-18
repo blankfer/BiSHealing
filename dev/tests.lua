@@ -15594,6 +15594,9 @@ do
             local tg = RD.topGrip
             ok(tg and tg:IsShown() and (tg.__h or tg:GetHeight()) >= RD.DeckHead(), "the deck's whole top strip is a grab band")
             ok(tg:GetFrameLevel() < RD.viewBtn:GetFrameLevel(), "under the switches button: that still clicks")
+            local up = EN.GaugeTop()
+            ok(up == 0 or ((tg.__h or tg:GetHeight()) >= RD.DeckHead() + up and RD.gauge:GetFrameLevel() > tg:GetFrameLevel()),
+               "the band reaches up over the mana strip too (Arn: \"i thought it was higher\"), the tape still on top", up)
             local started = 0
             local keepDS = RD.frame:GetScript("OnDragStart")
             RD.frame:SetScript("OnDragStart", function() started = started + 1 end)

@@ -3294,10 +3294,18 @@ function RD.PlaceTopGrip()
     if not (RD.Console and RD.Console()) then g:Hide() return end
     local C = RD.CON or {}
     local head = (RD.Deck() and RD.DeckHead and RD.DeckHead()) or C.head or 14
+    -- UP OVER THE MANA STRIP TOO (17 Nov, Arn: "i thought it was higher" - only the mana bar itself dragged up there):
+    -- the band starts at the window's very top, the strip above the console (EN.GaugeTop) included; the mana tape keeps
+    -- its tooltip, lifted over the band
+    local up = (NS.EN and NS.EN.GaugeTop and NS.EN.GaugeTop()) or 0
     g:ClearAllPoints()
-    g:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    g:SetPoint("TOPRIGHT", f, "TOPRIGHT", -RD.GRIP_RIGHT, 0)
-    g:SetHeight((C.pad or 8) + head)
+    g:SetPoint("TOPLEFT", f, "TOPLEFT", 0, up)
+    g:SetPoint("TOPRIGHT", f, "TOPRIGHT", -RD.GRIP_RIGHT, up)
+    g:SetHeight((C.pad or 8) + head + up)
+    local tape = RD.gauge
+    if tape and tape.GetFrameLevel and tape:GetFrameLevel() <= g:GetFrameLevel() then
+        pcall(tape.SetFrameLevel, tape, g:GetFrameLevel() + 1)
+    end
     g:Show()
 end
 
