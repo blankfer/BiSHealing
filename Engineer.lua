@@ -1064,6 +1064,11 @@ EN.STATUS = {
 }
 --- The word for a box: DEAD, OFFLINE, AFK or nil (a res on its way still reads DEAD).
 function EN.StatusOf(unit)
+    -- NOBODY THERE IS NOT "OFFLINE" (17 Nov, Arn's shot: the empty TARGET / ITS TARGET boxes read OFFLINE - the game
+    -- answers "not connected" for a unit that does not exist): a word only for someone who plainly IS there
+    if not (unit and UnitExists) then return nil end
+    local okE, there = pcall(UnitExists, unit)
+    if not (okE and NS.Plain(there) == true) then return nil end
     local FG = NS.FG
     local w = FG and FG.StatusWord and FG.StatusWord(unit)
     if type(w) ~= "string" then return nil end

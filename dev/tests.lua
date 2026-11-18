@@ -15970,6 +15970,15 @@ do
                     _G.UnitIsAFK = keepAfk
                     EN.Paint(tsp)
                     ok(not fs:IsShown(), "back: the bar alone")
+                    -- an EMPTY box (no target): the game says "not connected" for nobody - never OFFLINE (Arn's shot)
+                    _G.UnitIsConnected = function() return false end
+                    local keepT = STATE.units.target
+                    STATE.units.target = nil
+                    ok(EN.StatusOf("target") == nil, "no target: the TARGET box says nothing (not OFFLINE)")
+                    STATE.units.target = keepT
+                    STATE.units.nobody = nil
+                    ok(EN.StatusOf("nobody") == nil, "a unit that is not there: no word")
+                    _G.UnitIsConnected = keepConn
                 end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
                 RD.lastClick, RD.over = nil, nil
