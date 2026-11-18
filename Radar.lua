@@ -1746,16 +1746,20 @@ RD.SW = {
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
-             fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
+             fuel = true, tools = true, totems = true, timers = true, rip = true, mana = true, bounce = true, bsound = true,
              oath = true, vigil = true, swift = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
+--[[ CLICKED ON BY HAND ONLY (18 Nov 2026, Arn: "even when someone selects the deck options show everything it should not
+  turn on that black box, that one should always have to be clicked on"): a switch here reads OFF until its own tick is
+  clicked; no preset (FULL, RESET, the first-start card) writes it, and the preset that lights up ignores it. ]]
+RD.SW_MANUAL = { bb = true }
 RD.SW_ORDER = { "bare", "lean", "full" }
 RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
 function RD.Sw(key)
     local t = db().sw
-    if type(t) ~= "table" or t[key] == nil then return true end
+    if type(t) ~= "table" or t[key] == nil then return not RD.SW_MANUAL[key] end
     return t[key] == true
 end
 --- The icon row under each box's bar: while kicks or cures are on.
@@ -1764,7 +1768,9 @@ function RD.SwIcons() return RD.Sw("kicks") or RD.Sw("cures") end
 function RD.SwPresetNow()
     for _, name in ipairs(RD.SW_ORDER) do
         local p, same = RD.SW_PRESETS[name], true
-        for _, s in ipairs(RD.SW) do if (p[s.key] == true) ~= RD.Sw(s.key) then same = false end end
+        for _, s in ipairs(RD.SW) do
+            if not RD.SW_MANUAL[s.key] and (p[s.key] == true) ~= RD.Sw(s.key) then same = false end
+        end
         if same then return name end
     end
     return nil
@@ -1790,7 +1796,9 @@ function RD.SwPreset(name)
     local p = RD.SW_PRESETS[name]
     if not p then return nil end
     local t = {}
-    for _, s in ipairs(RD.SW) do t[s.key] = p[s.key] == true end
+    for _, s in ipairs(RD.SW) do
+        if RD.SW_MANUAL[s.key] then t[s.key] = RD.Sw(s.key) else t[s.key] = p[s.key] == true end
+    end
     db().sw = t
     return RD.SwApply()
 end
@@ -1806,6 +1814,21 @@ function RD.SwStamp()
     end
     d.view = nil
     return true
+end
+--- Once per character, when the black box became click-on-only (18 Nov 2026): whoever already had the deck and never
+--- switched the black box keeps it ON (nil meant on for them); a new install (NS.fresh) starts with it off. Waits for
+--- NS.Forever10 to decide new or returning.
+function RD.BBStamp()
+    local d, top = db(), NS.DB()
+    if d.bbStamp then return false end
+    if NS.pending10 or not top.forever10 then return false end
+    d.bbStamp = 1
+    if NS.fresh then return false end
+    local had = type(d.sw) == "table" or top.look == "radar"
+    if not had then return false end
+    d.sw = type(d.sw) == "table" and d.sw or {}
+    if d.sw.bb == nil then d.sw.bb = true return true end
+    return false
 end
 --- A box's sizes with the icon row taken out while kicks and cures are both off (the lean look: the bar is the box).
 --- BOX HEIGHT (16 Nov 2026, Arn: "maybe we also put the sliders there for width and height"): the bar's part of every box
@@ -7464,6 +7487,7 @@ end
 function RD.Apply()
     RD.DashStamp()                                   -- the old alpha switch, once, into the look
     RD.SwStamp()                                     -- the engineer's view, once, into the switches
+    RD.BBStamp()                                     -- the black box became click-on-only: who had it keeps it
     local want = RD.On()
     if combat() then
         if want ~= RD.Active() then RD.pending = true end

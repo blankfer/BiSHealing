@@ -2057,6 +2057,17 @@ local function withShort(line)
     end))
 end
 
+--- THE FIRST-START CARD again (Onboard.lua): heal (classic / deck) or utility.
+function NS.DO.onboard()
+    if NS.OB and NS.OB.Open then return NS.OB.Open() end
+    return false
+end
+--- THE UTILITY WINDOW (Utility.lua): no word = show / hide; on, off, faces, boxes, hide <class>.
+function NS.DO.utility(arg)
+    if NS.UT and NS.UT.Command then return NS.UT.Command(arg) end
+    return nil
+end
+
 function NS.DO.help()
     local Print = function(line) return NS.Print(withShort(line)) end
     Print("the window is /bish, or the button on your minimap. Also:")
@@ -2070,6 +2081,8 @@ function NS.DO.help()
     Print("  |cffb980ffholds|r  what has actually held anybody since login")
     Print("  |cffb980ffhits|r   does anything still say somebody was hit (a measurement)")
     Print("  |cffb980ffnow|r    BiS> now - the buttons that matter right now")
+    Print("  |cffb980ffutility|r  Innervate / Mana Tide - give or ask (|cffb980ffutility faces|r or |cffb980ffboxes|r)")
+    Print("  |cffb980ffonboard|r  the first-start card again: heal or utility")
     Print("  |cffb980ffwatch|r  a buff to watch on the GROUP - |cffb980ffwatch off|r to stop")
     Print("  |cffb980ffauras|r  mark every debuff, to prove the markers draw")
     Print("  |cffb980ffminimap|r  hide or show the button")
@@ -2134,7 +2147,7 @@ NS.SHORT = {
     buffsound = "bsnd", buffs = "bufs", markers = "mark", cures = "cure", trinkets = "trin",
     hover = "hov", flash = "flsh", overword = "ovw", overbutton = "ovb", clique = "clq", layout = "lay", pyramid = "pyr", columns = "cols",
     across = "rows", saved = "db", macro = "keep",
-    pvpmode = "pvp", healabsorb = "habs",
+    pvpmode = "pvp", healabsorb = "habs", onboard = "onb", utility = "util",
 }
 local LONG = {}
 for long, short in pairs(NS.SHORT) do LONG[short] = long end
@@ -2310,6 +2323,10 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.mana(msg:match("^mana%s+(%a+)$"))
     elseif msg:match("^me%s+%a+$") or msg:match("^self%s+%a+$") then
         NS.DO.me(msg:match("^%a+%s+(%a+)$"))
+    elseif msg == "onboard" then
+        NS.DO.onboard()
+    elseif msg == "utility" or msg:match("^utility%s") then
+        NS.DO.utility(msg:match("^utility%s+(.+)$"))
     elseif msg == "look" then
         NS.DO.look()
     elseif msg:match("^look%s+%a+$") then
@@ -2582,6 +2599,8 @@ function NS.Forever10(listIn)
         for k, v in pairs(NS.QUIET) do db[k] = v end
         db.selfBuffs = { none = true }                      -- no buff watched: no header word, no sound
         db.look = db.look or "classic"                      -- new installs: classic, nothing on (Arn, 11 Nov 2026)
+        db.radar = type(db.radar) == "table" and db.radar or {}
+        db.radar.bbStamp = 1                                -- the black box: off until its own tick (Radar.lua RD.BBStamp)
         was = "new"
     end
     db.forever10 = true
