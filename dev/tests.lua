@@ -15764,6 +15764,29 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                local q = tsp.cue
+                ok(q and q.icon:IsShown() and q.edge:IsShown() and q.edge.__w > q.icon.__w and q.edge.__color and q.edge.__color[1] == 1,
+                   "the mark edged white, bigger than before (Arn: in the middle so it does not get lost)")
+                -- EVERY BOX OF THAT PERSON (Arn: "rip tide is not propagating to the other frames"): the same GUID elsewhere
+                local twin
+                for _, sp in ipairs(RD.spokes) do
+                    if sp ~= tsp and sp.unit and sp.deckPlate:IsShown() then twin = sp break end
+                end
+                if twin then
+                    local keepG = STATE.guids[twin.unit]
+                    STATE.guids[twin.unit] = UnitGUID(tsp.unit)
+                    RD.RipMarks()
+                    ok(twin.ripMark and twin.ripMark:IsShown(), "the same person in another box (the TARGET pair): marked there too")
+                    STATE.guids[twin.unit] = keepG
+                    RD.RipMarks()
+                    ok(not (twin.ripMark and twin.ripMark:IsShown()), "someone else in that box: no mark")
+                    -- TARGETED AFTER THE RIPTIDE (Arn: "if I target later they dont show up"): the target change repaints them
+                    STATE.guids[twin.unit] = UnitGUID(tsp.unit)
+                    fire(RD.events, "PLAYER_TARGET_CHANGED")
+                    ok(twin.ripMark and twin.ripMark:IsShown(), "you target them after the Riptide: the mark comes up on the TARGET box too")
+                    STATE.guids[twin.unit] = keepG
+                    RD.RipMarks()
+                end
                 ok(tsp.ripHold and tsp.ripHold:GetFrameLevel() > tsp.heal:GetFrameLevel() + 1,
                    "the mark sits OVER the health bar (pip + 1), not on the plate under it (Arn: no mark on sushii)",
                    tsp.ripHold and tsp.ripHold:GetFrameLevel(), tsp.heal:GetFrameLevel())
@@ -15772,7 +15795,7 @@ do
                    "the Riptide icon and the lines on a layer OVER the bar's fill (Arn: \"keep riptide on top of the duration bar\")")
                 ok(rq.rip.iconBack and rq.rip.iconBack.__color and rq.rip.iconBack.__color[4] == 1,
                    "a solid back under the icon: the bar's colour never shows through it (Arn: \"looks like it has an overlay on it\")")
-                ok(math.abs((rq.rip.iconBack.__w or 0) - (rq.__w - 2) / 6) < 0.01,
+                ok(math.abs((rq.rip.iconBack.__w or 0) - rq.rip.sw) < 0.01,
                    "the back fills the icon's whole square: no sliver of green beside it (Arn)", rq.rip.iconBack.__w)
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
@@ -15786,7 +15809,7 @@ do
                 EN.RipPaint()
                 ok(rq.rip.iconK == 1 and rq.rip.late.TOP:IsShown() and barCol() == EN.RIP_RED[1],
                    "under one Chain Heal left: red, the icon lit, red edged - too late")
-                RD.ripLast.untilAt, RD.rips[tsp.unit] = GetTime() - 1, GetTime() - 1
+                RD.ripLast.untilAt, RD.rips[RD.RipKey(tsp.unit)] = GetTime() - 1, GetTime() - 1
                 ok(EN.RipPaint() == false and not tsp.ripMark:IsShown(), "gone: the bar empty, the mark off")
                 -- TWO RIPTIDES (Arn's cousin: "the icon stayed on two people, the second rip tide extended the timer for the
                 -- first one"): A's mark ends with A's own Riptide, while B's bar runs on
@@ -15800,14 +15823,162 @@ do
                     RD.lastClick, RD.lastClickAt = other, GetTime()
                     RD.RipCast(GetTime())
                     ok(tsp.ripMark:IsShown() and other.ripMark:IsShown(), "two Riptides standing: two marks")
-                    RD.rips[tsp.unit] = GetTime() - 0.1                -- A's runs out; B's has most of its time
-                    RD.ripNext = RD.rips[tsp.unit]
+                    RD.rips[RD.RipKey(tsp.unit)] = GetTime() - 0.1     -- A's runs out; B's has most of its time
+                    RD.ripNext = RD.rips[RD.RipKey(tsp.unit)]
                     EN.RipPaint()
                     rq:GetScript("OnUpdate")(rq, 1)                    -- the bar's ticker
                     ok(not tsp.ripMark:IsShown() and other.ripMark:IsShown() and rq.rip.bar:GetValue() > 10,
                        "A's ran out: A's mark gone at once, B's mark and B's bar carry on")
                     RD.rips, RD.ripLast, RD.ripNext = {}, nil, nil
                     RD.RipMarks()
+                end
+                -- THE CLASS HEAL CUES (Arn: "build all three"): Oath of Light, Light's Vigil, Swiftmend - our own clock of our casts
+                do
+                    local keepTex, keepRanks2 = _G.C_Spell.GetSpellTexture, NS.FM.Ranks
+                    _G.C_Spell.GetSpellTexture = function(n) return "tex:" .. tostring(n) end
+                    RD.cueTex = {}
+                    RD.rips, RD.ripLast = {}, nil
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Holy Light",
+                       "Oath of Light on a box: Holy Light in its middle (heal them there)")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Light's Vigil", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Holy Shock", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
+                    if other then
+                        RD.lastClick, RD.lastClickAt = other, GetTime()
+                        RD.CueCast("Oath of Light", GetTime())
+                        ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
+                    end
+                    -- HOLY SHOCK ON AN ENEMY never spends the Vigil (Arn: "think of all the possible scenarios")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Light's Vigil", GetTime())
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.sentTarget, RD.sentAt = "Hogger", GetTime()
+                    RD.CueCast("Holy Shock", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
+                    RD.sentTarget, RD.sentAt = nil, nil
+                    -- DEAD: no cue on their box, the clock waits
+                    STATE.dead[tsp.unit] = true
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "they died: no cue on a dead box")
+                    STATE.dead[tsp.unit] = nil
+                    RD.RipMarks()
+                    ok(tsp.cue.icon:IsShown(), "back up (a quick rez): the cue back")
+                    -- OUT OF A FIGHT, THE TRUTH (dispelled, a /reload): RD.CueSeed reads your own auras off the boxes
+                    do
+                        local keepUA = _G.C_UnitAuras
+                        _G.C_UnitAuras = setmetatable({}, { __index = keepUA or {} })
+                        local keepGet, keepR3 = C_UnitAuras.GetAuraDataBySpellName, NS.FM.Ranks
+                        NS.FM.Ranks = function(n) if n == "Light's Vigil" or n == "Oath of Light" then return { { rank = "", spell = 1 } } end return {} end
+                        C_UnitAuras.GetAuraDataBySpellName = function(u, n)
+                            if u == other.unit and n == "Oath of Light" then return { expirationTime = GetTime() + 200, duration = 300 } end
+                            return nil
+                        end
+                        RD.CueSeed()
+                        ok(not tsp.cue.icon:IsShown() and other.cue and other.cue.icon:IsShown() and other.cue.icon.__texture == "tex:Holy Light",
+                           "out of a fight: the Vigil nobody wears any more is gone, an Oath found on someone (after a /reload) comes up")
+                        NS.FM.Ranks = keepR3
+                        _G.C_UnitAuras = keepUA
+                    end
+                    RD.cueMarks = {}
+                    RD.RipMarks()
+                    -- the druid
+                    NS.FM.Ranks = function(n) if n == "Swiftmend" then return { { rank = "", spell = 18562 } } end return keepRanks2(n) end
+                    RD.swiftAt = nil
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Rejuvenation", GetTime())
+                    ok(tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
+                    RD.CueCast("Swiftmend", GetTime())
+                    ok(not tsp.cue.icon:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
+                    RD.swiftAt = GetTime() - 1
+                    RD.RipMarks()
+                    ok(tsp.cue.icon:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
+                    RD.SetSw("swift", false)
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "the Swiftmend switch off: no cue")
+                    RD.SetSw("swift", true)
+                    NS.FM.Ranks = function(n) return keepRanks2(n) end
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    -- a druid's synergy bar: the newest HoT's time left, the Swiftmend icon
+                    do
+                        local keepR = NS.FM.Ranks
+                        NS.FM.Ranks = function(n) if n == "Swiftmend" or n == "Rejuvenation" then return { { rank = "", spell = 1 } } end return {} end
+                        RD.swiftAt = nil
+                        RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                        RD.CueCast("Rejuvenation", GetTime())
+                        local stn = EN.SynergyNow()
+                        ok(stn and stn.kind == "hot" and stn.left > 10 and stn.icon == "Swiftmend" and stn.ready,
+                           "a druid: the synergy bar is the newest Rejuvenation's time, Swiftmend the payoff")
+                        RD.CueCast("Swiftmend", GetTime())
+                        ok(not EN.SynergyNow().ready, "Swiftmend cooling: the bar's icon greyed, never 'too late'")
+                        NS.FM.Ranks = keepR
+                        RD.cueLast = {}
+                    end
+                    RD.cueMarks, RD.swiftAt, RD.cueTex = {}, nil, {}
+                    NS.FM.Ranks, _G.C_Spell.GetSpellTexture = keepRanks2, keepTex
+                    RD.RipMarks()
+                end
+                -- THE SYNERGY BAR'S MATH (Arn: "call the riptide bar the synergy bar, and have that smart math behind it")
+                do
+                    local fit, late = EN.SynergyMath(10, 2.5, 0.1, 0)
+                    ok(fit == 3 and not late, "10 s left, a 2.5 s Chain Heal + 0.1 s lag: 3 still land", fit)
+                    fit, late = EN.SynergyMath(10, 2.0, 0.1, 0)
+                    ok(fit == 4, "a faster Chain Heal (2 s, a troll's or haste): 4 land", fit)
+                    fit, late = EN.SynergyMath(3, 2.5, 0.2, 1.0)
+                    ok(fit == 0 and late, "3 s left but 1 s still on the cast in hand: the next one would not land - too late")
+                    fit, late = EN.SynergyMath(2.6, 2.5, 0.2, 0)
+                    ok(late, "2.6 s left, 2.5 s cast + 0.2 s lag: too late (the old bar called this one fine)")
+                    local keepNS = _G.GetNetStats
+                    _G.GetNetStats = function() return 0, 0, 40, 120 end
+                    ok(math.abs(EN.Lag() - 0.12) < 1e-9, "the lag: the world latency, in seconds", EN.Lag())
+                    _G.GetNetStats = keepNS
+                    ok(EN.SynergyKind().kind == "rip", "a shaman who knows Riptide: the Riptide synergy")
+                    local n1 = EN.Squares(15, 2.6)
+                    local n2 = EN.Squares(15, 2.0)
+                    local n3, sh3 = EN.Squares(30, 1.5)
+                    ok(n1 == 5 and n2 == 7 and n3 == EN.SYN.maxSquares and math.abs(sh3 - 1 / EN.SYN.maxSquares) < 1e-9,
+                       "the squares: as many casts as fit (Arn) - 5 at 2.6 s, 7 at 2 s, a 30 s Vigil drawn as " .. EN.SYN.maxSquares, n1, n2, n3)
+                end
+                -- DEAD / OFFLINE / AFK ACROSS THE BAR (Arn: "big letter across the health bar dead dark red offline grey afk white")
+                do
+                    local keepConn, keepAfk = _G.UnitIsConnected, _G.UnitIsAFK
+                    local u = tsp.unit
+                    STATE.dead[u] = true
+                    EN.Paint(tsp)
+                    local fs = tsp.en and tsp.en.status
+                    ok(fs and fs:IsShown() and fs:GetText() == "DEAD" and fs.__color and fs.__color[1] > 0.6 and fs.__color[2] < 0.2,
+                       "dead: DEAD across the bar in dark red", fs and fs:GetText())
+                    STATE.dead[u] = nil
+                    _G.UnitIsConnected = function(x) return x ~= u end
+                    EN.Paint(tsp)
+                    ok(fs:IsShown() and fs:GetText() == "OFFLINE" and fs.__color[1] == EN.STATUS.OFFLINE[1], "offline: OFFLINE in grey")
+                    STATE.dead[u] = true
+                    EN.Paint(tsp)
+                    ok(fs:GetText() == "OFFLINE", "offline wins over dead (a corpse that logged out)")
+                    STATE.dead[u] = nil
+                    _G.UnitIsConnected = keepConn
+                    _G.UnitIsAFK = function(x) return x == u end
+                    fire(EN.events, "PLAYER_FLAGS_CHANGED", u)
+                    ok(fs:IsShown() and fs:GetText() == "AFK" and fs.__color[1] == 1 and fs.__color[3] == 1, "AFK: in white, the moment they go")
+                    _G.UnitIsAFK = function() return secret() end
+                    EN.Paint(tsp)
+                    ok(not fs:IsShown(), "AFK hidden by the game mid-fight: no stale word")
+                    _G.UnitIsAFK = keepAfk
+                    EN.Paint(tsp)
+                    ok(not fs:IsShown(), "back: the bar alone")
+                    -- an EMPTY box (no target): the game says "not connected" for nobody - never OFFLINE (Arn's shot)
+                    _G.UnitIsConnected = function() return false end
+                    local keepT = STATE.units.target
+                    STATE.units.target = nil
+                    ok(EN.StatusOf("target") == nil, "no target: the TARGET box says nothing (not OFFLINE)")
+                    STATE.units.target = keepT
+                    STATE.units.nobody = nil
+                    ok(EN.StatusOf("nobody") == nil, "a unit that is not there: no word")
+                    _G.UnitIsConnected = keepConn
                 end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
                 RD.lastClick, RD.over = nil, nil
