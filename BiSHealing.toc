@@ -47,6 +47,9 @@ TestCam.lua
 BlackBox.lua
 # healing with a controller: the D-pad lights one person, A/B/X/Y are your binds on them (off by default)
 PadHeal.lua
+# the first-start card and the utility window (Innervate / Power Infusion / Mana Tide over LibBiSComm BiS> in), 18 Nov 2026
+Utility.lua
+Onboard.lua
 # last before the UI-only files: BiSHealingAPI, for other addons (playbook 5a)
 API.lua
 

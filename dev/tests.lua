@@ -15236,6 +15236,12 @@ do
     local empty = 0
     for _, sp in ipairs(RD.spokes) do if sp.slot and not sp.slot.box and not sp.unit and sp.heal:IsShown() then empty = empty + 1 end end
     ok(empty == 0, "no empty boxes: the deck grows down instead", empty)
+    do   -- the black box is clicked on by hand (18 Nov 2026), so this deck switches it on first
+        local rd = NS.DB().radar
+        rd.sw = type(rd.sw) == "table" and rd.sw or {}
+        rd.sw.bb = true
+        RD.Arm()
+    end
     ok(RD.bbRail and RD.bbRail:IsShown(), "the black box stays, under the deck (Arn: \"dont forget my black box\")")
     local bp = RD.bbRail.points and RD.bbRail.points[1]
     ok(bp and bp[1] == "TOPLEFT" and bp[2] == RD.frame and bp[3] == "BOTTOMLEFT",
@@ -15553,8 +15559,22 @@ do
             local keepShown = RD.shownFor
             RD.shownFor = true                         -- the window standing in for the grid, as in the game
             d.radar.view, d.radar.sw = nil, nil
-            for _, s in ipairs(RD.SW) do ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            for _, s in ipairs(RD.SW) do
+                if RD.SW_MANUAL[s.key] then ok(not RD.Sw(s.key), "nothing switched yet: " .. s.key .. " OFF - clicked on by hand only")
+                else ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            end
             ok(RD.SwPresetNow() == "full", "and that is FULL")
+            -- CLICKED ON BY HAND ONLY (Arn, 18 Nov: "even when someone selects the deck options show everything it should
+            -- not turn on that black box, that one should always have to be clicked on")
+            ok(RD.SwPreset("full") == "now" and d.radar.sw.bb == false and not RD.Sw("bb"), "FULL leaves the black box off")
+            ok(not (RD.bbRail and RD.bbRail:IsShown()), "and no black box under the deck")
+            ok(RD.SetSw("bb", true) == "now" and RD.Sw("bb") and RD.bbRail:IsShown(), "its own tick turns it on")
+            ok(RD.SwPresetNow() == "full", "FULL still lights with the black box on - presets ignore it")
+            ok(RD.SwPreset("bare") == "now" and RD.Sw("bb"), "BARE keeps it on too: only its tick changes it")
+            ok(RD.SwPreset("full") == "now" and RD.Sw("bb"), "and FULL")
+            RD.SetSw("bb", false)
+            ok(RD.SwReset() == "now" and not RD.Sw("bb"), "RESET never turns it on")
+            d.radar.sw = nil
             ok(RD.SetSw("names", false) == "now" and d.radar.sw.names == false and not RD.Sw("names"), "a switch off, saved, laid out now")
             local sp1 = RD.spokes[RD.conOrder[1]]
             ok(sp1.deckTag and not sp1.deckTag:IsShown(), "names off: no name on the boxes")
@@ -16345,6 +16365,159 @@ do
     _G.GetUnitName = keepGUN
     if NS.AlphaApply then NS.AlphaApply() end
     if RD.On() then RD.Arm() end
+end
+
+-- THE FIRST-START CARD AND THE UTILITY WINDOW (18 Nov 2026, Arn: "Quick steps, I'm here to: [heal] : [utility]" -
+-- "Druids: Innervate faces ... Mages: an Innervate button and a Mana Tide button ... shamans see their Mana Tide button
+-- light up"; picks: two big cards, deck suggested, faces or boxes as a toggle).
+do
+    print("BiS> utility + onboard (18 Nov 2026)")
+    local UT, OB = NS.UT, NS.OB
+    ok(UT and OB, "Utility.lua and Onboard.lua loaded from the TOC")
+    local d = NS.DB()
+    d.radar = type(d.radar) == "table" and d.radar or {}
+    local keep = { lib = _G.LibBiSComm, look = d.look, shown = d.shown, sw = d.radar.sw,
+                   units = { party1 = STATE.units.party1, party2 = STATE.units.party2 },
+                   classes = STATE.classes, upt = _G.UnitPowerType, fresh = NS.fresh, char = _G.BiSHealingCharDB }
+    -- the real lib has every call this window makes
+    local real = keep.lib
+    for _, k in ipairs({ "BisInSet", "BisInMe", "BisInReady", "BisInAskers", "BisInRequests", "BisInRequest", "BisInAsk",
+                         "BisInClaim", "BisInCancel", "RegisterCallback", "FullName" }) do
+        ok(real and type(real[k]) == "function", "LibBiSComm has " .. k)
+    end
+    ok(real and real.BISIN_ORDER and real.BISIN_ORDER[1] == "innervate", "and its spell order")
+    -- a lib whose answers the test sets
+    local L = { BISIN_ORDER = { "innervate", "pi", "tide" }, me = { on = true, give = { innervate = true }, ask = false, class = "DRUID" },
+                askers = {}, reqs = {}, ready = {}, claimed = {}, asked = 0, cancelled = {} }
+    L.FullName = function(u) return ({ player = "Leaf Song", party1 = "Frost Wick", party2 = "Holy Ren" })[u] end
+    function L:BisInMe() return self.me end
+    function L:BisInSet(on) self.me.on = on return on end
+    function L:BisInAskers() return self.askers end
+    function L:BisInRequests(spell) return self.reqs[spell] or {} end
+    function L:BisInRequest(id) return self.open and self.open[id] end
+    function L:BisInReady(spell) local r = self.ready[spell] or { 0, nil, {} } return r[1], r[2], r[3] end
+    function L:BisInClaim(id) self.claimed[#self.claimed + 1] = id return true end
+    function L:BisInAsk(spell)
+        self.asked = self.asked + 1
+        local id = "me-" .. spell
+        self.open = self.open or {}
+        self.open[id] = { id = id, spell = spell }
+        return id
+    end
+    function L:BisInCancel(id) self.cancelled[#self.cancelled + 1] = id if self.open then self.open[id] = nil end return true end
+    function L:RegisterCallback() end
+    _G.LibBiSComm = L
+    _G.BiSHealingCharDB = {}
+    STATE.units.party1, STATE.units.party2 = true, true
+    STATE.classes = { party1 = "MAGE", party2 = "PRIEST" }
+
+    -- THE DRUID: a face per asker, pre-aimed
+    L.askers = { { name = "Frost Wick", class = "MAGE" }, { name = "Holy Ren", class = "PRIEST" }, { name = "Nobody Here", class = "MAGE" } }
+    ok(UT.SetShown(true) and UT.frame:IsShown(), "/bish utility: shown")
+    local f1, f2 = UT.frame.faces[1], UT.frame.faces[2]
+    ok(f1 and f2 and f1:IsShown() and f2:IsShown() and not UT.frame.faces[3], "one face per asker in the group (a name not here gets none)")
+    ok(f1:GetAttribute("type") == "spell" and f1:GetAttribute("spell") == "Innervate" and f1:GetAttribute("unit") == "party1",
+       "each face a secure button pre-aimed: Innervate on their unit", f1:GetAttribute("unit"))
+    ok(f1.model and f1.model:IsShown() and not f1.pic:IsShown(), "faces mode: the 3D portrait")
+    L.reqs.innervate = { { id = "r1", owner = "Frost Wick", spell = "innervate" } }
+    UT.Paint()
+    ok(f1.req == "r1" and f1:GetAlpha() == 1 and f1.ask:IsShown(), "who asks lights up, ASKING over the face")
+    ok(f2.req == nil and f2:GetAlpha() < 1 and not f2.ask:IsShown(), "who does not, stays dim", tostring(f2.req) .. " " .. tostring(f2:GetAlpha()) .. " " .. tostring(f2.ask:IsShown()))
+    f1.__scripts.PreClick(f1)
+    ok(L.claimed[1] == "r1", "the click claims their ask first (two druids never both cast)")
+    _G.UnitPowerType = function(u) return u == "party2" and 3 or 0 end
+    UT.Paint()
+    ok(f2:GetAlpha() <= 0.25, "no mana bar up (a druid in cat form): dimmer still", f2:GetAlpha())
+    _G.UnitPowerType = keep.upt
+    ok(UT.SetMode("boxes") == "boxes" and not f1.model:IsShown() and f1.pic:IsShown(), "BOXES: the deck's box shape instead")
+    ok(UT.frame.mode.label:GetText() == "BOXES", "the toggle says which")
+    UT.SetMode("faces")
+    ok(UT.SetHidden("MAGE") == true and not f2:IsShown() and UT.frame.faces[1].who == "Holy Ren", "the class filter: mages left off")
+    UT.SetHidden("MAGE")
+    ok(UT.frame.faces[1].who == "Frost Wick", "and back")
+    -- never in a fight
+    STATE.inCombat = true
+    L.askers[#L.askers + 1] = { name = "Leaf Song", class = "DRUID" }
+    local okR = pcall(fire, UT.events, "GROUP_ROSTER_UPDATE")
+    ok(okR and UT.pending, "a roster change in a fight waits (no secure write)")
+    STATE.inCombat = false
+    fire(UT.events, "PLAYER_REGEN_ENABLED")
+    ok(not UT.pending, "and is laid out when it ends")
+    table.remove(L.askers)
+
+    -- THE MAGE: two big ask buttons
+    L.me = { on = true, give = {}, ask = true, class = "MAGE" }
+    L.ready.innervate = { 0, ((GetServerTime and GetServerTime()) or 0) + 100, { "Leaf Song" } }
+    L.ready.tide = { 1, nil, { "Chain Heal" } }
+    UT.Layout()
+    local a1, a2 = UT.frame.asks[1], UT.frame.asks[2]
+    ok(a1 and a2 and a1:IsShown() and a2:IsShown() and a1.spell == "innervate" and a2.spell == "tide", "INNERVATE and MANA TIDE buttons")
+    ok(not UT.frame.faces[1]:IsShown(), "no faces: a mage gives nothing")
+    ok(a2.say:GetText() == "Chain ready", "who is ready, before the click", a2.say:GetText())
+    ok((a1.say:GetText() or ""):find("all on cooldown", 1, true), "all on cooldown, with the time", a1.say:GetText())
+    ok(UT.AskClick("innervate") == "me-innervate" and L.asked == 1, "a click asks")
+    ok(a1.say:GetText() == "asked - waiting for an answer", "asked", a1.say:GetText())
+    local keepICML = _G.InChatMessagingLockdown
+    _G.InChatMessagingLockdown = function() return secret() end
+    UT.Paint()
+    ok(a1.say:GetText() == "asked - goes out when the fight ends", "in the chat lockdown (a hidden answer = locked): it says it waits",
+       a1.say:GetText())
+    _G.InChatMessagingLockdown = keepICML
+    UT.Paint()
+    L.open["me-innervate"].claim = { by = "Leaf Song" }
+    UT.Paint()
+    ok(a1.say:GetText() == "asked - Leaf is answering", "then who is answering", a1.say:GetText())
+    ok(UT.AskClick("innervate") == false and L.cancelled[1] == "me-innervate", "again: taken back")
+    L.ready.tide = { 0, nil, {} }
+    UT.Layout()
+    ok(not (UT.frame.asks[2] and UT.frame.asks[2]:IsShown()), "no shaman giving Mana Tide here: no Mana Tide button")
+
+    -- THE SHAMAN: Mana Tide lights with who asked
+    L.me = { on = true, give = { tide = true }, ask = true, class = "SHAMAN" }
+    L.reqs.tide = { { id = "t1", owner = "Frost Wick", spell = "tide" } }
+    UT.Layout()
+    local t = UT.frame.tide
+    ok(t and t:IsShown() and t:GetAttribute("spell") == "Mana Tide Totem", "the shaman's Mana Tide button, secure")
+    ok(t and t.say:GetText() == "Frost asks - click to drop it" and t.req == "t1", "lit with who asked", t and t.say:GetText())
+    UT.SetShown(false)
+    ok(not UT.frame:IsShown(), "/bish utility off: hidden")
+
+    -- THE FIRST-START CARD
+    d.radar.sw = nil
+    NS.fresh, NS.pending10 = true, nil
+    OB.offered = nil
+    ok(OB.Maybe() and OB.frame:IsShown(), "a new install sees the card")
+    ok(OB.frame.cards.heal and OB.frame.cards.utility, "two big cards: HEAL and UTILITY")
+    OB.Choose("heal")
+    ok(OB.frame.deck:IsShown() and OB.frame.classic:IsShown() and OB.frame.suggest:GetText() == "SUGGESTED", "HEAL: CLASSIC / DECK, deck suggested")
+    OB.Choose("utility")
+    ok(OB.frame.line:IsShown() and not OB.frame.deck:IsShown(), "UTILITY: what your class gets instead")
+    STATE.inCombat = true
+    ok(OB.Pick("heal", "deck") == nil, "never picked in a fight")
+    STATE.inCombat = false
+    ok(OB.Pick("heal", "deck") and d.look == "radar", "DECK: the deck look")
+    ok(NS.RD.SwPresetNow() == "full" and not NS.RD.Sw("bb"), "every switch on - the black box still off (clicked on by hand only)")
+    ok(BiSHealingCharDB.onboard and BiSHealingCharDB.onboard.role == "heal" and BiSHealingCharDB.onboard.look == "deck", "kept per character")
+    ok(UT.Shown(), "a shaman healer gets the utility window too")
+    ok(not OB.frame:IsShown(), "the card goes")
+    OB.offered = nil
+    ok(not OB.Maybe(), "once picked, never again by itself")
+    ok(NS.DO.onboard() and OB.frame:IsShown(), "/bish onboard opens it again")
+    BiSHealingCharDB.onboard = nil
+    NS.fresh = false
+    OB.offered = nil
+    OB.frame:Hide()
+    ok(not OB.Maybe(), "an existing player never sees it")
+    ok(NS.Expand("onb") == "onboard" and NS.Expand("util faces") == "utility faces", "short words: onb, util")
+
+    -- back as it was
+    UT.SetShown(false)
+    _G.LibBiSComm, _G.BiSHealingCharDB = keep.lib, keep.char
+    STATE.units.party1, STATE.units.party2, STATE.classes = keep.units.party1, keep.units.party2, keep.classes
+    NS.fresh = keep.fresh
+    d.radar.sw = keep.sw
+    if d.look ~= keep.look then NS.DO.look(keep.look) end
+    d.shown = keep.shown
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
