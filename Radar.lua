@@ -2966,9 +2966,12 @@ function RD.LearnTimers()
     local d = db()
     d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
     for _, t in ipairs(RD.timers or {}) do
-        local okI, _, name = pcall(GetTotemInfo, t.slot)
+        local okI, _, name, start = pcall(GetTotemInfo, t.slot)
         name = okI and plain(name) or nil
-        if type(name) == "string" and name ~= "" then d.totemSlots[t.slot] = RD.TotemSpell(name) end
+        start = okI and plain(start) or nil
+        -- (a totem standing from before a pick sent in by SetTotems - BiS Tools' combo - does not undo the pick)
+        local older = type(d.totemSetAt) == "table" and d.totemSetAt[t.slot] and type(start) == "number" and start < d.totemSetAt[t.slot]
+        if type(name) == "string" and name ~= "" and not older then d.totemSlots[t.slot] = RD.TotemSpell(name) end
         local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
         t:SetAttribute("type1", want and "macro" or nil)
@@ -2980,6 +2983,34 @@ function RD.LearnTimers()
         end
         pcall(t.base.SetTexture, t.base, tex)
     end
+    return true
+end
+
+--[[ A TOTEM SET SENT IN (18 Nov 2026, Arn: "can we API-send the totems to BiS Healing's totem click areas - it's having me
+  test a new totem setup, I click something and it changes the totems on my BiS Healing deck - out of combat of course"):
+  `set` = { [slot] = "Spell Name" } (1 fire, 2 earth, 3 water, 4 air; a slot left out is left alone, false clears it). The
+  boxes drop the new ones from the next click; a totem already standing from before does not undo it (d.totemSetAt,
+  compared with the standing one's start). Out of a fight only (secure writes). Answers true, or nil and why. ]]
+RD.SLOT_OF = { fire = 1, earth = 2, water = 3, air = 4 }
+function RD.SetTotems(set)
+    if combat() or RD.inFight then return nil, "in a fight" end
+    if type(set) ~= "table" then return nil, "no totems" end
+    local d = db()
+    d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
+    d.totemSetAt = type(d.totemSetAt) == "table" and d.totemSetAt or {}
+    local now = GetTime and GetTime() or 0
+    local n = 0
+    for k, v in pairs(set) do
+        local slot = RD.SLOT_OF[k] or tonumber(k)
+        if slot and slot >= 1 and slot <= 4 then
+            if v == false then d.totemSlots[slot] = nil
+            elseif type(v) == "string" and v ~= "" then d.totemSlots[slot] = RD.TotemSpell(v) end
+            d.totemSetAt[slot] = now
+            n = n + 1
+        end
+    end
+    if n == 0 then return nil, "no totems" end
+    RD.LearnTimers()
     return true
 end
 
