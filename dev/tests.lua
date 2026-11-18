@@ -16347,6 +16347,158 @@ do
     if RD.On() then RD.Arm() end
 end
 
+-- THE TARGET RHYTHM TEST (19 Nov 2026, Arn: "build the test tool for the target rhythm" - a mage spams one button that
+-- flips between the druid and the boss; the druid's addon hears three target changes in two seconds = an ask, mid-fight,
+-- where addon messages hold). A secret alpha feature: what the client really does is only learned in a fight.
+do
+    print("BiS> rhythm test (19 Nov 2026)")
+    local RH = NS.RH
+    ok(RH and RH.Command, "Rhythm.lua loaded from the TOC")
+    local d = NS.DB()
+    local keep = { alpha = d.alpha, alphaOff = d.alphaOff, rhythm = d.rhythm, lib = _G.LibBiSComm, uiu = _G.UnitIsUnit,
+                   classes = STATE.classes, units = { party1 = STATE.units.party1, party2 = STATE.units.party2 },
+                   osb = _G.SetOverrideBindingClick, cob = _G.ClearOverrideBindings, ps = _G.PlaySound }
+    _G.LibBiSComm = nil
+    d.rhythm = nil
+    STATE.units.party1, STATE.units.party2 = true, true
+    STATE.classes = { party1 = "MAGE", party2 = "DRUID" }
+    local looks = {}                                       -- unit -> what their target is: "player" = me
+    _G.UnitIsUnit = function(a, b)
+        if a == b then return true end
+        if b == "player" and type(a) == "string" and a:match("target$") then
+            if STATE.inCombat and a ~= "target" then return secret() end
+            local who = a == "target" and "player" or a:gsub("target$", "")
+            return looks[who] == "player"
+        end
+        return false
+    end
+    local binds, played = {}, 0
+    _G.SetOverrideBindingClick = function(owner, prio, key, name) binds[key] = name end
+    _G.ClearOverrideBindings = function() binds = {} end
+    _G.PlaySound = function() played = played + 1 return true end
+
+    -- only with the alpha on
+    d.alpha = nil
+    ok(RH.Command("open") == false and not (RH.frame and RH.frame:IsShown()), "the alpha off: it does not open")
+    d.alpha, d.alphaOff = true, nil
+    ok(NS.AlphaOn("rhythm"), "listed as an alpha feature, on with the alpha")
+    STATE.inCombat = true
+    ok(RH.Command("open") == false and RH.pendingOpen, "never opened in a fight (it holds a secure button): after it")
+    STATE.inCombat = false
+    fire(RH.events, "PLAYER_REGEN_ENABLED")
+    ok(RH.frame and RH.frame:IsShown() and not RH.pendingOpen, "and opened when it ended")
+    local b = RH.frame.ask
+    ok(b:GetAttribute("type") == "macro", "ASK: one secure macro button")
+    ok(RH.to == "party2" and b:GetAttribute("bis-who") == "party2", "aimed by itself at the first druid", RH.to)
+    ok(b.to:GetText() == "asks Name-party2", "and says who", b.to:GetText())
+    ok(RH.events.__events.UNIT_TARGET and RH.events.__events.PLAYER_TARGET_CHANGED, "open = listening")
+
+    -- THE SNIPPET, run as the client's restricted world runs it (self = the button)
+    local function run(help, noParse)
+        local fn = assert(loadstring(RH.SNIPPET))
+        local proxy = { SetAttribute = function(_, k, v) RH.__snip = RH.__snip or {} RH.__snip[k] = v end,
+                        GetAttribute = function(_, k) if RH.__snip and RH.__snip[k] ~= nil then return RH.__snip[k] end return b:GetAttribute(k) end }
+        setfenv(fn, { self = proxy, SecureCmdOptionParse = (not noParse) and function(s)
+            ok(s == "[@target,help] back; go", "the snippet asks the client one thing: is my target friendly")
+            return help and "back" or "go"
+        end or nil })
+        fn()
+        return RH.__snip.macrotext
+    end
+    ok(run(false) == "/target party2", "a hostile target (the boss): the press targets the druid")
+    ok(run(true) == "/targetlasttarget", "the druid targeted: the press goes back to the boss")
+    RH.__snip = nil
+    ok(run(nil, true) == "/target party2" and run(nil, true) == "/targetlasttarget" and run(nil, true) == "/target party2",
+       "where the snippet cannot ask, it alternates")
+    RH.__snip = nil
+    ok(RH.wrapped, "the snippet is wrapped on the button's click")
+
+    -- aimed by name; never in a fight
+    ok(RH.Command("to name-party1") and RH.to == "party1", "/bish alpha rhythm to <name>: that member")
+    ok(d.rhythm.to == "name-party1", "kept")
+    ok(RH.Command("to nobody") == false and RH.to == "party1", "a name not in the group: no change")
+    STATE.inCombat = true
+    ok(RH.SetTo("me") == nil and RH.pendingTo, "in a fight: aimed after it")
+    STATE.inCombat = false
+    fire(RH.events, "PLAYER_REGEN_ENABLED")
+    ok(RH.to == "player" and b:GetAttribute("bis-who") == "player", "then: at you (a test alone)")
+    RH.Command("to name-party2")
+
+    -- A KEY presses it too
+    ok(RH.Command("bind f") == "F" and binds.F == "BiSHealingRhythm", "rhythm bind F: F presses the button")
+    ok(RH.Command("bind none") == false and next(binds) == nil and d.rhythm.bind == nil, "bind none: gone")
+
+    -- THE ASKER'S OWN BURST: presses, and how often the target really changed
+    RH.Clicked() TICK(0.2) fire(RH.events, "PLAYER_TARGET_CHANGED")
+    RH.Clicked() TICK(0.2) fire(RH.events, "PLAYER_TARGET_CHANGED")
+    RH.Clicked() TICK(0.2)
+    ok(RH.frame.sent:GetText() == "pressed 3 · target changed 2", "pressed and changed, counted apart", RH.frame.sent:GetText())
+    TICK(2.5) RH.Tick(0.2)
+    local e = d.rhythm.log[#d.rhythm.log]
+    ok(e and e.k == "sent" and e.n == 3 and e.changes == 2 and e.to == "Name-party2" and e.fight == false,
+       "two seconds quiet: the burst written", e and RH.Words(e))
+
+    -- THE DRUID HEARS: three changes in two seconds from the mage = RHYTHM
+    played = 0
+    looks.party1 = "player"
+    ok(fire(RH.events, "UNIT_TARGET", "party1"), "UNIT_TARGET heard")
+    local r1
+    for _, r in ipairs(RH.frame.rows) do if r.unit == "party1" then r1 = r end end
+    ok(r1 and r1:IsShown() and r1.name:GetText() == "Name-party1", "a row per person")
+    RH.Tick(0.2)
+    ok(r1.lamp:GetAlpha() == 1, "their target is me: ON ME lit")
+    looks.party1 = "boss" TICK(0.3) fire(RH.events, "UNIT_TARGET", "party1") RH.Tick(0.2)
+    ok(r1.lamp:GetAlpha() < 0.5, "not me: dim")
+    ok(played == 0 and r1.count:GetText() == "2", "two changes: nothing yet", r1.count:GetText())
+    looks.party1 = "player" TICK(0.3) fire(RH.events, "UNIT_TARGET", "party1")
+    ok(played == 1 and RH.seen.party1.hotAt, "the third inside two seconds: RHYTHM, with a sound")
+    RH.Tick(0.2)
+    ok(r1.hot:GetAlpha() > 0.5, "their row flashes RHYTHM")
+    TICK(0.3) fire(RH.events, "UNIT_TARGET", "party1")
+    ok(played == 1, "a fourth right after: no second alarm (quiet for 3 s)")
+    TICK(2.5) RH.Tick(0.2)
+    ok(r1.hot:GetAlpha() == 0, "the word fades")
+    e = d.rhythm.log[#d.rhythm.log]
+    ok(e and e.k == "heard" and e.who == "Name-party1" and e.n == 4 and e.rhythm and e.isMe.yes == 3 and e.isMe.no == 1,
+       "the burst written: who, how many, rhythm, what on-me answered", e and RH.Words(e))
+    ok(e.gmin == 300 and e.gmax == 300 and e.span == 0.9, "and the gaps in ms", e.gmin, e.gmax, e.span)
+    ok(RH.Words(e):find("RHYTHM", 1, true), "in words")
+
+    -- IN A FIGHT: "their target is me" is secret - handed to the lamp, never tested
+    STATE.inCombat = true
+    local okF = pcall(function()
+        fire(RH.events, "UNIT_TARGET", "party2") TICK(0.1) fire(RH.events, "UNIT_TARGET", "party2")
+        RH.Tick(0.2)
+    end)
+    local r2
+    for _, r in ipairs(RH.frame.rows) do if r.unit == "party2" then r2 = r end end
+    ok(okF and r2 and r2.lamp.__alphaFromSecret == true, "in a fight: the secret answer drawn by the client")
+    ok(pcall(fire, RH.events, "UNIT_TARGET", secret()) and RH.stat.secretUnit >= 1, "a secret unit: counted, nothing else")
+    ok(pcall(fire, RH.events, "UNIT_TARGET", "nameplate3") and RH.stat.other >= 1, "a nameplate: not a person in the group")
+    TICK(2.5) RH.Tick(0.2)
+    e = d.rhythm.log[#d.rhythm.log]
+    ok(e and e.who == "Name-party2" and e.fight == true and e.isMe.secret == 2, "written: in a fight, on me = secret", e and RH.Words(e))
+    ok(RH.Command("close") == false and RH.pendingClose, "never closed in a fight")
+    STATE.inCombat = false
+    fire(RH.events, "PLAYER_REGEN_ENABLED")
+    ok(not RH.frame:IsShown() and not RH.events.__events.UNIT_TARGET, "closed after it: deaf again")
+    ok(RH.Report() == #d.rhythm.log, "/bish alpha rhythm report")
+
+    -- WHAT AN OPEN SECOND COSTS (lean and mean): ten ticks, a party of three
+    RH.Command("open")
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n, by = Cost.Count(function() for _ = 1, 10 do RH.Tick(0.1) end end)
+    ok(n <= 75, "an open second, a party of three: <= 75 client calls (70 measured: a lamp each, 10 a second)", n, Cost.Top(by, 4))
+    print(("   cost: rhythm window open, 1 s = %d calls (%s)"):format(n, Cost.Top(by, 3)))
+    RH.Command("close")
+    TICK(3)
+
+    _G.LibBiSComm, _G.UnitIsUnit, STATE.classes = keep.lib, keep.uiu, keep.classes
+    STATE.units.party1, STATE.units.party2 = keep.units.party1, keep.units.party2
+    _G.SetOverrideBindingClick, _G.ClearOverrideBindings, _G.PlaySound = keep.osb, keep.cob, keep.ps
+    d.alpha, d.alphaOff, d.rhythm = keep.alpha, keep.alphaOff, keep.rhythm
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
