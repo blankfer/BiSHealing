@@ -1,5 +1,9 @@
 # BiS Healing
 
+## 1.8.0
+
+- **BiS Tools can set your deck's totems.** BiS Tools 1.6.0's SET DECK (on the combo list's TRY NEXT strip, or a right-click on a combo) sends that combo's totems to the deck's totem boxes, each under its element. Water is left alone. Out of a fight only.
+
 ## 1.7.1
 
 - **Fixed: after a res, the deck could still say DEAD and try to res you.** A box that switched to "every click resurrects" while someone lay dead now gives your binds back as soon as they stand up (and when a fight starts), and the DEAD word goes.
