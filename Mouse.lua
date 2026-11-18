@@ -1640,14 +1640,26 @@ FM.resEvents:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_ENABLED" then FM.WheelOthers() end
     if event == "PLAYER_REGEN_DISABLED" then
         FM.fighting = true
-        for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do
+        for _, cell in ipairs(FM.ResCells()) do
             if cell.__res then FM.ApplyTo(cell) end
         end
     else
         FM.fighting = nil
-        for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do FM.ResCheck(cell) end
+        for _, cell in ipairs(FM.ResCells()) do FM.ResCheck(cell) end
     end
 end)
+--- Every frame whose clicks can turn into a res: the grid's cells AND the deck's boxes and pets (17 Nov 2026, Arn's cousin:
+--- "when he died and was res'd his frames still said dead, and anytime he tried to cast on himself it tried to res him" -
+--- the deck's boxes took the all-res while he lay dead, and only the grid's cells were ever given their binds back).
+function FM.ResCells()
+    local out = {}
+    for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do out[#out + 1] = cell end
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        if sp.heal then out[#out + 1] = sp.heal end
+        if sp.pet then out[#out + 1] = sp.pet end
+    end
+    return out
+end
 
 --- THE SEQUENCE WATCH: haste from new gear or a racial, or a new Riptide rank, changes how many heals follow Riptide; the
 --- macros are written again (FM.Apply queues it in a fight) only when that number or the reset really moved.

@@ -15594,6 +15594,9 @@ do
             local tg = RD.topGrip
             ok(tg and tg:IsShown() and (tg.__h or tg:GetHeight()) >= RD.DeckHead(), "the deck's whole top strip is a grab band")
             ok(tg:GetFrameLevel() < RD.viewBtn:GetFrameLevel(), "under the switches button: that still clicks")
+            local up = EN.GaugeTop()
+            ok(up == 0 or ((tg.__h or tg:GetHeight()) >= RD.DeckHead() + up and RD.gauge:GetFrameLevel() > tg:GetFrameLevel()),
+               "the band reaches up over the mana strip too (Arn: \"i thought it was higher\"), the tape still on top", up)
             local started = 0
             local keepDS = RD.frame:GetScript("OnDragStart")
             RD.frame:SetScript("OnDragStart", function() started = started + 1 end)
@@ -15970,6 +15973,27 @@ do
                     _G.UnitIsAFK = keepAfk
                     EN.Paint(tsp)
                     ok(not fs:IsShown(), "back: the bar alone")
+                    -- STOOD UP (Arn's cousin: res'd, his box still said DEAD and every click on himself tried to res him)
+                    STATE.dead[u] = true
+                    local keepUIP = _G.UnitIsPlayer
+                    _G.UnitIsPlayer = function() return true end
+                    local keepRS = NS.FM.ResSpell
+                    NS.FM.ResSpell = function() return "Ancestral Spirit" end
+                    RD.PaintHeal(tsp)
+                    ok(tsp.heal.__res and fs:GetText() == "DEAD" and tsp.deadSeen, "dead out of a fight: DEAD, and the box's clicks resurrect",
+                       tostring(tsp.heal.__res), fs:GetText())
+                    STATE.dead[u] = nil                         -- res'd: and no health event after it
+                    RD.Look()
+                    ok(not tsp.heal.__res and not fs:IsShown() and not tsp.deadSeen,
+                       "up again: the next tick sees it - the word goes and the binds come back", tostring(tsp.heal.__res))
+                    STATE.dead[u] = true
+                    RD.PaintHeal(tsp)
+                    NS.FM.resEvents:GetScript("OnEvent")(NS.FM.resEvents, "PLAYER_REGEN_DISABLED")
+                    ok(not tsp.heal.__res, "a fight starts while they lie dead: the deck's box gets the binds back too (it was the grid's only)")
+                    NS.FM.resEvents:GetScript("OnEvent")(NS.FM.resEvents, "PLAYER_REGEN_ENABLED")
+                    STATE.dead[u] = nil
+                    RD.Look()
+                    _G.UnitIsPlayer, NS.FM.ResSpell = keepUIP, keepRS
                     -- an EMPTY box (no target): the game says "not connected" for nobody - never OFFLINE (Arn's shot)
                     _G.UnitIsConnected = function() return false end
                     local keepT = STATE.units.target

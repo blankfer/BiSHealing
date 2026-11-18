@@ -3294,10 +3294,18 @@ function RD.PlaceTopGrip()
     if not (RD.Console and RD.Console()) then g:Hide() return end
     local C = RD.CON or {}
     local head = (RD.Deck() and RD.DeckHead and RD.DeckHead()) or C.head or 14
+    -- UP OVER THE MANA STRIP TOO (17 Nov, Arn: "i thought it was higher" - only the mana bar itself dragged up there):
+    -- the band starts at the window's very top, the strip above the console (EN.GaugeTop) included; the mana tape keeps
+    -- its tooltip, lifted over the band
+    local up = (NS.EN and NS.EN.GaugeTop and NS.EN.GaugeTop()) or 0
     g:ClearAllPoints()
-    g:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    g:SetPoint("TOPRIGHT", f, "TOPRIGHT", -RD.GRIP_RIGHT, 0)
-    g:SetHeight((C.pad or 8) + head)
+    g:SetPoint("TOPLEFT", f, "TOPLEFT", 0, up)
+    g:SetPoint("TOPRIGHT", f, "TOPRIGHT", -RD.GRIP_RIGHT, up)
+    g:SetHeight((C.pad or 8) + head + up)
+    local tape = RD.gauge
+    if tape and tape.GetFrameLevel and tape:GetFrameLevel() <= g:GetFrameLevel() then
+        pcall(tape.SetFrameLevel, tape, g:GetFrameLevel() + 1)
+    end
     g:Show()
 end
 
@@ -6798,6 +6806,11 @@ end
 --- One spoke's heal pip, coloured by the client from their health.
 function RD.PaintHeal(sp)
     RD.PaintOutline(sp)                              -- the deck's box edge: amber low, red very low (the client picks)
+    -- STOOD UP (17 Nov 2026, Arn's cousin, res'd: his box still said DEAD and every click on himself tried to res him): out of
+    -- a fight each paint asks whether the box's clicks still match their death (FM.ResCheck writes only on a change), and
+    -- a box that showed someone dead is looked at again every tick until they are up (RD.StandUpWatch) - the health event
+    -- can come while the game still calls them dead, and nothing else would come after it
+    -- (no question of its own: the death RD.DeadDark asks below decides - the 40-man repaint budget)
     if not (sp and sp.unit and sp.paintTex) then
         if sp and sp.heal then RD.HealFaces(sp.heal, 0) end
         return false
@@ -6808,7 +6821,12 @@ function RD.PaintHeal(sp)
     if okE and plain(there) == false then RD.HealFaces(sp.heal, 0) return false end
     RD.HealFaces(sp.heal, 1)
     -- dead: nothing to heal, nothing lit - all three faces
-    if RD.DeadDark(sp.heal.face, sp.unit, sp.heal.redFace, sp.heal.amberFace) then return false end
+    local dead = RD.DeadDark(sp.heal.face, sp.unit, sp.heal.redFace, sp.heal.amberFace)
+    if dead then sp.deadSeen = true end
+    if (dead and not sp.heal.__res or not dead and sp.heal.__res) and NS.FM and NS.FM.ResCheck and not (RD.inFight or combat()) then
+        NS.FM.ResCheck(sp.heal)                      -- (the clicks and the death disagree: FM.ResCheck sets them right)
+    end
+    if dead then return false end
     local curve = RD.Curve(sp.amber)
     if not (curve and UnitHealthPercent) then
         -- no curves on this client: the pip stays at its spot, plainly green, rather than lie about urgency
@@ -7106,8 +7124,22 @@ local function paintContact(sp, lit)
     return hostile == true
 end
 
+--- The boxes that last showed someone dead: up again now? Then painted again (the word, the colour, the clicks).
+function RD.StandUpWatch()
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.deadSeen then
+            local up = true
+            if sp.unit and UnitIsDeadOrGhost then
+                local okD, dead = pcall(UnitIsDeadOrGhost, sp.unit)
+                up = okD and plain(dead) == false
+            end
+            if up then sp.deadSeen = nil RD.PaintHeal(sp) end
+        end
+    end
+end
 function RD.Look()
     local FG = NS.FG
+    RD.StandUpWatch()
     local anyCast = false
     -- asked only while the chaff could light (armed, knob on, in a fight): lean when it cannot
     local wantChaff = RD.chaff and RD.chaff.macro and (RD.inFight or combat()) and not RD.KnobOff("chaff") or false
@@ -7564,7 +7596,8 @@ for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENAB
                      "BAG_UPDATE_DELAYED", "UI_ERROR_MESSAGE", "PLAYER_TARGET_CHANGED", "UNIT_TARGET",
                      "PLAYER_ROLES_ASSIGNED", "SPELL_UPDATE_COOLDOWN", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "UNIT_MAXPOWER",
                      "PLAYER_LEVEL_UP", "UNIT_PET", "INCOMING_RESURRECT_CHANGED", "UNIT_CONNECTION",
-                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD", "ADDON_RESTRICTION_STATE_CHANGED" }) do
+                     "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD", "ADDON_RESTRICTION_STATE_CHANGED",
+                     "PLAYER_ALIVE", "PLAYER_UNGHOST" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
@@ -7645,6 +7678,9 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         -- in a fight it only marks RD.pending; then a repaint, so whoever LEFT goes dark now, not at the fight's end
         -- (11 Nov, Arn: "left group still icons remain ... during combat")
         if not RD.Arm() then RD.Paint() end
+    elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then   -- you stood up (a res taken, back at your body)
+        for _, sp in ipairs(RD.spokes) do RD.PaintHeal(sp) end
+        RD.resDirty = true
     elseif event == "INCOMING_RESURRECT_CHANGED" or event == "UNIT_CONNECTION" then
         if not (RD.inFight or combat()) then RD.resDirty = true end
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
