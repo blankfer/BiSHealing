@@ -15795,7 +15795,7 @@ do
                    "the Riptide icon and the lines on a layer OVER the bar's fill (Arn: \"keep riptide on top of the duration bar\")")
                 ok(rq.rip.iconBack and rq.rip.iconBack.__color and rq.rip.iconBack.__color[4] == 1,
                    "a solid back under the icon: the bar's colour never shows through it (Arn: \"looks like it has an overlay on it\")")
-                ok(math.abs((rq.rip.iconBack.__w or 0) - (rq.__w - 2) / 6) < 0.01,
+                ok(math.abs((rq.rip.iconBack.__w or 0) - rq.rip.sw) < 0.01,
                    "the back fills the icon's whole square: no sliver of green beside it (Arn)", rq.rip.iconBack.__w)
                 local function barCol() local c = rq.rip.bar.__sbColor or rq.rip.bar.__color or {} return c[1] end
                 ok(barCol() == EN.RIP_GREEN[1], "plenty left: green", tostring(barCol()))
@@ -15852,6 +15852,37 @@ do
                         RD.CueCast("Oath of Light", GetTime())
                         ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
                     end
+                    -- HOLY SHOCK ON AN ENEMY never spends the Vigil (Arn: "think of all the possible scenarios")
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.CueCast("Light's Vigil", GetTime())
+                    RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                    RD.sentTarget, RD.sentAt = "Hogger", GetTime()
+                    RD.CueCast("Holy Shock", GetTime())
+                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
+                    RD.sentTarget, RD.sentAt = nil, nil
+                    -- DEAD: no cue on their box, the clock waits
+                    STATE.dead[tsp.unit] = true
+                    RD.RipMarks()
+                    ok(not tsp.cue.icon:IsShown(), "they died: no cue on a dead box")
+                    STATE.dead[tsp.unit] = nil
+                    RD.RipMarks()
+                    ok(tsp.cue.icon:IsShown(), "back up (a quick rez): the cue back")
+                    -- OUT OF A FIGHT, THE TRUTH (dispelled, a /reload): RD.CueSeed reads your own auras off the boxes
+                    do
+                        local keepUA = _G.C_UnitAuras
+                        _G.C_UnitAuras = setmetatable({}, { __index = keepUA or {} })
+                        local keepGet, keepR3 = C_UnitAuras.GetAuraDataBySpellName, NS.FM.Ranks
+                        NS.FM.Ranks = function(n) if n == "Light's Vigil" or n == "Oath of Light" then return { { rank = "", spell = 1 } } end return {} end
+                        C_UnitAuras.GetAuraDataBySpellName = function(u, n)
+                            if u == other.unit and n == "Oath of Light" then return { expirationTime = GetTime() + 200, duration = 300 } end
+                            return nil
+                        end
+                        RD.CueSeed()
+                        ok(not tsp.cue.icon:IsShown() and other.cue and other.cue.icon:IsShown() and other.cue.icon.__texture == "tex:Holy Light",
+                           "out of a fight: the Vigil nobody wears any more is gone, an Oath found on someone (after a /reload) comes up")
+                        NS.FM.Ranks = keepR3
+                        _G.C_UnitAuras = keepUA
+                    end
                     RD.cueMarks = {}
                     RD.RipMarks()
                     -- the druid
@@ -15872,9 +15903,45 @@ do
                     NS.FM.Ranks = function(n) return keepRanks2(n) end
                     RD.RipMarks()
                     ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    -- a druid's synergy bar: the newest HoT's time left, the Swiftmend icon
+                    do
+                        local keepR = NS.FM.Ranks
+                        NS.FM.Ranks = function(n) if n == "Swiftmend" or n == "Rejuvenation" then return { { rank = "", spell = 1 } } end return {} end
+                        RD.swiftAt = nil
+                        RD.lastClick, RD.lastClickAt = tsp, GetTime()
+                        RD.CueCast("Rejuvenation", GetTime())
+                        local stn = EN.SynergyNow()
+                        ok(stn and stn.kind == "hot" and stn.left > 10 and stn.icon == "Swiftmend" and stn.ready,
+                           "a druid: the synergy bar is the newest Rejuvenation's time, Swiftmend the payoff")
+                        RD.CueCast("Swiftmend", GetTime())
+                        ok(not EN.SynergyNow().ready, "Swiftmend cooling: the bar's icon greyed, never 'too late'")
+                        NS.FM.Ranks = keepR
+                        RD.cueLast = {}
+                    end
                     RD.cueMarks, RD.swiftAt, RD.cueTex = {}, nil, {}
                     NS.FM.Ranks, _G.C_Spell.GetSpellTexture = keepRanks2, keepTex
                     RD.RipMarks()
+                end
+                -- THE SYNERGY BAR'S MATH (Arn: "call the riptide bar the synergy bar, and have that smart math behind it")
+                do
+                    local fit, late = EN.SynergyMath(10, 2.5, 0.1, 0)
+                    ok(fit == 3 and not late, "10 s left, a 2.5 s Chain Heal + 0.1 s lag: 3 still land", fit)
+                    fit, late = EN.SynergyMath(10, 2.0, 0.1, 0)
+                    ok(fit == 4, "a faster Chain Heal (2 s, a troll's or haste): 4 land", fit)
+                    fit, late = EN.SynergyMath(3, 2.5, 0.2, 1.0)
+                    ok(fit == 0 and late, "3 s left but 1 s still on the cast in hand: the next one would not land - too late")
+                    fit, late = EN.SynergyMath(2.6, 2.5, 0.2, 0)
+                    ok(late, "2.6 s left, 2.5 s cast + 0.2 s lag: too late (the old bar called this one fine)")
+                    local keepNS = _G.GetNetStats
+                    _G.GetNetStats = function() return 0, 0, 40, 120 end
+                    ok(math.abs(EN.Lag() - 0.12) < 1e-9, "the lag: the world latency, in seconds", EN.Lag())
+                    _G.GetNetStats = keepNS
+                    ok(EN.SynergyKind().kind == "rip", "a shaman who knows Riptide: the Riptide synergy")
+                    local n1 = EN.Squares(15, 2.6)
+                    local n2 = EN.Squares(15, 2.0)
+                    local n3, sh3 = EN.Squares(30, 1.5)
+                    ok(n1 == 5 and n2 == 7 and n3 == EN.SYN.maxSquares and math.abs(sh3 - 1 / EN.SYN.maxSquares) < 1e-9,
+                       "the squares: as many casts as fit (Arn) - 5 at 2.6 s, 7 at 2 s, a 30 s Vigil drawn as " .. EN.SYN.maxSquares, n1, n2, n3)
                 end
                 ok(RD.Command("rip"):find("riptide: known true", 1, true), "/bish alpha radar rip: the readout")
                 RD.lastClick, RD.over = nil, nil

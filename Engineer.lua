@@ -146,7 +146,7 @@ function EN.HeadBoxes()
     local function wanted(key)                       -- the switches: LOS / RANGE / OVER together, loss of control its own
         if not deck then return key ~= "cc" and key ~= "rip" end
         if key == "cc" then return RD.Sw("cc") end
-        if key == "rip" then return RD.Sw("rip") and RD.RipKnown and RD.RipKnown() end
+        if key == "rip" then return EN.SynergyKnown() end
         return RD.Sw("alerts")
     end
     local f, x0, y = EN.Where()
@@ -498,6 +498,87 @@ EN.RIP_GREEN = { 0.25, 0.85, 0.35, 0.90 }
 EN.RIP_AMBER = { 1.00, 0.70, 0.15, 0.90 }
 EN.RIP_RED = { 0.95, 0.20, 0.20, 0.90 }
 EN.RIP_EVERY = 0.1
+--[[ THE SYNERGY BAR (17 Nov 2026, Arn: "should we call the riptide bar the synergy bar, and have that smart math behind it" -
+  "for the other classes"). One spell opens a window, another pays it off inside it: the shaman's Riptide -> Chain Heal,
+  the paladin's Light's Vigil -> Holy Shock, the druid's Rejuvenation / Regrowth -> Swiftmend. The look stays (six
+  icon-sized wide, the PAYOFF's icon in the first square, green / amber / red); the MATH is now yours:
+  one payoff = your cast time off the book over your haste, never under your GCD (Mouse.lua's FM.SeqCastTime / FM.Haste /
+  FM.SeqGcd - an instant one is one GCD), plus your lag (GetNetStats, world); the count starts when the cast you are in
+  lands (UnitCastingInfo). fit = how many still land before it runs out: under 1 too late (the icon lit, red edged),
+  under 2 red, under 3 amber, else green; the number on the bar's right says it. Every answer read plainly or not at all.
+  THE SQUARES (Arn: "the numbers of squares depends how many cast they can get off at that time"): each square is ONE
+  payoff of yours (cast + lag), as many as fit in the whole window - a 2.5 s Chain Heal in a 15 s Riptide is 5 with lag,
+  a hasted 2 s one 7; the bit that does not make a whole cast is the short piece at the right end. More than `maxSquares`
+  (a paladin's 30 s Vigil in 1.5 s GCDs) and they are drawn evenly, `maxSquares` of them - the colours still count yours. ]]
+EN.SYN = { lagMax = 1.0, maxSquares = 12 }
+--- Which synergy this character has, or nil: { kind, opener, payoff, sw }.
+function EN.SynergyKind()
+    local RD, FM = NS.RD, NS.FM
+    if not RD then return nil end
+    local function knows(n) return FM and FM.Ranks and #FM.Ranks(n) > 0 end
+    if RD.RipKnown and RD.RipKnown() then return { kind = "rip", payoff = "Chain Heal", icon = RD.RIPTIDE or "Riptide", sw = "rip" } end
+    if knows("Light's Vigil") then return { kind = "vigil", payoff = "Holy Shock", icon = "Holy Shock", sw = "vigil" } end
+    if knows(RD.SWIFTMEND or "Swiftmend") then return { kind = "hot", payoff = "Swiftmend", icon = "Swiftmend", sw = "swift" } end
+    return nil
+end
+--- The bar is wanted: a synergy known and its switch on.
+function EN.SynergyKnown()
+    local k = EN.SynergyKind()
+    return (k and NS.RD.Sw(k.sw)) and true or false
+end
+local function plainNum(v) if NS.Secret and NS.Secret(v) then return nil end return type(v) == "number" and v == v and v or nil end
+--- Your lag in seconds (world), plain, capped; 0 when the client does not say.
+function EN.Lag()
+    if not GetNetStats then return 0 end
+    local ok, _, _, home, world = pcall(GetNetStats)
+    local ms = ok and (plainNum(world) or plainNum(home)) or nil
+    return ms and math.max(0, math.min(EN.SYN.lagMax, ms / 1000)) or 0
+end
+--- How long until the cast you are in lands (0 when none, or the client does not say).
+function EN.CastLeft(now)
+    if not UnitCastingInfo then return 0 end
+    local ok, name, _, _, _, endMS = pcall(UnitCastingInfo, "player")
+    local e = ok and name and plainNum(endMS) or nil
+    if not e then return 0 end
+    return math.max(0, e / 1000 - (now or GetTime()))
+end
+--- One payoff's time: the cast off the book over your haste, never under the GCD (an instant = one GCD).
+function EN.PayTime(spell)
+    local FM = NS.FM
+    local gcd = (FM and FM.SeqGcd and FM.SeqGcd()) or 1.5
+    local ct = (FM and FM.SeqCastTime and FM.SeqCastTime(spell)) or 2.5
+    if spell ~= "Chain Heal" and FM and FM.CAST_GUESS and ct == FM.CAST_GUESS then ct = 0 end   -- (an instant: the book says 0)
+    local haste = (FM and FM.Haste and FM.Haste()) or 0
+    return math.max(gcd, ct / (1 + haste / 100))
+end
+--- The arithmetic, on its own: time left, one payoff, lag, the cast in hand -> fit, late, colour.
+function EN.SynergyMath(left, pay, lag, castLeft)
+    local step = math.max(0.1, (pay or 2.5) + (lag or 0))
+    local room = (left or 0) - (castLeft or 0)
+    local fit = room > 0 and math.floor(room / step + 1e-6) or 0
+    local col = (fit < 2) and EN.RIP_RED or ((fit < 3) and EN.RIP_AMBER or EN.RIP_GREEN)
+    return fit, fit < 1, col
+end
+--- Where the bar stands now: { len, left, icon, pay, ready } or nil (nothing open).
+function EN.SynergyNow(now)
+    local RD = NS.RD
+    local k = EN.SynergyKind()
+    if not (k and RD) then return nil end
+    now = now or GetTime()
+    local l, len
+    if k.kind == "rip" then
+        l = RD.ripLast
+        len = RD.RipLength and RD.RipLength() or 15
+    else
+        l = RD.cueLast and RD.cueLast[k.kind]
+        len = l and l.len
+    end
+    local left = l and l.untilAt and (l.untilAt - now) or 0
+    local ready = true
+    if k.kind == "hot" then ready = RD.SwiftReady and RD.SwiftReady(now) or false end
+    return { kind = k.kind, len = len or 15, left = left, icon = k.icon, payoff = k.payoff, ready = ready }
+end
+
 function EN.RipBuild(q)
     if q.rip then return q.rip end
     local B = {}
@@ -516,15 +597,8 @@ function EN.RipBuild(q)
     local bl = B.bar.GetFrameLevel and B.bar:GetFrameLevel()
     if type(bl) == "number" and B.over.SetFrameLevel then B.over:SetFrameLevel(bl + 2) end
     local top = B.over
-    B.ticks = {}
+    B.ticks = {}                                               -- made as the squares need them (ripShape)
     local RD = NS.RD
-    local segs = (RD and RD.RIP_SEGS) or 6
-    for k = 1, segs - 1 do
-        local t = top:CreateTexture(nil, "OVERLAY")
-        t:SetColorTexture(0, 0, 0, 0.8)
-        t:SetWidth(1)
-        B.ticks[k] = t
-    end
     -- a solid back under the icon (Arn's shot: "looks like it has an overlay on it" - the dim icon was see-through, the
     -- bar's green showed through it): the icon dims by greying, never by fading
     B.iconBack = top:CreateTexture(nil, "OVERLAY", nil, 1)
@@ -535,6 +609,10 @@ function EN.RipBuild(q)
         local ok, t = pcall(C_Spell.GetSpellTexture, (RD and RD.RIPTIDE) or "Riptide")
         if ok then pcall(B.icon.SetTexture, B.icon, t) end
     end
+    B.count = top:CreateFontString(nil, "OVERLAY")              -- how many payoffs still land (the synergy bar)
+    B.count:SetFont("Fonts\\ARIALN.TTF", 11, "OUTLINE")
+    B.count:SetPoint("RIGHT", q, "RIGHT", -4, 0)
+    B.count:SetTextColor(1, 1, 1, 1)
     B.late = {}
     for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
         local t = top:CreateTexture(nil, "OVERLAY", nil, 3)
@@ -552,17 +630,38 @@ function EN.RipIcon(B, k)
     if B.icon.SetDesaturated then pcall(B.icon.SetDesaturated, B.icon, k < 1) end
     B.icon:SetVertexColor(k, k, k, 1)
 end
---- Lay the segments out on the box's size (called with every paint - the box can be narrowed).
-local function ripShape(q, B)
-    local RD = NS.RD
-    local segs = (RD and RD.RIP_SEGS) or 6
+--- How many squares and how wide (a share of the bar): one payoff each, as many as fit in the window.
+function EN.Squares(len, step)
+    len, step = tonumber(len) or 15, math.max(0.1, tonumber(step) or 2.5)
+    local n = math.max(1, math.floor(len / step + 1e-6))
+    if n > EN.SYN.maxSquares then return EN.SYN.maxSquares, 1 / EN.SYN.maxSquares end
+    return n, step / len
+end
+--- Lay the squares out on the box's size (called with every paint - the box can be narrowed, the cast time changes).
+local function ripShape(q, B, n, share)
     local w, h = q:GetWidth(), q:GetHeight()
     if type(w) ~= "number" or type(h) ~= "number" or w <= 0 then return end
-    local sw = (w - 2) / segs
-    for k, t in ipairs(B.ticks) do
-        t:ClearAllPoints()
-        t:SetPoint("TOPLEFT", q, "TOPLEFT", 1 + k * sw, -1)
-        t:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", 1 + k * sw, 1)
+    n, share = n or 6, share or (1 / 6)
+    local sw = (w - 2) * share
+    B.n, B.sw = n, sw
+    for k = 1, math.max(#B.ticks, n) do
+        local t = B.ticks[k]
+        if k <= n and not t then
+            t = B.over:CreateTexture(nil, "OVERLAY")
+            t:SetColorTexture(0, 0, 0, 0.8)
+            t:SetWidth(1)
+            B.ticks[k] = t
+        end
+        if t then
+            local x = 1 + k * sw
+            local show = k <= n and x < w - 2                  -- (the last square's right edge: a tick only inside the bar)
+            if show then
+                t:ClearAllPoints()
+                t:SetPoint("TOPLEFT", q, "TOPLEFT", x, -1)
+                t:SetPoint("BOTTOMLEFT", q, "BOTTOMLEFT", x, 1)
+            end
+            t:SetShown(show)
+        end
     end
     local is = math.min(sw, h) - 2                         -- as big as the kick and the tools (the strip is their height)
     B.icon:SetSize(is, is)
@@ -587,30 +686,39 @@ function EN.RipPaint()
     local RD = NS.RD
     if not (q and q:IsShown() and RD) then return false end
     local B = EN.RipBuild(q)
-    ripShape(q, B)
-    local l = RD.ripLast
     local now = GetTime()
-    local left = l and (l.untilAt - now) or 0
+    local st = EN.SynergyNow(now)
+    local step = (st and EN.PayTime(st.payoff) or 2.5) + EN.Lag()
+    ripShape(q, B, EN.Squares(st and st.len or 15, step))
+    if st and st.icon and B.iconName ~= st.icon and C_Spell and C_Spell.GetSpellTexture then   -- the payoff's own icon
+        B.iconName = st.icon
+        local ok, t = pcall(C_Spell.GetSpellTexture, st.icon)
+        if ok then pcall(B.icon.SetTexture, B.icon, t) end
+    end
+    local left = st and st.left or 0
     if left <= 0 then
         B.bar:SetValue(0)
         EN.RipIcon(B, 0.3)
         ripLate(B, false)
+        if B.count.text ~= "" then B.count.text = "" B.count:SetText("") end
         q:SetScript("OnUpdate", nil)
         q.ripTicking = nil                                 -- (so the next Riptide starts the ticker again, however this ended)
         if RD.RipMarks then RD.RipMarks() end
         return false
     end
-    local len = RD.RipLength and RD.RipLength() or 15
+    local len = st.len
     B.bar:SetMinMaxValues(0, len)
     B.bar:SetValue(left)
-    local seg = len / ((RD.RIP_SEGS) or 6)
-    local late = left < seg                               -- under one Chain Heal: it would be gone before it lands
-    -- THE COLOUR (Arn, 16 Nov: "green half way amber 2 chain heals left red", then "red on last 2"): green for the first
-    -- half (three Chain Heals or more left), amber with two to three left, red on the last two
-    local col = (left < 2 * seg) and EN.RIP_RED or ((left < 3 * seg) and EN.RIP_AMBER or EN.RIP_GREEN)
+    -- THE COLOUR (Arn, 16 Nov: "green half way amber 2 chain heals left red", then "red on last 2") - counted now in YOUR
+    -- payoffs (EN.SynergyMath): the last two red, two to three amber, more green; under one, too late
+    local fit, late, col = EN.SynergyMath(left, EN.PayTime(st.payoff), EN.Lag(), EN.CastLeft(now))
+    B.fit = fit
     B.bar:SetStatusBarColor(col[1], col[2], col[3], col[4])
-    EN.RipIcon(B, late and 1 or 0.55)
+    if not st.ready then EN.RipIcon(B, 0.3) late = false   -- (Swiftmend cooling: nothing to pay off with yet)
+    else EN.RipIcon(B, late and 1 or 0.55) end
     ripLate(B, late)
+    local word = late and "" or tostring(fit)
+    if B.count.text ~= word then B.count.text = word B.count:SetText(word) end
     if not q.ripTicking then
         q.ripTicking, q.ripAcc = true, 0
         q:SetScript("OnUpdate", function(self, e)

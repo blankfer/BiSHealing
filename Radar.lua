@@ -1738,10 +1738,10 @@ RD.SW = {
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
     { key = "bounce", group = "SHAMAN",    name = "Chain Heal path",          tip = "After your Chain Heal, a bolt across the boxes it landed on: gold for 3, amber for 2, a red flash for 1. A star on each crit." },
     { key = "bsound", group = "SHAMAN",    name = "Chain Heal sounds",        tip = "A fanfare when all 3 bounces crit, a buzzer when it healed only one (mana wasted)." },
-    { key = "rip",    group = "SHAMAN",    name = "Riptide tracker",          tip = "A Riptide mark on whoever has yours, and a bar on top: six Chain Heals long, the last one the Riptide icon - too late for another Chain Heal." },
+    { key = "rip",    group = "SHAMAN",    name = "Riptide + synergy bar",    tip = "A Riptide mark on whoever has yours, and the synergy bar on top: how many of YOUR Chain Heals (your cast time and lag) still land before it runs out; the Riptide icon lights when the next one would be too late." },
     { key = "oath",   group = "PALADIN",   name = "Oath of Light cue",        tip = "Holy Light in the middle of the box of whoever carries your Oath of Light: your heals land harder there." },
-    { key = "vigil",  group = "PALADIN",   name = "Light's Vigil cue",        tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil: that Holy Shock skips its cooldown and splashes their party." },
-    { key = "swift",  group = "DRUID",     name = "Swiftmend cue",            tip = "Swiftmend in the middle of the box of whoever carries your Rejuvenation or Regrowth, while Swiftmend is ready." },
+    { key = "vigil",  group = "PALADIN",   name = "Light's Vigil + synergy",  tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil (that Holy Shock skips its cooldown and splashes their party), and the synergy bar on top counting its 30 s down." },
+    { key = "swift",  group = "DRUID",     name = "Swiftmend + synergy",      tip = "Swiftmend in the middle of the box of whoever carries your Rejuvenation or Regrowth while it is ready, and the synergy bar on top: your newest one's time left." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
@@ -1838,7 +1838,10 @@ function RD.DeckSized(M)
 end
 --- The strip on top: the alert boxes' height, or just room for the switches button.
 RD.DECK_HEAD_BARE = 16
-function RD.DeckHead() return (RD.Sw("alerts") or RD.Sw("cc") or (RD.Sw("rip") and RD.RipKnown())) and RD.DECK_HEAD or RD.DECK_HEAD_BARE end
+function RD.DeckHead()
+    local syn = NS.EN and NS.EN.SynergyKnown and NS.EN.SynergyKnown()
+    return (RD.Sw("alerts") or RD.Sw("cc") or syn) and RD.DECK_HEAD or RD.DECK_HEAD_BARE
+end
 
 --- The window's width at which the totem row fits on ONE line: CALL / BRING / RECALL in the middle, two timers each side.
 function RD.TotemWideW()
@@ -5438,6 +5441,7 @@ function RD.RipMarks()
         local key = shown and RD.RipKey(sp.unit) or nil
         local has = on and key and RD.rips[key]
         local tex
+        if key and RD.CueDead(sp.unit) then key, has = nil, nil end   -- (dead: nothing to heal there - the mark waits)
         if has then tex = RD.SpellTex(RD.RIPTIDE) elseif deck and key then tex = RD.CueFor(key, now) end
         if tex then
             local q = RD.CueMark(sp)
@@ -5459,12 +5463,93 @@ end
   fight), the Riptide tracker's road (RD.CastTarget). The higher `prio` wins a box's middle. ]]
 RD.CUE_DEFS = {
     { key = "oath", cast = "Oath of Light", len = 300, one = true, show = "Holy Light", sw = "oath", prio = 1 },
-    { key = "vigil", cast = "Light's Vigil", len = 30, one = true, show = "Holy Shock", sw = "vigil", prio = 2, ends = "Holy Shock" },
-    { key = "rejuv", cast = "Rejuvenation", len = 12, show = "Swiftmend", sw = "swift", prio = 1, gate = "swift" },
-    { key = "regrowth", cast = "Regrowth", len = 21, show = "Swiftmend", sw = "swift", prio = 1, gate = "swift" },
+    { key = "vigil", cast = "Light's Vigil", len = 30, one = true, show = "Holy Shock", sw = "vigil", prio = 2, ends = "Holy Shock", bar = "vigil" },
+    { key = "rejuv", cast = "Rejuvenation", len = 12, show = "Swiftmend", sw = "swift", prio = 1, gate = "swift", bar = "hot" },
+    { key = "regrowth", cast = "Regrowth", len = 21, show = "Swiftmend", sw = "swift", prio = 1, gate = "swift", bar = "hot" },
 }
 RD.SWIFTMEND, RD.SWIFT_CD = "Swiftmend", 15
+--[[ WHAT A PALADIN OR A DRUID RUNS INTO (17 Nov 2026, Arn: "I dont play the other classes so think of all the possible
+  scenarios they might run into"), and what the cues do:
+  - the person DIES: their box shows no cue (RD.CueDead, plain answers only); the clock keeps running, so a quick rez
+    still has it.
+  - the buff is DISPELLED, clicked off, or runs out early; a /RELOAD or a new login wipes our clock: out of a fight,
+    when the numbers are plain again, RD.CueSeed reads the truth off every box - your own Riptide / Oath of Light /
+    Light's Vigil / Rejuvenation / Regrowth on them, its real end - and puts the clock right (a mark nobody wears goes).
+    In a fight our clock is all there is (their auras are secret).
+  - HOLY SHOCK ON AN ENEMY (it is a damage spell too): never spends the Vigil - when the game named the target and it is
+    not the box's person, the cast is not theirs (RD.CueCast).
+  - Swiftmend's cooldown: off the book (GetSpellBaseCooldown), else 15 s.
+  - Swiftmend EATING the HoT (Classic did; Forever reportedly does not): the cue stays on after a Swiftmend; if it did eat
+    it, the next out-of-fight read (RD.CueSeed) takes the mark away.
+  - two paladins, two druids: each addon tracks its OWN casts only (the aura reads ask for yours: "HELPFUL|PLAYER"). ]]
+function RD.CueDead(unit)
+    if not (unit and UnitIsDeadOrGhost) then return false end
+    local ok, d = pcall(UnitIsDeadOrGhost, unit)
+    return ok and plain(d) == true
+end
+--- Swiftmend's cooldown off the book, else RD.SWIFT_CD; read once, out of a fight.
+function RD.SwiftCd()
+    if RD.swiftCdRead then return RD.swiftCdRead end
+    if combat() then return RD.SWIFT_CD end
+    local id
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, RD.SWIFTMEND)
+        id = ok and type(info) == "table" and plain(info.spellID) or nil
+    end
+    if id and GetSpellBaseCooldown then
+        local ok, ms = pcall(GetSpellBaseCooldown, id)
+        ms = ok and plain(ms) or nil
+        if type(ms) == "number" and ms >= 3000 and ms <= 120000 then RD.swiftCdRead = ms / 1000 return RD.swiftCdRead end
+    end
+    return RD.SWIFT_CD
+end
+--- OUT OF A FIGHT: the truth off every box - your own opener auras on them, their real end. Answers how many it read.
+function RD.CueSeed()
+    if combat() or (NS.Blind and NS.Blind()) then return 0 end
+    local get = C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName
+    if not get then return 0 end
+    local now = GetTime()
+    local names = { [RD.RIPTIDE] = "rip" }
+    for _, d in ipairs(RD.CUE_DEFS) do names[d.cast] = d end
+    local FM = NS.FM
+    local seen, read = {}, 0
+    for _, sp in ipairs(RD.spokes or {}) do
+        local u = sp.unit
+        local key = u and RD.RipKey(u)
+        if key and not seen[key] then
+            seen[key] = true
+            for spell, d in pairs(names) do
+                if FM and FM.Ranks and #FM.Ranks(spell) > 0 then
+                    local ok, a = pcall(get, u, spell, "HELPFUL|PLAYER")
+                    if ok and not (NS.Secret and NS.Secret(a)) then
+                        read = read + 1
+                        local exp = type(a) == "table" and plain(a.expirationTime) or nil
+                        local m = (d == "rip") and RD.rips or (function() RD.cueMarks[d.key] = RD.cueMarks[d.key] or {} return RD.cueMarks[d.key] end)()
+                        if type(exp) == "number" and exp > now then
+                            m[key] = exp
+                            if d ~= "rip" and d.bar then
+                                local l = RD.cueLast[d.bar]
+                                if not l or l.key == key or exp > (l.untilAt or 0) then
+                                    local dur = plain(a.duration)
+                                    RD.cueLast[d.bar] = { key = key, at = now, len = (type(dur) == "number" and dur > 0) and dur or RD.SpellSecs(d.cast, d.len), untilAt = exp }
+                                end
+                            end
+                        elseif a == nil then
+                            m[key] = nil                       -- nobody wears it (dispelled, clicked off, ran out)
+                            if d ~= "rip" and d.bar and RD.cueLast[d.bar] and RD.cueLast[d.bar].key == key then RD.cueLast[d.bar] = nil end
+                            if d == "rip" and RD.ripLast and RD.ripLast.key == key then RD.ripLast = nil end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    RD.RipMarks()
+    if NS.EN and NS.EN.RipPaint then NS.EN.RipPaint() end
+    return read
+end
 RD.cueMarks = {}                                     -- cue key -> person (RD.RipKey) -> until
+RD.cueLast = {}                                      -- the synergy bar's newest: "vigil" / "hot" -> { key, at, len, untilAt }
 RD.cueSecs, RD.cueTex = {}, {}
 --- A spell's icon (asked once).
 function RD.SpellTex(name)
@@ -5496,12 +5581,18 @@ function RD.SwiftReady(now)
     if not (FM and FM.Ranks and #FM.Ranks(RD.SWIFTMEND) > 0) then return false end
     return (now or GetTime()) >= (RD.swiftAt or 0)
 end
+--- The game named a different target than the box's person (a Holy Shock on an enemy, a keybind on your target): true.
+function RD.CueElsewhere(sp, now)
+    local who = RD.sentTarget
+    if not (who and RD.sentAt and now - RD.sentAt <= RD.RIP_CLICK and sp and sp.unit) then return false end
+    return not RD.BoxIsNamed(sp.unit, who)
+end
 --- A spell of yours went out: start, move or end a cue. Answers true when a cue changed.
 function RD.CueCast(name, now)
     if not name then return false end
     now = now or GetTime()
     local hit = false
-    if name == RD.SWIFTMEND then RD.swiftAt = now + RD.SWIFT_CD hit = true end
+    if name == RD.SWIFTMEND then RD.swiftAt = now + RD.SwiftCd() hit = true end
     for _, d in ipairs(RD.CUE_DEFS) do
         if d.cast == name or d.ends == name then
             local sp = RD.CastTarget(now)
@@ -5510,10 +5601,14 @@ function RD.CueCast(name, now)
             RD.cueMarks[d.key] = m
             if d.cast == name and key then
                 if d.one then for k in pairs(m) do m[k] = nil end end
-                m[key] = now + RD.SpellSecs(d.cast, d.len)
+                local len = RD.SpellSecs(d.cast, d.len)
+                m[key] = now + len
+                if d.bar then RD.cueLast[d.bar] = { key = key, at = now, len = len, untilAt = m[key] } end   -- the synergy bar's
                 hit = true
-            elseif d.ends == name and key and m[key] then
+            elseif d.ends == name and key and m[key] and not RD.CueElsewhere(sp, now) then
                 m[key] = nil
+                local l = d.bar and RD.cueLast[d.bar]
+                if l and l.key == key then RD.cueLast[d.bar] = nil end
                 hit = true
             end
         end
@@ -6689,6 +6784,7 @@ function RD.Arm()
     RD.PaintSeats(slots)                             -- a faint dot at every place, out of a fight
     RD.ApplyView()                                   -- what steps aside in the console, and the view button
     RD.Paint()
+    if RD.Deck() then RD.CueSeed() end               -- (out of a fight here: a login, a /reload, a new group - the cues read the truth)
     return true
 end
 
@@ -7535,6 +7631,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
             RD.PaintQuiet() RD.PaintShield() RD.PickFuel() RD.PaintFuel()
         end
         RD.LearnTimers()                   -- a totem swapped in the fight: its box learns it now
+        RD.CueSeed()                       -- the heal cues: the truth off every box, now it is plain again
         return
     end
     if not RD.Active() then return end
