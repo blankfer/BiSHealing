@@ -1,7 +1,11 @@
-# BiS Healing — CurseForge page text (1.6.1)
+# BiS Healing — CurseForge page text (1.7.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.6.1 text (17 Nov, 1.7.0): "The deck" gains the heal cues (Riptide / Oath of Light / Light's Vigil /
+Swiftmend in the middle of the bar), the synergy bar, DEAD / OFFLINE / AFK, and the top strip as the grab band; the
+shaman line's Riptide part moves into the cues.
 
 Changed since the 1.4.4 text (16 Nov, 1.6.0; Arn: "its one unified deck / classic, cockpit is just colors in classic now" - no radar or engineer words on the page): "The radar look" becomes "The deck", "The cockpit look" becomes "Cockpit colours for classic" - the one-window deck with switches, the top row, group mana, Mana Tide's chat line and ping, outlines, Riptide and the Chain Heal bolt; a new "Heal with a controller" section.
 
@@ -153,10 +157,13 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
 - **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
 - **Mana Tide, quietly:** one click drops it; click again to ping the totem so your group knows where to stand. Nothing goes in chat. Other BiS Healing users see a tag under your name.
-- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL, a **Riptide** mark on whoever has yours with a bar showing how long it lasts, and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
+- **Heal cues:** the middle of a person's bar carries one white-edged icon that says heal them now, with this - **Riptide** on whoever has yours (start the Chain Heal there), **Holy Light** on a paladin's Oath of Light, **Holy Shock** on Light's Vigil, **Swiftmend** on a druid's Rejuvenation or Regrowth while it's ready. On every box that person is in.
+- **The synergy bar** on top: how many of your casts still land before that window closes, counted from your own cast time, haste and lag.
+- **DEAD, OFFLINE, AFK** across the bar, in dark red, grey and white.
+- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL, and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
 - **The black box** along the bottom.
 - **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
-- **Resize** by dragging the bottom-right corner; Shift-drag for width. Out of a fight.
+- **Move it** by its top strip; **resize** by dragging the bottom-right corner (Shift-drag for width). Out of a fight.
 
 Pick **the deck** in the options' look row. It and classic are the two looks.
 

@@ -42,6 +42,7 @@ FG.CELL_W, FG.CELL_H, FG.CELL_PAD = FRAME_W, FRAME_H, PAD
 local HEADER_H, HEADER_LIFT = 16, 2
 -- the grid's own bar, and how far it floats above the anchor (makeHeader)
 local GRID_HEADER_H, GRID_HEADER_LIFT = 16, 2
+FG.GRID_GRAB = 8                                       -- the header's handle reaches this far above the bar (17 Nov)
 -- EVERY GAP IN THE BLOCK IS THE GRID'S OWN PAD. Arn, 23 Sep, looking at the two of them lined up:
 -- "make sure all the windows line up". The target and tot cells had twice the gap between them
 -- that two grid columns have, which made the block three pixels wider than the grid beneath it -
@@ -3930,6 +3931,9 @@ local function makeHeader(anchor)
     h:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", 0, GRID_HEADER_LIFT)
     h:EnableMouse(true)
     h:RegisterForDrag("LeftButton")
+    -- EASIER TO TAKE HOLD OF (17 Nov 2026, Arn: "make bis healing easier to drag and move from the header"): the 16 px bar
+    -- answers the mouse GRID_GRAB px above itself too - the same look, a bigger handle
+    if h.SetHitRectInsets then h:SetHitRectInsets(0, 0, -FG.GRID_GRAB, 0) end
 
     local bg = h:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()

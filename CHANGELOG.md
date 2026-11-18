@@ -1,5 +1,16 @@
 # BiS Healing
 
+## 1.7.0
+
+- **Heal cues: who to heal, with what, at a glance.** The middle of a person's health bar is kept for one thing - a white-edged icon that says heal this person now, with this:
+  - **Shamans:** Riptide on whoever has yours - start your Chain Heal there. It shows on every box that person is in (your tank box and TARGET / ITS TARGET too), and comes up when you target them later.
+  - **Paladins:** Holy Light on whoever carries your **Oath of Light**; Holy Shock on whoever carries your **Light's Vigil** (that Holy Shock skips its cooldown and splashes their party) until you cast it.
+  - **Druids:** Swiftmend on whoever carries your Rejuvenation or Regrowth, while Swiftmend is ready.
+  - Each has its own switch. Nobody's buffs are read in a fight (the game hides them): your own casts are counted. Out of a fight, after a /reload or when your group changes, the cues check who really still has them.
+- **The synergy bar** (the Riptide bar, for every healer): how many of **your** casts still land before the window closes - your cast time with haste, plus your lag, counted from when the cast you're in lands. The squares are your casts, the number on the right how many still fit; red on the last one, amber two, green more. Shamans count Chain Heals into Riptide, paladins Light's Vigil into Holy Shock, druids a heal-over-time into Swiftmend.
+- **DEAD, OFFLINE and AFK** in big letters across the deck's health bars - dark red, grey and white. Offline wins over dead; AFK goes away when the game hides it mid-fight.
+- **Easier to drag:** on the deck, the whole top strip is a grab band (it lights when you point at it); in classic, the header grabs a little above itself too.
+
 ## 1.6.1
 
 - **Mana Tide is quiet:** one click drops it - no ping, nothing in chat. Click it again to ping the totem so your group knows where to stand. Other BiS Healing users still see the small tag under your name.
