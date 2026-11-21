@@ -16744,6 +16744,276 @@ do
     NS.DB().radar.reveal = nil
 end
 
+-- THE CLASS EFFECTS (Effects.lua, 21 Nov 2026 - BiS Cues sheet 3, Arn: "all")
+do
+    local FX, RD = NS.FX, NS.RD
+    local D = NS.DB()
+    D.radar = type(D.radar) == "table" and D.radar or {}
+    local d = D.radar
+    local keep = { sw = d.sw, fxStamp = d.fxStamp, swStamp = d.swStamp, view = d.view, spokes = RD.spokes, deck = RD.Deck,
+                   name = C_Spell.GetSpellName, desc = C_Spell.GetSpellDescription, timer = _G.C_Timer, alias = RD.bounceAlias,
+                   marks = RD.cueMarks.vigil, click = RD.lastClick, clickAt = RD.lastClickAt, over = RD.over,
+                   sent = RD.sentTarget, sentAt = RD.sentAt, combat = STATE.inCombat, fight = RD.inFight }
+    local HS, LV, POM, POH, WG, FH = 20473, 990001, 33076, 596, 48438, 2061
+    local NAMES = { [HS] = "Holy Shock", [LV] = "Light's Vigil", [POM] = "Prayer of Mending", [POH] = "Prayer of Healing",
+                    [WG] = "Wild Growth", [FH] = "Flash Heal" }
+    C_Spell.GetSpellName = function(id) if NAMES[id] then return NAMES[id] end return keep.name(id) end
+    local later = {}
+    _G.C_Timer = { After = function(_, fn) later[#later + 1] = fn end, NewTicker = keep.timer and keep.timer.NewTicker }
+    local function runLater() local l = later later = {} for _, fn in ipairs(l) do fn() end end
+    STATE.inCombat, RD.inFight = false, nil
+
+    -- the switches: on the deck's panel, after the druid's, FULL only
+    local at, keys = nil, {}
+    for i, s in ipairs(RD.SW) do
+        if s.group == "CLASS EFFECTS" then at = at or i keys[#keys + 1] = s.key end
+    end
+    ok(table.concat(keys, ",") == "fxvigil,fxmend,fxpoh,fxwild" and RD.SW[at - 1].group == "DRUID",
+       "four CLASS EFFECTS switches on the deck's panel, right after the druid's", table.concat(keys, ","))
+    local plainWords = true
+    for _, s in ipairs(RD.SW) do
+        if s.group == "CLASS EFFECTS" then
+            for _, w in ipairs({ "fuel", "chaff", "bingo", "fighter" }) do
+                if (s.name .. " " .. s.tip):lower():find(w, 1, true) then plainWords = false end
+            end
+        end
+    end
+    ok(plainWords, "their words are plain (no flight words)")
+    ok(RD.SW_PRESETS.full.fxvigil and RD.SW_PRESETS.full.fxwild and not RD.SW_PRESETS.lean.fxmend and not RD.SW_PRESETS.bare.fxpoh,
+       "FULL turns them on (everything); LEAN and BARE do not")
+
+    -- DEFAULT OFF: a save nobody touched (nil = on for every other switch) gets them written off once, at login
+    d.sw, d.fxStamp, d.swStamp, d.view = nil, nil, 1, nil
+    FX.armed = nil
+    ok(not FX.Sw("fxvigil") and not FX.AnyOn(), "nil reads OFF for a class effect (RD.Sw reads it on)")
+    ok(fire(FX.loginEv, "PLAYER_LOGIN"), "the login reaches the effects")
+    ok(d.fxStamp == 1 and d.sw.fxvigil == false and d.sw.fxmend == false and d.sw.fxpoh == false and d.sw.fxwild == false,
+       "the login writes the four off, once")
+    ok(not RD.Sw("fxvigil") and RD.Sw("names") and RD.Sw("bounce"), "so the panel draws them off - and nothing else changed")
+    ok(not FX.armed and not (FX.castEv.__events and FX.castEv.__events.UNIT_SPELLCAST_SENT) and not FX.listening,
+       "all four off: not one event registered")
+    d.sw.fxvigil = true
+    ok(FX.Stamp() == false and d.sw.fxvigil == true, "a second login keeps what you picked")
+    -- the engineer's view still moves to LEAN (RD.SwStamp needs sw == nil, so it runs first)
+    d.sw, d.fxStamp, d.swStamp, d.view = nil, nil, nil, "console"
+    ok(FX.Stamp() and RD.SwPresetNow() == "lean" and d.sw.fxwild == false, "an engineer user: LEAN, the effects off", RD.SwPresetNow())
+
+    -- THE COLD START: a switch on in the save, no click at all - the login alone listens
+    d.sw, d.fxStamp = { fxvigil = true, fxmend = true, fxpoh = true, fxwild = true }, 1
+    FX.armed = nil
+    fire(FX.loginEv, "PLAYER_LOGIN")
+    local ce = FX.castEv
+    ok(FX.armed and ce.__events.UNIT_SPELLCAST_SENT and ce.__unitFilter.UNIT_SPELLCAST_SENT.player
+       and ce.__events.UNIT_SPELLCAST_SUCCEEDED and ce.__unitFilter.UNIT_SPELLCAST_SUCCEEDED.player,
+       "after a login with a switch on: your own casts are heard (you only)")
+    ok(not (FX.combatEv.__events and FX.combatEv.__events.UNIT_COMBAT), "but not UNIT_COMBAT until one of the spells goes out")
+
+    -- the deck: four boxes the client has placed
+    local function box(unit, x, y)
+        local p = CreateFrame("Frame")
+        p:Show()
+        p.GetCenter = function() return x, y end
+        return { unit = unit, deckPlate = p }
+    end
+    local A, B, C, E = box("player", 110, 220), box("party1", 210, 160), box("party2", 310, 160), box("party3", 410, 160)
+    RD.spokes, RD.bounceAlias = { A, B, C, E }, {}
+    RD.Deck = function() return true end
+    local L = FX.Layer()
+    L.GetLeft = function() return 10 end
+    L.GetBottom = function() return 20 end
+    ok(not L.__secure and not L:IsProtected(), "the layer is a plain frame, never a secure one")
+    local function sent(id, target) return fire(ce, "UNIT_SPELLCAST_SENT", "player", target, "Cast-1", id) end
+    local function landed(id) return fire(ce, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", id) end
+    local function heard(u, a) return fire(FX.combatEv, "UNIT_COMBAT", u, a or "HEAL", "", secret(), 2) end
+    local function shown(kind, colour)
+        local n = 0
+        for _, ko in ipairs((FX.lastDraw and FX.lastDraw.item.objs) or {}) do
+            local o = ko[2]
+            if ko[1] == kind and o:IsShown() then
+                local c = (kind == "line" and o.color) or (kind == "ring" and o.edges[1].__color) or (kind == "glow" and o.__vertex) or nil
+                if not colour or (c and math.abs(c[2] - colour[2]) < 0.01 and math.abs(c[3] - colour[3]) < 0.01) then n = n + 1 end
+            end
+        end
+        return n
+    end
+    local function click(sp) RD.lastClick, RD.lastClickAt, RD.over, RD.sentTarget = sp, GetTime(), nil, nil end
+    local function settle() TICK(10) FX.Tick() heard("nameplate1", "WOUND") later = {} end
+
+    -- PALADIN: Holy Shock through Light's Vigil
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    ok(sent(HS) and FX.pend and FX.pend.kind == "vigil" and FX.listening and FX.combatEv.__events.UNIT_COMBAT,
+       "your Holy Shock on a box with your Light's Vigil: UNIT_COMBAT heard from now")
+    heard(B.unit) heard(C.unit) heard("target") heard("nameplate2", "WOUND") heard(E.unit)
+    landed(HS)
+    TICK(0.1)
+    heard("raid7")                                      -- (a raid token with no box here: nothing)
+    runLater()
+    ok(FX.last and FX.last.kind == "vigil" and FX.last.n == 3, "it healed three boxes: the target and two of its party",
+       FX.last and FX.last.n)
+    ok(shown("line", FX.GOLD) == 30, "gold dashed rays from the target's box: 10 dashes to the box 100 px away, 20 to the one 200 px away",
+       shown("line"))
+    ok(shown("ring", FX.GOLD) == 3, "a gold ring on each of the three boxes")
+    local r1 = FX.lastDraw.item.objs[#FX.lastDraw.item.objs][2]
+    ok(r1.box == E.deckPlate and r1.points[1][2] == E.deckPlate, "a ring is pinned round its box")
+    ok(L:IsShown() and L:GetScript("OnUpdate"), "it shows and fades")
+    TICK(FX.HOLD.vigil + 0.05)
+    FX.Tick()
+    ok(not L:IsShown() and not L:GetScript("OnUpdate") and shown("line") == 0, "after " .. FX.HOLD.vigil .. " s it is gone, nothing left running")
+    local made = L.pool.line.made
+    settle()
+    click(B)
+    sent(HS) heard(B.unit) heard(C.unit) heard(E.unit) landed(HS) runLater()
+    ok(FX.last.n == 3 and L.pool.line.made == made and shown("line", FX.GOLD) == 30, "the second burst reuses the first one's lines (pooled)", L.pool.line.made)
+    settle()
+    -- no splash: nothing; no Vigil: nothing; an enemy: nothing
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    sent(HS) heard(B.unit) landed(HS) runLater()
+    ok(FX.last.kind == "vigil" and FX.last.n == 0, "only the target healed: no burst", FX.last.n)
+    settle()
+    RD.cueMarks.vigil = {}
+    click(B)
+    ok(not sent(HS) or FX.pend == nil, "no Light's Vigil on that box: a plain Holy Shock, nothing listens")
+    ok(FX.pend == nil, "(nothing waits)")
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    sent(HS, "Hogger")
+    ok(FX.pend == nil, "a Holy Shock the game says went to an enemy: no burst")
+    ok(FX.Sent(nil, secret()) == false, "a hidden spell id is never compared")
+
+    -- PRIEST: Prayer of Healing
+    settle()
+    click(A)
+    sent(POH)
+    TICK(1.5)
+    heard(E.unit)                                       -- (someone else's heal while you cast)
+    TICK(1.5)
+    heard(A.unit) heard(B.unit) heard(C.unit)
+    landed(POH)
+    runLater()
+    ok(FX.last.kind == "poh" and FX.last.n == 3 and shown("ring", FX.WHITE) == 3 and shown("line") == 0,
+       "Prayer of Healing: a white ring on each of the three boxes it healed, none on the box healed a moment before",
+       FX.last.n)
+
+    -- PRIEST: Prayer of Mending hops
+    settle()
+    FX.mendWords = nil
+    C_Spell.GetSpellDescription = function(s)
+        if s == "Prayer of Mending" then
+            return "Places a spell on the target that heals them for 800 the next time they take damage. When the heal occurs, Prayer of Mending jumps to a party or raid member within 20 yards. Jumps up to 5 times and lasts 30 sec after each jump."
+        end
+        return keep.desc and keep.desc(s)
+    end
+    click(B)
+    sent(POM) landed(POM)
+    ok(FX.mend and FX.mend.left == 5 and FX.mend.first == B and FX.listening, "Prayer of Mending on a box: 5 heals, listening")
+    TICK(2)
+    heard(C.unit, "WOUND") heard(C.unit)
+    ok(FX.mend.hops == 0, "a hit and a heal on ANOTHER box first: not it (its first heal is on the box you cast it on)")
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    ok(FX.mend.hops == 1 and FX.mend.left == 4 and shown("line") == 0 and shown("ring", FX.WHITE) == 1,
+       "hit, then healed in the same moment: the first heal - a white ring, no arc yet")
+    local lab
+    for _, ko in ipairs(FX.lastDraw.item.objs) do if ko[1] == "label" then lab = ko[2] end end
+    ok(lab and lab:GetText() == "4", "and the heals it has left: 4", lab and lab:GetText())
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    ok(FX.mend.hops == 1, "the same box again: it has jumped away from there")
+    TICK(1)
+    heard(E.unit)
+    ok(FX.mend.hops == 1, "a heal alone (another healer, a HoT): not a hop")
+    TICK(1)
+    heard(E.unit, "WOUND") heard(E.unit)
+    ok(FX.mend.hops == 2 and FX.mend.left == 3 and shown("line", FX.WHITE) == FX.ARC_SEGS,
+       "the next box hit and healed: a white arc from the last box to it", shown("line"))
+    local first = FX.lastDraw.item.objs[1][2]
+    ok(first.from[1] == 200 and first.from[2] == 140, "the arc starts in the middle of the box it came from", first.from[1], first.from[2])
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local nC, by = Cost.Count(function() for _ = 1, 100 do heard("nameplate4", "WOUND") end end)
+    ok(nC <= 200, "100 enemy hits while a Prayer of Mending lives: at most 2 client calls each", nC, Cost.Top(by, 3))
+    print(("   cost: class effects, 100 enemy hits while listening = %d calls (%s)"):format(nC, Cost.Top(by, 3)))
+    -- its words unread: no number
+    FX.mendWords = { charges = nil, life = 30 }
+    TICK(1)
+    click(B)
+    sent(POM) landed(POM)
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    lab = nil
+    for _, ko in ipairs(FX.lastDraw.item.objs) do if ko[1] == "label" and ko[2]:IsShown() then lab = ko[2] end end
+    ok(FX.mend.hops == 1 and FX.mend.left == nil and not lab, "its words unread: the hop, no number")
+    TICK(31)
+    heard("nameplate4", "WOUND")
+    ok(not FX.listening and FX.mend == nil and not FX.combatEv.__events.UNIT_COMBAT, "30 s with no heal: it lets UNIT_COMBAT go")
+
+    -- DRUID: Wild Growth
+    settle()
+    click(C)
+    sent(WG)
+    TICK(3)
+    landed(WG)
+    ok(shown("glow", FX.GREEN) == 1, "Wild Growth lands: its target's box glows at once")
+    TICK(1.0)
+    heard(A.unit) heard(B.unit) heard(C.unit) heard(E.unit)
+    TICK(0.2)
+    heard(A.unit)                                       -- (a heal of someone else's, alone)
+    runLater()
+    ok(FX.last.kind == "wild" and FX.last.n == 4 and shown("glow", FX.GREEN) == 4,
+       "its first tick on four boxes in one moment: all four bloom", FX.last.n)
+    local g = FX.lastDraw.item.objs[1][2]
+    TICK(2)
+    FX.Tick()
+    local a1 = g.__alpha
+    TICK(3)
+    FX.Tick()
+    ok(type(a1) == "number" and a1 > 0 and a1 <= FX.GLOW_A and g.__alpha < a1, "a soft glow, fading", a1, g.__alpha)
+    TICK(2)
+    FX.Tick()
+    ok(not g:IsShown() and not L:GetScript("OnUpdate"), "gone after its 7 s")
+
+    -- IN A FIGHT: the same, and no secure call (the mock refuses Show/Hide/SetAttribute on a secure frame in combat)
+    settle()
+    STATE.inCombat, RD.inFight = true, true
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    local okF, errF = pcall(function()
+        sent(HS) heard(B.unit) heard(C.unit) landed(HS) runLater()
+        click(A) sent(POH) heard(A.unit) heard(B.unit) landed(POH) runLater()
+        TICK(1) FX.Tick()
+    end)
+    ok(okF and FX.last.kind == "poh" and FX.last.n == 2, "in a fight: drawn, and no secure call", errF)
+    STATE.inCombat, RD.inFight = false, nil
+
+    -- SWITCHED OFF: nothing
+    settle()
+    RD.SetSw("fxvigil", false)
+    click(B)
+    ok(not sent(HS) or FX.pend == nil, "Light's Vigil burst off: the Holy Shock draws nothing")
+    RD.SetSw("fxpoh", false)
+    sent(POH)
+    ok(FX.pend == nil, "Prayer of Healing pulse off: nothing")
+    RD.SetSw("fxmend", false)
+    RD.SetSw("fxwild", false)
+    ok(not FX.armed and not sent(WG) and not ce.__events.UNIT_SPELLCAST_SENT, "all four off: your casts are not even heard")
+    RD.SetSw("fxwild", true)
+    ok(FX.armed and ce.__events.UNIT_SPELLCAST_SENT, "one back on: heard again")
+    RD.Deck = function() return false end
+    click(C)
+    sent(WG)
+    ok(FX.pend == nil, "the deck not on screen: nothing")
+
+    settle()
+    RD.Deck, RD.spokes, RD.bounceAlias = keep.deck, keep.spokes, keep.alias
+    C_Spell.GetSpellName, C_Spell.GetSpellDescription, _G.C_Timer = keep.name, keep.desc, keep.timer
+    RD.cueMarks.vigil, RD.lastClick, RD.lastClickAt, RD.over = keep.marks, keep.click, keep.clickAt, keep.over
+    RD.sentTarget, RD.sentAt, STATE.inCombat, RD.inFight = keep.sent, keep.sentAt, keep.combat, keep.fight
+    d.sw, d.fxStamp, d.swStamp, d.view = keep.sw, keep.fxStamp, keep.swStamp, keep.view
+    FX.Arm()
+    FX.mendWords = nil
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
