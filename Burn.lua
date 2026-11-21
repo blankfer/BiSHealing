@@ -176,6 +176,8 @@ function BN.Paint(sp, mx)
     local unit, t = sp.unit, now()
     local left = BN.Sw("hell") and BN.Left(unit, t) or nil
     local tapOn = BN.Sw("tap") and BN.tap[unit] and BN.tap[unit] > t or false
+    -- a box too small for the line under the name: the extra tags go first (Radar.lua RD.BoxRoom, BiS Cues sheet 7)
+    if tapOn and NS.RD and NS.RD.BoxHas and not NS.RD.BoxHas(sp, "extras") then tapOn = false end
     if not left and not tapOn and not e.burn then return false end   -- (nothing made for a box that never burned)
     local B = BN.Parts(e)
     if left then
