@@ -30,8 +30,36 @@ local function db()
 end
 local function fight() return (InCombatLockdown and InCombatLockdown()) and true or false end
 
+--[[ THE SECOND ROAD (20 Nov 2026, Arn's live test: "no crit mid fight" - `/bish reveal` said the aura read never answered,
+  yet the game's own floating text said "<Revelation fades>"): the game announces your auras to its combat text through
+  COMBAT_TEXT_UPDATE ("SPELL_AURA_START" / "SPELL_AURA_END", the name from GetCurrentCombatTextEventInfo). A PLAIN name
+  equal to Revelation's lights it / puts it out; a hidden name is never compared. ]]
+RV.textUp = false
+function RV.Name()
+    local get = C_Spell and C_Spell.GetSpellName
+    if get then
+        local ok, n = pcall(get, RV.IDS[1])
+        n = ok and plain(n) or nil
+        if type(n) == "string" and n ~= "" then return n end
+    end
+    return "Revelation"
+end
+function RV.Text(kind)
+    kind = plain(kind)
+    if kind ~= "SPELL_AURA_START" and kind ~= "SPELL_AURA_END" then return false end
+    local info = GetCurrentCombatTextEventInfo
+    if not info then RV.seenText = "no combat text api" return false end
+    local ok, name = pcall(info)
+    local n = ok and plain(name) or nil
+    RV.seenText = kind .. " " .. (n and tostring(n) or (ok and "hidden name" or "refused"))
+    if n ~= RV.Name() then return false end
+    RV.textUp = kind == "SPELL_AURA_START"
+    return true
+end
+
 --- Is Revelation on you right now (true / false)?
 function RV.Up()
+    if RV.textUp then return true end
     local get = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
     if not get then return false end
     local d = db()
@@ -91,7 +119,12 @@ RV.events = CreateFrame("Frame")
 if RV.events.RegisterUnitEvent then RV.events:RegisterUnitEvent("UNIT_AURA", "player")
 else RV.events:RegisterEvent("UNIT_AURA") end
 RV.events:RegisterEvent("PLAYER_ENTERING_WORLD")
+RV.events:RegisterEvent("COMBAT_TEXT_UPDATE")
 RV.events:SetScript("OnEvent", function(_, event, unit)
+    if event == "COMBAT_TEXT_UPDATE" then
+        if RV.Text(unit) then RV.Paint() end
+        return
+    end
     if event == "UNIT_AURA" and unit ~= "player" then return end
     RV.Paint()
 end)
@@ -101,8 +134,9 @@ function RV.Status()
     local d = db()
     local pas = {}
     for id in pairs(d.passive) do pas[#pas + 1] = tostring(id) end
-    local line = string.format("reveal: up %s | the buff's id %s | passive %s | last read: %s", tostring(RV.Up()),
-        tostring(d.buff or "not seen yet"), #pas > 0 and table.concat(pas, ", ") or "none", RV.seen or "nothing yet")
+    local line = string.format("reveal: up %s | the buff's id %s | passive %s | last read: %s | combat text: %s", tostring(RV.Up()),
+        tostring(d.buff or "not seen yet"), #pas > 0 and table.concat(pas, ", ") or "none", RV.seen or "nothing yet",
+        RV.seenText or "nothing heard")
     if NS.Print then NS.Print(line) end
     return line
 end

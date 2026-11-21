@@ -16622,6 +16622,24 @@ do
     ok(RV.Paint() == true and fs:IsShown(), "in a fight, a hidden answer about the known buff: up (a missing one answers nil)")
     ON[1248808] = nil
     RV.Paint()
+    -- the second road: the game's combat text ("<Revelation fades>" in Arn's shot)
+    local TEXT
+    local keepInfo, keepName = _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName
+    _G.GetCurrentCombatTextEventInfo = function() return TEXT end
+    _G.C_Spell.GetSpellName = function(id) return id == RV.IDS[1] and "Revelation" or nil end
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_START")
+    ok(RV.textUp and fs:IsShown(), "the game's combat text says Revelation starts: CRIT, even with the aura read silent")
+    TEXT = "Ancestral Fortitude"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown(), "another buff fading: CRIT stays")
+    TEXT = secret()
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown() and RV.seenText == "SPELL_AURA_END hidden name", "a hidden name is never compared")
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(not RV.textUp and not fs:IsShown(), "Revelation fades: CRIT goes")
+    _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName = keepInfo, keepName
     local Cost = dofile("../_bisdev/dev/cost.lua")
     local n = Cost.Count(function() RV.Paint() end)
     ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)
