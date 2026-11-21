@@ -367,9 +367,11 @@ function BN.Container(sp)
         if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 5) end
         local box, pip = e.box, sp.heal
         local init = function(button) BN.BadgeOn(button, box, pip) end
+        -- HELPFUL ONLY (21 Nov 2026, Arn: "he was not hellfiring in those pictures" - a HARMFUL slot beside it lit his box
+        -- in Zul'Farrak with no Hellfire up: the debuff side seems to show ANY debuff, filter or not; Hellfire is his own
+        -- channel - a buff on him)
         local a = FA.AddSlot(c, "BiSHealHellfireBuff", "HELPFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = init })
-        local b = FA.AddSlot(c, "BiSHealHellfireAura", "HARMFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = init })
-        if not (a or b) then BN.drawSeen = "no slot" return nil end
+        if not a then BN.drawSeen = "no slot" return nil end
         sp.burnC = c
         BN.drawSeen = "built"
     end

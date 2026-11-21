@@ -16585,8 +16585,8 @@ do
     local c = BN.Container(sp)
     local hs = c and c.slots and c.slots.BiSHealHellfireBuff
     ok(c and c.unit == "party1" and c.enabled and sp.burnC == c, "his box gets a container on him", BN.drawSeen)
-    ok(hs and hs.filter == "HELPFUL" and hs.opts.candidateFilters.includeSpellIDs[11684] and c.slots.BiSHealHellfireAura,
-       "one slot per filter, Hellfire's ids only")
+    ok(hs and hs.filter == "HELPFUL" and hs.opts.candidateFilters.includeSpellIDs[11684] and not c.slots.BiSHealHellfireAura,
+       "one HELPFUL slot (no debuff side - it lit his box with no Hellfire up), Hellfire's ids only")
     local hb = CreateFrame("Button")
     hb.Icon = hb:CreateTexture()
     hb.Icon:Show()
