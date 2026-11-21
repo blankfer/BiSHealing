@@ -40,6 +40,8 @@ Radar.lua
 Overheal.lua
 # the engineer's boxes as health bars (class colour, range dim, the heal ghost)
 Engineer.lua
+# the class effects on the deck (Light's Vigil burst, Prayer of Mending hops, Prayer of Healing pulse, Wild Growth bloom), off by default
+Effects.lua
 MiniBars.lua
 # a warlock hurting himself (Hellfire = the burning bar, Life Tap = the TAP tag), on his deck box
 Burn.lua
