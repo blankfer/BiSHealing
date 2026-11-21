@@ -41,6 +41,8 @@ Overheal.lua
 # the engineer's boxes as health bars (class colour, range dim, the heal ghost)
 Engineer.lua
 MiniBars.lua
+# a warlock hurting himself (Hellfire = the burning bar, Life Tap = the TAP tag), on his deck box
+Burn.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

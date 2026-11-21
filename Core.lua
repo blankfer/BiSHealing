@@ -1293,6 +1293,12 @@ end
 --- target's cell (or your own): is the client's call there, what it answers (a hidden number prints "secret").
 --- `test` forces the band to a third, cut back from the end of everyone's health, for 10 seconds - seen = the
 --- drawing works; then a real heal-absorb debuff is the only thing left to check.
+--- /bish burn - a warlock hurting himself (Burn.lua): who has Hellfire on, and which road answered last.
+function NS.DO.burn()
+    if NS.BN and NS.BN.Status then return NS.BN.Status() end
+    Print("burn: not loaded")
+end
+
 function NS.DO.healabsorb(test)
     local FG = NS.FG
     local f = (FG.target and FG.target.unit and FG.target:IsShown() and FG.target)
@@ -2102,7 +2108,7 @@ function NS.DO.help()
     Print("  |cffb980ffoverword|r off / any / half / 75%   |cffb980ffoverbutton|r left / right / wheel / thumb1 / thumb2")
     Print("  |cffb980ffwheel|r frames / ours / everywhere  where the wheel binds work")
     Print("  |cffb980ffpad|r on / off  heal with a controller (D-pad lights a person, A B X Y = your binds)")
-    Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
+    Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r |cffb980ffburn|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
     Print("  the grey word after a command is the short way to type it")
 end
 
@@ -2328,6 +2334,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.overheal(msg:match("test"))
     elseif msg == "healabsorb" or msg == "healabsorb test" then
         NS.DO.healabsorb(msg:match("test"))
+    elseif msg == "burn" then
+        NS.DO.burn()
     elseif msg == "byid" then
         NS.DO.byid()
     elseif msg == "curve" then

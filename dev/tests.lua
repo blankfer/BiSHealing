@@ -16520,6 +16520,80 @@ do
     d.alpha, d.alphaOff, d.rhythm = keep.alpha, keep.alphaOff, keep.rhythm
 end
 
+-- A WARLOCK HURTING HIMSELF (Burn.lua, 20 Nov 2026 - Arn: "tag for single cast, 2 for channel")
+do
+    local BN, EN = NS.BN, NS.EN
+    local keep = { classes = STATE.classes, get = _G.C_UnitAuras and _G.C_UnitAuras.GetUnitAuraBySpellID,
+                   desc = _G.C_Spell and _G.C_Spell.GetSpellDescription }
+    STATE.classes = { party1 = "WARLOCK", party2 = "SHAMAN" }
+    ok(BN.Warlock("party1") and not BN.Warlock("party2") and not BN.Warlock("target"),
+       "only a warlock in your group is looked at (never your target)")
+    local WEAR = {}
+    _G.C_UnitAuras = _G.C_UnitAuras or {}
+    _G.C_UnitAuras.GetUnitAuraBySpellID = function(unit, id)
+        local w = WEAR[unit]
+        if w == "secret" then return secret() end
+        if w == id then return { spellId = id } end
+        return nil
+    end
+    _G.C_Spell.GetSpellDescription = function(id)
+        if id == 11683 then return "Ignites the area surrounding the caster, causing 139 Fire damage to himself and 139 Fire damage to all nearby enemies every 1 sec." end
+        return nil
+    end
+    BN.on, BN.tap, BN.tickCache = {}, {}, {}
+    WEAR.party1 = 11683
+    ok(BN.Look("party1") and BN.on.party1 and BN.on.party1.id == 11683, "the aura road: Hellfire rank 2 seen on him by its id")
+    ok(BN.Tick(11683) == 139 and BN.Tick(1949) == BN.TICK[1949], "a tick's burn from the spell's own words, else the table")
+    ok(BN.Left("party1") == 15 * 139, "what the rest of the channel will burn: 15 ticks of 139", BN.Left("party1"))
+    TICK(4.2)
+    ok(BN.Left("party1") == 11 * 139, "4.2 s in: 11 ticks left", BN.Left("party1"))
+    -- the box
+    local sp = { unit = "party1", heal = CreateFrame("Button") }
+    sp.heal:SetSize(74, 58)
+    local e = EN.Box(sp)
+    e.bar:SetStatusBarColor(0.53, 0.53, 0.93, 1)
+    ok(BN.Paint(sp, 4000), "a burning warlock's box paints")
+    local B = e.burn
+    local r, g = e.bar.__color[1], e.bar.__color[2]
+    local lo, hi = B.band:GetMinMaxValues()
+    ok(B.band:IsShown() and B.band:GetValue() == 11 * 139 and hi == 4000 and r == BN.FIRE[1] and g == BN.FIRE[2],
+       "the burning bar: orange, the band = what he will still lose on his max health's scale", B.band:GetValue(), hi)
+    ok(B.edges[1]:IsShown() and B.edges[4]:IsShown() and not B.tag:IsShown(), "an orange edge round the box, no TAP tag")
+    -- a hidden answer changes nothing; the aura gone ends it
+    WEAR.party1 = "secret"
+    ok(not BN.Look("party1") and BN.on.party1, "a secret answer: could not tell - the burn stays")
+    WEAR.party1 = nil
+    ok(BN.Look("party1") and not BN.on.party1, "the aura gone (a plain no): the burn ends")
+    BN.Paint(sp, 4000)
+    ok(not B.band:IsShown() and not B.edges[1]:IsShown(), "and the box is plain again")
+    -- the cast road
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949) and BN.on.party1.id == 1949, "the cast road: a plain Hellfire id starts it")
+    ok(not BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", secret()) and BN.seen.cast == "hidden id", "a secret spell id is never compared")
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949) and not BN.on.party1, "the channel stops: the burn ends")
+    -- Life Tap
+    ok(BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party1", 11689) and BN.tap.party1, "Life Tap (a plain id): the TAP tag")
+    BN.Paint(sp, 4000)
+    ok(B.tag:IsShown() and B.tag:GetText() == "TAP" and not B.band:IsShown(), "TAP in amber under his name, no burning bar",
+       tostring(B.tag:IsShown()) .. " " .. tostring(B.tag:GetText()) .. " " .. tostring(B.band:IsShown()))
+    ok(not BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party2", 11689) and not BN.tap.party2, "a shaman casting the same id: nothing")
+    TICK(BN.TAP_FOR + 0.1)
+    BN.Paint(sp, 4000)
+    ok(not B.tag:IsShown() and not BN.tap.party1, "after " .. BN.TAP_FOR .. " s the tag goes")
+    -- what a paint costs (lean and mean)
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 11684)
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n, by = Cost.Count(function() BN.Paint(sp, 4000) end)
+    ok(n <= 20, "one burning box's repaint: <= 20 client calls", n, Cost.Top(by, 4))
+    print(("   cost: a burning warlock's box, one repaint = %d calls (%s)"):format(n, Cost.Top(by, 3)))
+    -- nobody listens with no warlock in the group
+    BN.on, BN.tap = {}, {}
+    STATE.classes = { party1 = "SHAMAN" }
+    BN.armed = nil
+    ok(BN.Arm() == false and not (BN.events.__events and BN.events.__events.UNIT_AURA), "no warlock with you: not listening")
+    STATE.classes, BN.armed = keep.classes, nil
+    _G.C_UnitAuras.GetUnitAuraBySpellID, _G.C_Spell.GetSpellDescription = keep.get, keep.desc
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)
