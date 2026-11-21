@@ -16872,6 +16872,23 @@ do
     ok(CU.Look("hell") == c.look.rows[2].id, "a click on a look picks it")
     c.def:GetScript("OnClick")(c.def)
     ok(CU.Look("hell") == "model:198692", "BACK TO DEFAULT")
+    -- Arn's 21 Nov shot: the fireball never showed, the bar stopped short, a chip ran off the card
+    local pv = c.preview
+    ok(pv.model and pv.model:IsShown() and not pv.icon:IsShown() and pv.model.bisFile == 198692,
+       "the preview: the Fireball model on its own dark square (no icon over it)")
+    local bp = {}
+    for _, p in ipairs(pv.bar.points) do bp[p[1]] = p end
+    ok(bp.TOPLEFT and bp.BOTTOMRIGHT and bp.BOTTOMRIGHT[2] == pv, "the preview's bar runs edge to edge (anchored to both corners)")
+    local edgeR = 300 + 124
+    local past = false
+    for _, b in ipairs(c.sound.chips) do
+        local pt = b.points[1]
+        if pt[4] + b.__w > edgeR + 0.5 then past = true end
+    end
+    ok(not past and c.sound.extra > 0, "the sound chips wrap to a second line instead of running off the card")
+    ok(c.sound.rows[1].points[1][5] == -94 - 50 - c.sound.extra, "and the list moves down under them")
+    ok(c.code and c.code:GetText():find("hell on m198692 vn", 1, true) and c.code:GetText():find(NS.VERSION, 1, true),
+       "the faint code: the build, and Hellfire's settings", c.code and c.code:GetText())
     c.export:GetScript("OnClick")(c.export)
     ok(CU.strWin and CU.strWin:IsShown() and CU.strWin.edit:GetText():match("^BiSCues1p:"), "EXPORT shows the string to copy")
     c.import:GetScript("OnClick")(c.import)

@@ -69,6 +69,7 @@ CU.SOUNDS = {
     { id = "off", name = "Off", cat = "Off" },
 }
 CU.SQUARE = { x = 3, y = -14, gap = 2, px = 22 }    -- the cue row under the callsign (RD.DECK_TAG y -4, size 9)
+CU.MODEL_CAM = 1.6                                  -- a model's camera distance in a square (BN.FLAME.cam)
 CU.VOICE = { rate = 0, volume = 100 }
 
 local function fight() return (InCombatLockdown and InCombatLockdown()) and true or false end
@@ -584,12 +585,15 @@ local function picker(card, kind, x, y, w)
         if not seen then cats[#cats + 1] = o.cat end
     end
     P.chips = {}
-    local cx = x
+    -- (chips that would run past the picker's edge wrap to a second line - Arn's shot: "Crea..." off the card)
+    local cx, cy = x, y - 33
+    P.extra = 0
     for _, c in ipairs(cats) do
         local b = CreateFrame("Button", nil, card)
         local wd = 8 + #c * 5
+        if cx > x and cx + wd > x + w then cx, cy, P.extra = x, cy - 15, P.extra + 15 end
         b:SetSize(wd, 13)
-        b:SetPoint("TOPLEFT", card, "TOPLEFT", cx, y - 33)
+        b:SetPoint("TOPLEFT", card, "TOPLEFT", cx, cy)
         b.edges = edges(b, { 0.16, 0.19, 0.31, 1 })
         b.text = text(b, 9, DIM)
         b.text:SetPoint("CENTER")
@@ -604,7 +608,7 @@ local function picker(card, kind, x, y, w)
     for i = 1, CU.ROWS do
         local row = CreateFrame("Button", nil, card)
         row:SetSize(w, 15)
-        row:SetPoint("TOPLEFT", card, "TOPLEFT", x, y - 50 - (i - 1) * 15)
+        row:SetPoint("TOPLEFT", card, "TOPLEFT", x, y - 50 - P.extra - (i - 1) * 15)
         hoverRow(row)
         row.text = text(row, 10, INK)
         row.text:SetPoint("LEFT", row, "LEFT", 6, 0)
@@ -670,15 +674,19 @@ local function buildPreview(card, x, y)
     pv.bg:SetAllPoints(pv)
     pv.bg:SetColorTexture(0.05, 0.06, 0.10, 1)
     pv.edges = edges(pv, { 0.15, 0.17, 0.27, 1 })
+    -- the bar runs edge to edge, always (Arn, 21 Nov: "the bar must always go to the end of the box no empty space")
     pv.bar = pv:CreateTexture(nil, "BORDER")
     pv.bar:SetPoint("TOPLEFT", pv, "TOPLEFT", 1, -1)
-    pv.bar:SetSize(104, 42)
+    pv.bar:SetPoint("BOTTOMRIGHT", pv, "BOTTOMRIGHT", -1, 1)
     pv.bar:SetColorTexture(0.58, 0.51, 0.79, 1)          -- a warlock's purple
     pv.name = text(pv, 9, { 0.86, 1.00, 0.90 })
     pv.name:SetPoint("TOPLEFT", pv, "TOPLEFT", 4, -4)
     pv.name:SetText("TIN")
     pv.sq = CreateFrame("Frame", nil, pv)
     pv.sq:SetSize(CU.SQUARE.px, CU.SQUARE.px)
+    pv.sqBg = pv.sq:CreateTexture(nil, "BACKGROUND")    -- (a dark square under a model: the fire reads on it)
+    pv.sqBg:SetAllPoints(pv.sq)
+    pv.sqBg:SetColorTexture(0, 0, 0, 0.75)
     pv.icon = pv.sq:CreateTexture(nil, "ARTWORK")
     pv.icon:SetAllPoints(pv.sq)
     if pv.icon.SetTexCoord then pv.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
@@ -727,11 +735,20 @@ function CU.PaintPreview()
     end
     local model = CU.ModelOf(key)
     if pv.model then
-        if model then pcall(pv.model.SetModel, pv.model, model) pv.model:Show() else pv.model:Hide() end
+        -- (the in-game badge's road, BN.BadgeOn: the model, then the camera pulled back - without it the 22 px square
+        -- shows the inside of the fireball, i.e. nothing; Arn's 21 Nov shot: "i cant just get a fireball there")
+        if model then
+            if pv.model.bisFile ~= model then
+                pcall(pv.model.SetModel, pv.model, model)
+                pv.model.bisFile = model
+            end
+            if pv.model.SetCamDistanceScale then pcall(pv.model.SetCamDistanceScale, pv.model, CU.MODEL_CAM) end
+            pv.model:Show()
+        else pv.model:Hide() end
     end
     if tex then pcall(pv.icon.SetTexture, pv.icon, tex) end
-    local showIcon = look == "icon" or (model ~= nil)
-    if showIcon then pv.icon:Show() else pv.icon:Hide() end
+    if look == "icon" then pv.icon:Show() else pv.icon:Hide() end   -- (a model stands on its own dark square)
+    if model or look == "icon" then pv.sq:Show() pv.sqBg:Show() else pv.sq:Hide() end
     if look == "word" then
         pv.word:SetText(CU.Word(key)) pv.word:Show() pv.back:Show()
     else
@@ -820,6 +837,13 @@ function CU.Card()
     c.hint = text(c, 9, DIM)
     c.hint:SetPoint("LEFT", c.import, "RIGHT", 8, 0)
     c.hint:SetText("Set it up in the browser: Explorer\\BiSCues.html in the addon's folder.")
+    -- THE FAINT CODE (Arn, 21 Nov: "a faint code on the page so when i ss you can see back end info version number ect
+    -- setting turn on"): what a screenshot needs to tell Claude - the build, the chosen cue, the order, what is on
+    c.code = text(c, 8, DIM)
+    c.code:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 30)
+    c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 30)
+    c.code:SetJustifyH("LEFT")
+    c.code:SetAlpha(0.45)
     c:Hide()
     if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingCues") end
     CU.card = c
@@ -847,7 +871,36 @@ function CU.Paint()
     CU.PaintPicker(c.look)
     CU.PaintPicker(c.sound)
     CU.PaintPreview()
+    if c.code then c.code:SetText(CU.Code()) end
     return true
+end
+
+--- The faint code: build | chosen cue: on, look, sound, square | order (first letters, capital = on) | Hellfire's game
+--- buttons | fight | class effects. Short codes on purpose - it is for Claude reading a screenshot, not for reading.
+local SOUND_CODE = { voicename = "vn", voice = "v", off = "x" }
+function CU.Code()
+    local key = CU.sel
+    local look = CU.Look(key)
+    local lk = look == "icon" and "i" or look == "word" and "w" or ("m" .. (look:match("%d+") or "?"))
+    local sd = CU.Sound(key)
+    sd = SOUND_CODE[sd] or ("k" .. (sd:match("%d+") or "?"))
+    local q = CU.BY[key]
+    local sq = q and q.kind == "square" and ("@" .. CU.SquareXY(key)) or (q and q.kind or "")
+    local ord = {}
+    for _, k in ipairs(CU.Order()) do
+        local l = k:sub(1, 2)
+        ord[#ord + 1] = CU.On(k) and l:upper() or l
+    end
+    local BN, FX, RD = NS.BN, NS.FX, NS.RD
+    local burn = BN and (tostring(BN.drawSeen or "-") .. "/" .. tostring(#(BN.badges or {}))) or "-"
+    local fx = ""
+    if FX and FX.Sw then
+        for _, k in ipairs({ "fxvigil", "fxmend", "fxpoh", "fxwild" }) do fx = fx .. (FX.Sw(k) and "1" or "0") end
+    end
+    local look2 = RD and RD.Deck and (pcall(RD.Deck) and RD.Deck()) and "deck" or (NS.FG and NS.FG.Look and NS.FG.Look()) or "?"
+    return string.format("%s | %s %s %s %s %s | %s | burn %s | %s | fx %s | %s",
+        NS.Mark and NS.Mark() or tostring(NS.VERSION), key, CU.On(key) and "on" or "off", lk, sd, sq,
+        table.concat(ord, " "), burn, fight() and "FIGHT" or "calm", fx, tostring(look2))
 end
 
 --- TRY: the chosen cue's sound now, and the preview box flashes.
