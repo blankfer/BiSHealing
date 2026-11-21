@@ -16580,6 +16580,23 @@ do
     TICK(BN.TAP_FOR + 0.1)
     BN.Paint(sp, 4000)
     ok(not B.tag:IsShown() and not BN.tap.party1, "after " .. BN.TAP_FOR .. " s the tag goes")
+    -- THE GAME DRAWS IT (Arn: "was not able to see warlock hf" - the Revelation road)
+    STATE.inCombat = false
+    local c = BN.Container(sp)
+    local hs = c and c.slots and c.slots.BiSHealHellfireBuff
+    ok(c and c.unit == "party1" and c.enabled and sp.burnC == c, "his box gets a container on him", BN.drawSeen)
+    ok(hs and hs.filter == "HELPFUL" and hs.opts.candidateFilters.includeSpellIDs[11684] and c.slots.BiSHealHellfireAura,
+       "one slot per filter, Hellfire's ids only")
+    local hb = CreateFrame("Button")
+    hb.Icon = hb:CreateTexture()
+    hb.Icon:Show()
+    hs.opts.initializeFrame(hb)
+    ok(hb.bisHell and hb.bisHell:GetText() == "HELLFIRE" and not hb.Icon:IsShown() and hb.__w == sp.heal:GetWidth() - 2,
+       "the client's button dressed as the burning box: over his whole box, HELLFIRE in its corner", hb.__w)
+    local other = { unit = "party2", heal = CreateFrame("Button") }
+    other.heal:SetSize(74, 58)
+    EN.Box(other)
+    ok(BN.Container(other) == nil and not other.burnC, "a shaman's box: no container")
     -- what a paint costs (lean and mean)
     BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 11684)
     local Cost = dofile("../_bisdev/dev/cost.lua")

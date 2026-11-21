@@ -261,12 +261,100 @@ BN.events:SetScript("OnEvent", function(_, event, unit, guid, id)
     if changed then BN.Repaint(unit) BN.Beat() end
 end)
 
+--[[ THE GAME DRAWS IT (20 Nov 2026, Arn: "was not able to see warlock hf" - the road Revelation proved in Zul'Farrak the
+  same night: in a fight the game hides a buff from us but still DRAWS it). Each deck box of a warlock gets an
+  AuraContainer on his unit with one slot per filter, filtered to Hellfire's ids; the client hands us the button while he
+  wears it, and we dress it as THE BURNING BOX: sized over his whole box, an orange wash (his bar burns orange), an orange
+  edge, and HELLFIRE in its corner. Nothing of ours decides; the client shows it while the buff is there. Built and
+  pointed at his unit out of a fight only. ]]
+BN.DRAW_IDS = {}
+for _, id in ipairs(BN.HELLFIRE) do BN.DRAW_IDS[id] = true end
+BN.WASH = 0.32                                             -- the orange over his bar (additive)
+local function fightNow() return (InCombatLockdown and InCombatLockdown()) and true or false end
+
+--- Dress the client's button as the burning box over `box` (inside initializeFrame - the one place it may be placed).
+function BN.BadgeOn(button, box, pip)
+    if not (button and box) then return end
+    local placed = pcall(function()
+        local w, h = box:GetWidth(), box:GetHeight()
+        if not (type(w) == "number" and w > 2) and pip then w, h = pip:GetWidth() - 2, pip:GetHeight() - 2 end   -- (the box is the pip less its edge)
+        button:SetSize(type(w) == "number" and w > 2 and w or 60, type(h) == "number" and h > 2 and h or 40)
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", box, "CENTER", 0, 0)
+    end)
+    if not placed then BN.drawSeen = "button refused" return end
+    pcall(function()
+        if button.GetRegions then
+            for _, r in ipairs({ button:GetRegions() }) do if r.SetTexture and r.Hide then r:Hide() end end
+        end
+        for _, k in ipairs({ "Icon", "icon", "Border", "border", "Count", "count", "Cooldown" }) do
+            local part = button[k]
+            if type(part) == "table" and part.Hide then part:Hide() end
+        end
+        if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
+        if button.EnableMouse then button:EnableMouse(false) end   -- (his box's clicks stay his box's)
+        local c = BN.FIRE
+        local wash = button:CreateTexture(nil, "BACKGROUND")
+        wash:SetAllPoints(button)
+        wash:SetColorTexture(c[1], c[2], c[3], BN.WASH)
+        if wash.SetBlendMode then wash:SetBlendMode("ADD") end
+        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 2 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 2 },
+                             { "TOPLEFT", "BOTTOMLEFT", 2, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 2, 0 } }) do
+            local t = button:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(c[1], c[2], c[3], 1)
+            t:SetPoint(e[1], button, e[1], 0, 0)
+            t:SetPoint(e[2], button, e[2], 0, 0)
+            if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        end
+        local fs = button:CreateFontString(nil, "OVERLAY")
+        fs:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
+        fs:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -3, 3)
+        fs:SetTextColor(1, 0.85, 0.55, 1)
+        fs:SetText("HELLFIRE")
+        button.bisHell = fs
+    end)
+    BN.drawn = (BN.drawn or 0) + 1
+end
+
+--- His box's container: made on first need, pointed at his unit, off when the box is somebody else (out of a fight).
+function BN.Container(sp)
+    local FA, e = NS.FA, sp and sp.en
+    if not (e and e.box and FA and FA.Available and FA.Available() and FA.AddSlot) or fightNow() then return nil end
+    local warlock = BN.Warlock(sp.unit)
+    local c = sp.burnC
+    if not c then
+        if not warlock then return nil end
+        local ok, made = pcall(CreateFrame, "AuraContainer", nil, e.box, "CustomAuraContainerTemplate")
+        if not ok or not made then BN.drawSeen = "refused" return nil end
+        c = made
+        c:SetAllPoints(e.box)
+        local lvl = e.box.GetFrameLevel and e.box:GetFrameLevel()
+        if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 5) end
+        local box, pip = e.box, sp.heal
+        local init = function(button) BN.BadgeOn(button, box, pip) end
+        local a = FA.AddSlot(c, "BiSHealHellfireBuff", "HELPFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = init })
+        local b = FA.AddSlot(c, "BiSHealHellfireAura", "HARMFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = init })
+        if not (a or b) then BN.drawSeen = "no slot" return nil end
+        sp.burnC = c
+        BN.drawSeen = "built"
+    end
+    if sp.burnUnit ~= sp.unit or c.bisOn ~= warlock then
+        sp.burnUnit = sp.unit
+        if warlock then pcall(c.SetUnit, c, sp.unit) end
+        if c.SetEnabled then pcall(c.SetEnabled, c, warlock) end
+        c.bisOn = warlock
+    end
+    return c
+end
+
 -- EN.Paint paints the box; the burn goes on top of it.
 local EN = NS.EN
 if EN and EN.Paint then
     local paint = EN.Paint
     EN.Paint = function(sp, ...)
         local done = paint(sp, ...)
+        -- the game-drawn burning box: only while a warlock is with you, and only re-pointed when the box changed hands
+        if done and BN.armed and sp and sp.unit and (not sp.burnC or sp.burnUnit ~= sp.unit) and not fightNow() then BN.Container(sp) end
         if done and sp and sp.unit and (BN.on[sp.unit] or BN.tap[sp.unit] or (sp.en and sp.en.burn)) then
             local okM, mx = pcall(UnitHealthMax, sp.unit)
             BN.Paint(sp, okM and mx or nil)
@@ -279,8 +367,9 @@ end
 function BN.Status()
     local who = {}
     for unit, st in pairs(BN.on) do who[#who + 1] = unit .. " rank " .. st.id end
-    local line = string.format("burn: listening %s | Hellfire on: %s | aura road: %s | cast road: %s",
-        tostring(BN.armed and true or false), #who > 0 and table.concat(who, ", ") or "nobody", BN.seen.aura, BN.seen.cast)
+    local line = string.format("burn: listening %s | Hellfire on: %s | aura road: %s | cast road: %s | game draws it: %s (%d drawn)",
+        tostring(BN.armed and true or false), #who > 0 and table.concat(who, ", ") or "nobody", BN.seen.aura, BN.seen.cast,
+        tostring(BN.drawSeen or "not built"), BN.drawn or 0)
     if NS.Print then NS.Print(line) end
     return line
 end
