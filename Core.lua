@@ -2336,6 +2336,11 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "burn voice on" or msg == "burn voice off" then
+        local d = NS.DB().radar or {}
+        NS.DB().radar = d
+        d.burnVoice = msg:find("off") and false or nil
+        Print("burn: the Hellfire voice is " .. (d.burnVoice == false and "off" or "on"))
     elseif msg == "reveal" then
         if NS.RV and NS.RV.Status then NS.RV.Status() end
     elseif msg == "byid" then

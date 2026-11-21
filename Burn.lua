@@ -269,7 +269,22 @@ end)
   pointed at his unit out of a fight only. ]]
 BN.DRAW_IDS = {}
 for _, id in ipairs(BN.HELLFIRE) do BN.DRAW_IDS[id] = true end
-BN.WASH = 0.32                                             -- the orange over his bar (additive)
+BN.FLAME = { edge = 2, glow = 3, tip = 1, red = { 1, 0.18, 0.05, 0.9 }, gold = { 1, 0.85, 0.3, 0.9 }, beat = { 0.17, 0.11 } }
+-- THE VOICE (the games' road: the PC's own voice, C_VoiceChat.SpeakText - heard on Forever 17 Nov): "Hellfire" when the
+-- game shows his burning box, at most once every `every` s a box; db().radar.burnVoice = false keeps it quiet.
+BN.VOICE = { text = "Hellfire", every = 12, rate = 0, volume = 100 }
+BN.spoke = {}
+function BN.Speak(key)
+    local d = NS.DB and NS.DB().radar
+    if d and d.burnVoice == false then return false end
+    local t = GetTime and GetTime() or 0
+    if key and BN.spoke[key] and t - BN.spoke[key] < BN.VOICE.every then return false end
+    if key then BN.spoke[key] = t end
+    if not (C_VoiceChat and C_VoiceChat.SpeakText) then return false end
+    local ok = pcall(C_VoiceChat.SpeakText, 0, BN.VOICE.text, BN.VOICE.rate, BN.VOICE.volume)
+    BN.said = (BN.said or 0) + 1
+    return ok
+end
 local function fightNow() return (InCombatLockdown and InCombatLockdown()) and true or false end
 
 --- Dress the client's button as the burning box over `box` (inside initializeFrame - the one place it may be placed).
@@ -293,26 +308,39 @@ function BN.BadgeOn(button, box, pip)
         end
         if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
         if button.EnableMouse then button:EnableMouse(false) end   -- (his box's clicks stay his box's)
-        local c = BN.FIRE
-        local wash = button:CreateTexture(nil, "BACKGROUND")
-        wash:SetAllPoints(button)
-        wash:SetColorTexture(c[1], c[2], c[3], BN.WASH)
-        if wash.SetBlendMode then wash:SetBlendMode("ADD") end
-        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 2 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 2 },
-                             { "TOPLEFT", "BOTTOMLEFT", 2, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 2, 0 } }) do
-            local t = button:CreateTexture(nil, "BORDER")
-            t:SetColorTexture(c[1], c[2], c[3], 1)
-            t:SetPoint(e[1], button, e[1], 0, 0)
-            t:SetPoint(e[2], button, e[2], 0, 0)
-            if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        -- THE BORDER ON FIRE (Arn, 20 Nov: "use what we learn from the games, something simple like voice: hellfire and the
+        -- border on fire" - the wash came out pink on a purple warlock): an orange edge under a red-gold glow that
+        -- flickers, two layers at different beats so it never pulses in step - the client runs it, no Lua per frame
+        local function ring(parent, px, col, inset)
+            local hold = CreateFrame("Frame", nil, parent)
+            hold:SetPoint("TOPLEFT", parent, "TOPLEFT", -inset, inset)
+            hold:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", inset, -inset)
+            for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, px }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, px },
+                                 { "TOPLEFT", "BOTTOMLEFT", px, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", px, 0 } }) do
+                local t = hold:CreateTexture(nil, "OVERLAY")
+                t:SetColorTexture(col[1], col[2], col[3], col[4] or 1)
+                t:SetPoint(e[1], hold, e[1], 0, 0)
+                t:SetPoint(e[2], hold, e[2], 0, 0)
+                if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+                if t.SetBlendMode then t:SetBlendMode("ADD") end
+            end
+            return hold
         end
-        local fs = button:CreateFontString(nil, "OVERLAY")
-        fs:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
-        fs:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -3, 3)
-        fs:SetTextColor(1, 0.85, 0.55, 1)
-        fs:SetText("HELLFIRE")
-        button.bisHell = fs
+        local function flicker(frame, lo, beat)
+            if not frame.CreateAnimationGroup then return end
+            local ag = frame:CreateAnimationGroup()
+            local a = ag:CreateAnimation("Alpha")
+            a:SetFromAlpha(1) a:SetToAlpha(lo) a:SetDuration(beat)
+            ag:SetLooping("BOUNCE")
+            ag:Play()
+        end
+        local F = BN.FLAME
+        ring(button, F.edge, BN.FIRE, 0)
+        flicker(ring(button, F.glow, F.red, 1), 0.25, F.beat[1])
+        flicker(ring(button, F.tip, F.gold, 2), 0.1, F.beat[2])
+        if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box) end) end
     end)
+    BN.Speak(box)
     BN.drawn = (BN.drawn or 0) + 1
 end
 

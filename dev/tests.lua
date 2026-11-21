@@ -16590,9 +16590,22 @@ do
     local hb = CreateFrame("Button")
     hb.Icon = hb:CreateTexture()
     hb.Icon:Show()
+    local keepVC, heardV = _G.C_VoiceChat, {}
+    _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
+    BN.spoke = {}
     hs.opts.initializeFrame(hb)
-    ok(hb.bisHell and hb.bisHell:GetText() == "HELLFIRE" and not hb.Icon:IsShown() and hb.__w == sp.heal:GetWidth() - 2,
-       "the client's button dressed as the burning box: over his whole box, HELLFIRE in its corner", hb.__w)
+    ok(not hb.Icon:IsShown() and hb.__w == sp.heal:GetWidth() - 2,
+       "the client's button dressed as the burning box: over his whole box, Blizzard's icon hidden", hb.__w)
+    ok(#heardV == 1 and heardV[1][2] == "Hellfire" and heardV[1][4] == 100, "and the voice says Hellfire (voice, text, rate, volume)", #heardV)
+    local hb2 = CreateFrame("Button")
+    hs.opts.initializeFrame(hb2)
+    ok(#heardV == 1, "the same box again within " .. BN.VOICE.every .. " s: no second Hellfire")
+    TICK(BN.VOICE.every + 1)
+    NS.DB().radar.burnVoice = false
+    hs.opts.initializeFrame(CreateFrame("Button"))
+    ok(#heardV == 1, "voice off: quiet")
+    NS.DB().radar.burnVoice = nil
+    _G.C_VoiceChat = keepVC
     local other = { unit = "party2", heal = CreateFrame("Button") }
     other.heal:SetSize(74, 58)
     EN.Box(other)
