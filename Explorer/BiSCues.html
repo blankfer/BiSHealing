@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BiS Cues</title>
+<title>BiS&gt;Cues</title>
 <!--
   BiS Cues explorer - part of BiS Healing. Opened from the addon folder (file://), fully offline:
   system fonts only, no network, no folder access. Writes and reads the string in dev/CUES.md:
@@ -154,7 +154,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:12px/1.4 var(--mono);backgrou
 <body>
 <div class="wrap">
   <header>
-    <h1>BiS <b>CUES</b></h1>
+    <h1>BiS&gt;<b>Cues</b></h1>
     <p>Pick the cues you want, see them on a sample group, then copy the string and paste it into the game with <code>/bish import</code>. Got a string from the game (<code>/bish export</code>)? Paste it in step 5.</p>
   </header>
 
@@ -295,8 +295,8 @@ function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 
 /* the JSON object -> settings + notes; throws a plain-words Error when it cannot be used */
 function fromObj(o) {
-  if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("The text inside is not BiS Cues settings.");
-  if (o.v === undefined) throw new Error("This string has no version number, so it is not BiS Cues settings.");
+  if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("The text inside is not BiS>Cues settings.");
+  if (o.v === undefined) throw new Error("This string has no version number, so it is not BiS>Cues settings.");
   if (o.v !== 1) throw new Error("This string is version " + JSON.stringify(o.v) + "; this page reads version 1.");
   var st = defaults(), notes = [];
   var seen = {}, order = [];
@@ -379,7 +379,7 @@ async function importString(text) {
   var kind, body;
   if (t.indexOf(P_PLAIN) === 0) { kind = "plain"; body = t.slice(P_PLAIN.length); }
   else if (t.indexOf(P_GZ) === 0) { kind = "packed"; body = t.slice(P_GZ.length); }
-  else throw new Error("This is not a BiS Cues string: it should start with BiSCues1: or BiSCues1p:");
+  else throw new Error("This is not a BiS>Cues string: it should start with BiSCues1: or BiSCues1p:");
   var bytes = bytesFromB64(body);
   if (kind === "packed") {
     if (!(bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b)) throw new Error("This BiSCues1: string is not packed the expected way (gzip). Try the BiSCues1p: string instead.");

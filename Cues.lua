@@ -842,7 +842,7 @@ function CU.Card()
     c.edges = edges(c, { CYAN[1] * 0.6, CYAN[2] * 0.6, CYAN[3] * 0.6, 1 })
     c.title = text(c, 12, CYAN)
     c.title:SetPoint("TOPLEFT", c, "TOPLEFT", 8, -7)
-    c.title:SetText("BiS CUES")
+    c.title:SetText("BiS>Cues")
     c.note = text(c, 9, { 1, 0.75, 0.3 })
     c.note:SetPoint("LEFT", c.title, "RIGHT", 8, 0)
     c.close = button(c, 14, 14, "x", function() c:Hide() end)
@@ -1032,12 +1032,12 @@ function CU.HookPanel()
         if p and not had and not p.cues then
             local h = p:GetHeight()
             p:SetHeight((type(h) == "number" and h or 0) + 24)
-            p.cues = button(p, (RD.SW_W or 210) - 16, 18, "BiS CUES...", function() CU.Toggle() end)
+            p.cues = button(p, (RD.SW_W or 210) - 16, 18, "BiS>Cues...", function() CU.Toggle() end)
             p.cues:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 8)
             p.cues:SetScript("OnEnter", function(self)
                 if not GameTooltip then return end
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine("BiS CUES")
+                GameTooltip:AddLine("BiS>Cues")
                 GameTooltip:AddLine("Pick how each cue looks and sounds, and the order of the cue row.", 1, 1, 1, true)
                 GameTooltip:Show()
             end)
@@ -1070,14 +1070,14 @@ function CU.Slash(rest)
     elseif cmd == "import" then
         if arg ~= "" then
             local n, why = CU.Import(arg)
-            say(n and ("BiS Cues: imported, " .. n .. " cues set.") or ("BiS Cues: not imported - " .. tostring(why)))
+            say(n and ("BiS>Cues: imported, " .. n .. " cues set.") or ("BiS>Cues: not imported - " .. tostring(why)))
             return n
         end
         CU.ShowString("import")
         return true
     elseif cmd == "all" then
         CU.showAll = not CU.showAll
-        say(CU.showAll and "BiS Cues: showing every class's cues (until you reload)." or "BiS Cues: only your class's cues.")
+        say(CU.showAll and "BiS>Cues: showing every class's cues (until you reload)." or "BiS>Cues: only your class's cues.")
         if CU.card and CU.card:IsShown() then CU.Paint() else CU.Toggle() end
         return CU.showAll
     end
