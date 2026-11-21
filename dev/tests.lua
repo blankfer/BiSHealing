@@ -16618,7 +16618,18 @@ do
     ok(pt == "TOPLEFT" and rel == sp.en.box and py == BN.FLAME.y, "under his callsign", tostring(pt) .. " " .. tostring(py))
     ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
     hb:GetScript("OnShow")(hb)
-    ok(#heardV == 1 and heardV[1][2] == "Hellfire" and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", #heardV)
+    ok(#heardV == 1 and heardV[1][2]:find("^Hellfire") and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", heardV[1] and heardV[1][2])
+    local keepGUN = _G.GetUnitName
+    _G.GetUnitName = function(u) if u == "party1" then return "TIN Manicore" end return keepGUN and keepGUN(u) end
+    ok(BN.Words("party1") == "Hellfire, Tin" and BN.Words(nil) == "Hellfire", "and his name, first name in normal case: \"Hellfire, Tin\" (Arn: which warlock)", BN.Words("party1"))
+    _G.GetUnitName = function() return secret() end
+    ok(BN.Words("party1") == "Hellfire", "a hidden name: just the spell")
+    _G.GetUnitName = keepGUN
+    local fs2 = c.slots.BiSHealHellfireFlash
+    ok(fs2 and fs2.filter == "HELPFUL" and fs2.opts.candidateFilters.includeSpellIDs[1949], "a second button for the same buff: the flash over his box")
+    local fb = CreateFrame("Button")
+    fs2.opts.initializeFrame(fb)
+    ok(fb.bisFlash and fb.__w == sp.heal:GetWidth() - 2, "the flash: over his whole box, fading out", fb.__w)
     hb:GetScript("OnShow")(hb)
     ok(#heardV == 1, "shown again within " .. BN.VOICE.every .. " s: no second Hellfire")
     TICK(BN.VOICE.every + 1)

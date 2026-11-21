@@ -278,7 +278,20 @@ BN.spoke = {}
 --- A switch on the deck's panel (RD.SW; nil = on).
 function BN.Sw(key) local RD = NS.RD return not (RD and RD.Sw) or RD.Sw(key) end
 BN.quietUntil = 0                                          -- (a /reload re-makes the buttons: no voice for a moment after it)
-function BN.Speak(key)
+--- The voice's words: "Hellfire, Tin" - his callsign when the game says it plainly, else just the spell (Arn, 21 Nov: "how
+--- fire, which warlock, I would have to look through all of them to find it").
+function BN.Words(unit)
+    local name
+    if type(unit) == "string" and GetUnitName then
+        local ok, n = pcall(GetUnitName, unit, false)
+        n = ok and plain(n) or nil
+        -- his first name, in normal case ("TIN" would be spelled out letter by letter by the voice)
+        if type(n) == "string" then name = (n:match("^(%S+)") or n):lower():gsub("^%l", string.upper) end
+    end
+    if type(name) == "string" and name ~= "" then return BN.VOICE.text .. ", " .. name end
+    return BN.VOICE.text
+end
+function BN.Speak(key, unit)
     local d = NS.DB and NS.DB().radar
     if (d and d.burnVoice == false) or not BN.Sw("hellvoice") or not BN.Sw("hell") then return false end
     local t = GetTime and GetTime() or 0
@@ -286,14 +299,14 @@ function BN.Speak(key)
     if key and BN.spoke[key] and t - BN.spoke[key] < BN.VOICE.every then return false end
     if key then BN.spoke[key] = t end
     if not (C_VoiceChat and C_VoiceChat.SpeakText) then return false end
-    local ok = pcall(C_VoiceChat.SpeakText, 0, BN.VOICE.text, BN.VOICE.rate, BN.VOICE.volume)
+    local ok = pcall(C_VoiceChat.SpeakText, 0, BN.Words(unit), BN.VOICE.rate, BN.VOICE.volume)
     BN.said = (BN.said or 0) + 1
     return ok
 end
 local function fightNow() return (InCombatLockdown and InCombatLockdown()) and true or false end
 
 --- Dress the client's button as the burning box over `box` (inside initializeFrame - the one place it may be placed).
-function BN.BadgeOn(button, box, pip)
+function BN.BadgeOn(button, box, pip, sp)
     if not (button and box) then return end
     local F = BN.FLAME
     -- (21 Nov 2026, Arn: "can we just add a 3d model of fire under their name with 15s numbers?" - the burning border is
@@ -358,9 +371,54 @@ function BN.BadgeOn(button, box, pip)
         end
         -- the voice when the game SHOWS the button (Arn: "everytime i reload it says hellfire" - the client makes the
         -- button ahead of time, at the reload; made is not shown)
-        if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box) end) end
+        if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box, sp and sp.unit) end) end
     end)
     BN.drawn = (BN.drawn or 0) + 1
+end
+
+--- The flash: the client's second button over his whole box, a bright edge that fades out in `flashT` s each time it shows.
+BN.FLASH = { px = 3, col = { 1, 0.95, 0.7, 1 }, flashT = 3 }
+function BN.FlashOn(button, box, pip)
+    if not (button and box) then return end
+    local placed = pcall(function()
+        local w, h = box:GetWidth(), box:GetHeight()
+        if not (type(w) == "number" and w > 2) and pip then w, h = pip:GetWidth() - 2, pip:GetHeight() - 2 end
+        button:SetSize(type(w) == "number" and w > 2 and w or 60, type(h) == "number" and h > 2 and h or 40)
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", box, "CENTER", 0, 0)
+    end)
+    if not placed then return end
+    pcall(function()
+        if button.GetRegions then
+            for _, r in ipairs({ button:GetRegions() }) do if r.SetTexture and r.Hide then r:Hide() end end
+        end
+        for _, k in ipairs({ "Icon", "icon", "Border", "border", "Count", "count", "Cooldown" }) do
+            local part = button[k]
+            if type(part) == "table" and part.Hide then part:Hide() end
+        end
+        if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
+        if button.EnableMouse then button:EnableMouse(false) end
+        local Fl = BN.FLASH
+        local hold = CreateFrame("Frame", nil, button)
+        hold:SetAllPoints(button)
+        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, Fl.px }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, Fl.px },
+                             { "TOPLEFT", "BOTTOMLEFT", Fl.px, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", Fl.px, 0 } }) do
+            local t = hold:CreateTexture(nil, "OVERLAY")
+            t:SetColorTexture(Fl.col[1], Fl.col[2], Fl.col[3], Fl.col[4])
+            t:SetPoint(e[1], hold, e[1], 0, 0)
+            t:SetPoint(e[2], hold, e[2], 0, 0)
+            if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        end
+        if hold.CreateAnimationGroup then
+            local ag = hold:CreateAnimationGroup()
+            local a = ag:CreateAnimation("Alpha")
+            a:SetFromAlpha(1) a:SetToAlpha(0) a:SetDuration(Fl.flashT)
+            if ag.SetToFinalAlpha then ag:SetToFinalAlpha(true) end
+            button.bisFlash = ag
+            if button.HookScript then pcall(button.HookScript, button, "OnShow", function() ag:Stop() ag:Play() end) end
+            ag:Play()
+        end
+    end)
 end
 
 --- His box's container: made on first need, pointed at his unit, off when the box is somebody else (out of a fight).
@@ -378,11 +436,14 @@ function BN.Container(sp)
         local lvl = e.box.GetFrameLevel and e.box:GetFrameLevel()
         if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 5) end
         local box, pip = e.box, sp.heal
-        local init = function(button) BN.BadgeOn(button, box, pip) end
+        local init = function(button) BN.BadgeOn(button, box, pip, sp) end
+        local flash = function(button) BN.FlashOn(button, box, pip) end
         -- HELPFUL ONLY (21 Nov 2026, Arn: "he was not hellfiring in those pictures" - a HARMFUL slot beside it lit his box
         -- in Zul'Farrak with no Hellfire up: the debuff side seems to show ANY debuff, filter or not; Hellfire is his own
         -- channel - a buff on him)
         local a = FA.AddSlot(c, "BiSHealHellfireBuff", "HELPFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = init })
+        -- a second button for the same buff: his whole box flashes as it starts (Arn: "his box jumps out")
+        FA.AddSlot(c, "BiSHealHellfireFlash", "HELPFUL", { candidateFilters = { includeSpellIDs = BN.DRAW_IDS }, initializeFrame = flash })
         if not a then BN.drawSeen = "no slot" return nil end
         sp.burnC = c
         BN.drawSeen = "built"
