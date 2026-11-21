@@ -32,6 +32,7 @@ local function db()
     return r.reveal
 end
 local function fight() return (InCombatLockdown and InCombatLockdown()) and true or false end
+RV.fight = fight
 
 --[[ THE SECOND ROAD (20 Nov 2026, Arn's live test: "no crit mid fight" - `/bish reveal` said the aura read never answered,
   yet the game's own floating text said "<Revelation fades>"): the game announces your auras to its combat text through
@@ -99,7 +100,7 @@ function RV.Word()
     if not B.crit then
         local fs = B.over:CreateFontString(nil, "OVERLAY")
         fs:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
-        fs:SetPoint("CENTER", q, "CENTER", 0, 0)
+        fs:SetPoint("CENTER", q, "CENTER", 12, 0)       -- (the game's own icon sits just left of it)
         fs:SetTextColor(RV.COL[1], RV.COL[2], RV.COL[3], 1)
         fs:SetText(RV.WORD)
         fs:Hide()
@@ -108,8 +109,39 @@ function RV.Word()
     return B.crit
 end
 
+--[[ THE GAME DRAWS IT (20 Nov 2026, Arn: "can we just tell hey blizzard you see this buff in my bar can you put it in
+  this place"). Your probe said ShouldSpellAuraBeSecret(1323418) = true: in a fight the game will not TELL us Revelation
+  is up - but it will DRAW it: an AuraContainer on you with one slot filtered to the buff's id, its icon and countdown
+  swipe put in the middle of the synergy bar (the road the classic look's HoT icons and SelfBuff's Water Shield badge
+  take). Nothing of ours decides; the client shows it while the buff is there. Built out of a fight, once the bar is. ]]
+RV.ICON_IDS = { [1323418] = true }
+function RV.Icon()
+    if RV.container then return RV.container end
+    local EN, FA = NS.EN, NS.FA
+    local q = EN and EN.heads and EN.heads.rip
+    if not (q and FA and FA.Available and FA.Available() and FA.AddSlot) then return nil end
+    if fight() then return nil end
+    local ok, c = pcall(CreateFrame, "AuraContainer", nil, q, "CustomAuraContainerTemplate")
+    if not ok or not c then RV.iconSeen = "refused" return nil end
+    c:SetAllPoints(q)
+    local lvl = q.GetFrameLevel and q:GetFrameLevel()
+    if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 4) end
+    c:SetUnit("player")
+    local h = q.GetHeight and q:GetHeight()
+    local px = (type(h) == "number" and h > 6) and (h - 4) or 18
+    local slot = FA.AddSlot(c, "BiSHealRevelation", "HELPFUL", {
+        candidateFilters = { includeSpellIDs = RV.ICON_IDS },
+        initializeFrame = FA.Placed(FA.HotIcon, px, "CENTER", q, -18, 0),
+    })
+    if not slot then RV.iconSeen = "no slot" return nil end
+    if c.SetEnabled then c:SetEnabled(true) end
+    RV.container, RV.iconSeen = c, "built"
+    return c
+end
+
 --- Paint it: shown while Revelation is on you.
 function RV.Paint()
+    RV.Icon()
     local up = RV.Up()
     RV.up = up
     local fs = (up or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit)) and RV.Word()
@@ -137,7 +169,8 @@ function RV.Status()
     local d = db()
     local pas = {}
     for id in pairs(d.passive) do pas[#pas + 1] = tostring(id) end
-    local line = string.format("reveal: up %s | the buff's id %s | passive %s | last read: %s | combat text: %s", tostring(RV.Up()),
+    local line = string.format("reveal: up %s | icon %s | the buff's id %s | passive %s | last read: %s | combat text: %s", tostring(RV.Up()),
+        tostring(RV.iconSeen or "not built"),
         tostring(d.buff or "not seen yet"), #pas > 0 and table.concat(pas, ", ") or "none", RV.seen or "nothing yet",
         RV.seenText or "nothing heard")
     if NS.Print then NS.Print(line) end

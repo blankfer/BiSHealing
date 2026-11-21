@@ -16616,6 +16616,13 @@ do
     ok(RV.Paint() == true and NS.DB().radar.reveal.buff == 1248808, "the proc (a real duration): up, and its id kept")
     local fs = q.rip and q.rip.crit
     ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
+    RV.container = nil
+    RV.Icon()
+    local c = RV.container
+    local slot = c and c.slots and (c.slots[1] or select(2, next(c.slots)))
+    ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "the game draws Revelation itself: a container on you, on the bar", RV.iconSeen)
+    local rs = c.slots.BiSHealRevelation
+    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418], "its one slot: Revelation's id only")
     ON[1248808] = nil
     ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
     ON[1248808] = "secret"
