@@ -71,3 +71,7 @@ The JSON:
 | swift | Swiftmend | druid | middle |
 
 The middle cues keep their place (sheet 1, "big cues keep their own place"); the square row is for the small ones.
+
+## Explorer
+
+`Explorer/BiSCues.html` (ships in the addon folder): double-click it to open in the browser, offline; add `?selftest` to the address (or press CHECK) for the round-trip test.
