@@ -338,7 +338,11 @@ function BN.BadgeOn(button, box, pip, sp)
         end
         if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
         if button.EnableMouse then button:EnableMouse(false) end   -- (his box's clicks stay his box's)
-        -- under it all, Hellfire's own icon: what shows if the model does not draw
+        -- under a model: a dark square (the fire reads on it); for the "icon" look: Hellfire's own icon
+        local dark = button:CreateTexture(nil, "BACKGROUND", nil, -1)
+        dark:SetAllPoints(button)
+        dark:SetColorTexture(0, 0, 0, 0.75)
+        button.bisDark = dark
         local icon = button:CreateTexture(nil, "BACKGROUND")
         icon:SetAllPoints(button)
         if icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
@@ -407,7 +411,10 @@ function BN.Relook(button)
         if btn.bisModel then
             if model then pcall(btn.bisModel.SetModel, btn.bisModel, model) btn.bisModel:Show() else btn.bisModel:Hide() end
         end
-        if btn.bisIcon then if look == "word" then btn.bisIcon:Hide() else btn.bisIcon:Show() end end
+        -- the spell's icon only for the "icon" look (Arn, 21 Nov: "the hellfire spell icon comes out when i choose fireball
+        -- too" - it sat under the fireball as a fallback); a model stands on its own dark square
+        if btn.bisIcon then if look == "icon" then btn.bisIcon:Show() else btn.bisIcon:Hide() end end
+        if btn.bisDark then if model and look ~= "icon" then btn.bisDark:Show() else btn.bisDark:Hide() end end
         if btn.bisWord then if look == "word" then btn.bisWord:Show() else btn.bisWord:Hide() end end
     end
     return #list

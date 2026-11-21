@@ -51,7 +51,36 @@ CU.LIST = {
       tip = "Whoever carries your Rejuvenation or Regrowth while Swiftmend is ready." },
 }
 CU.BY = {}
-for i, c in ipairs(CU.LIST) do c.i = i CU.BY[c.key] = c end
+local CLASS_CAT = { SHAMAN = true, PALADIN = true, DRUID = true, PRIEST = true }
+for i, c in ipairs(CU.LIST) do
+    c.i = i
+    CU.BY[c.key] = c
+    if CLASS_CAT[c.cat] then c.class = c.cat end      -- (a class's own cue: only that class can act on it)
+end
+
+-- ONLY WHAT YOU CAN ACT ON (Arn, 21 Nov: "smartly when its the real one we wont see ones that arent our class that we
+-- cant act on like oath and light vigil"): the card lists a class cue to that class only. The browser explorer shows
+-- them all (anyone may set up anyone's); `/bish cues all` shows them all here too until the next reload, for testing
+-- (not the secret alpha: Arn tests with it on, and would never see the class filter work).
+function CU.MyClass()
+    if not UnitClass then return nil end
+    local ok, _, token = pcall(UnitClass, "player")
+    if not ok or token == nil or (NS.Secret and NS.Secret(token)) then return nil end
+    return token
+end
+function CU.ForMe(key)
+    local q = CU.BY[key]
+    if not q then return false end
+    if not q.class or CU.showAll then return true end
+    local mine = CU.MyClass()
+    return mine == nil or mine == q.class                 -- (class unknown: show it rather than hide it)
+end
+--- The cues the card lists, in row order.
+function CU.Shown()
+    local out = {}
+    for _, k in ipairs(CU.Order()) do if CU.ForMe(k) then out[#out + 1] = k end end
+    return out
+end
 -- the looks: only what is known to draw (the model census proves each one first)
 CU.LOOKS = {
     { id = "icon", name = "Spell icon", cat = "Icon" },
@@ -161,13 +190,16 @@ function CU.Default(key)
     c.look[key], c.sound[key] = nil, nil
     return CU.Apply()
 end
---- Move a cue one place up (-1) or down (+1) in the order: its square moves with it.
+--- Move a cue one place up (-1) or down (+1) among the cues the card lists: its square moves with it (a cue another
+--- class owns is stepped over, so an arrow never seems to do nothing).
 function CU.Move(key, by)
     local o = CU.Order()
     local at
     for i, k in ipairs(o) do if k == key then at = i end end
-    local to = at and at + (by or 0)
-    if not at or to < 1 or to > #o or to == at then return nil end
+    if not at or (by ~= 1 and by ~= -1) then return nil end
+    local to = at + by
+    while o[to] and not CU.ForMe(o[to]) do to = to + by end
+    if to < 1 or to > #o or not o[to] then return nil end
     o[at], o[to] = o[to], o[at]
     CU.DB().order = o
     return CU.Apply()
@@ -853,8 +885,10 @@ end
 function CU.Paint()
     local c = CU.card
     if not c then return false end
-    if not CU.BY[CU.sel] then CU.sel = CU.LIST[1].key end
-    for i, k in ipairs(CU.Order()) do
+    local shown = CU.Shown()
+    if not CU.BY[CU.sel] or not CU.ForMe(CU.sel) then CU.sel = shown[1] or CU.LIST[1].key end
+    for i, row in ipairs(c.order) do if i > #shown then row.key = nil row:Hide() else row:Show() end end
+    for i, k in ipairs(shown) do
         local row = c.order[i]
         local q = CU.BY[k]
         row.key = k
@@ -1041,6 +1075,11 @@ function CU.Slash(rest)
         end
         CU.ShowString("import")
         return true
+    elseif cmd == "all" then
+        CU.showAll = not CU.showAll
+        say(CU.showAll and "BiS Cues: showing every class's cues (until you reload)." or "BiS Cues: only your class's cues.")
+        if CU.card and CU.card:IsShown() then CU.Paint() else CU.Toggle() end
+        return CU.showAll
     end
     return CU.Toggle()
 end

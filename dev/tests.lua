@@ -16907,8 +16907,36 @@ do
     ok(btn.bisWord:IsShown() and not btn.bisIcon:IsShown(), "the word look: FIRE, no icon")
     CU.SetLook("hell", "icon")
     ok(btn.bisIcon:IsShown() and not btn.bisWord:IsShown() and (not btn.bisModel or not btn.bisModel:IsShown()), "the icon look: no turning model")
+    CU.SetLook("hell", "model:198692")
+    ok(not btn.bisIcon:IsShown() and btn.bisDark:IsShown() and (not btn.bisModel or btn.bisModel:IsShown()),
+       "the Fireball look: the fireball on a dark square, no Hellfire icon under it (Arn's 21 Nov shot)")
     CU.Move("hell", -1)
     ok(btn.points[1][4] == CU.SQUARE.x, "re-ordered out of a fight: the button moves to its new square")
+    -- only what your class can act on (Arn: "we wont see ones that arent our class ... like oath and light vigil")
+    local keepUC, keepAlpha = _G.UnitClass, NS.DB().alpha
+    NS.DB().alpha = nil
+    _G.UnitClass = function() return "Shaman", "SHAMAN", 7 end
+    local seen = {}
+    for _, k in ipairs(CU.Shown()) do seen[k] = true end
+    ok(seen.rip and seen.hell and seen.tap and seen.crit and not seen.oath and not seen.vigil and not seen.swift,
+       "a shaman's card: Riptide and the group cues, no Oath / Vigil / Swiftmend")
+    CU.DB().order = { "hell", "tap", "crit", "oath", "vigil", "rip", "swift" }
+    ok(CU.Move("rip", -1) and CU.Order()[3] == "rip", "the arrow steps over the paladin's cues (never seems to do nothing)", table.concat(CU.Order(), ","))
+    CU.sel = "oath"
+    CU.Toggle() CU.Toggle()
+    ok(CU.sel ~= "oath" and not c.order[5]:IsShown() and c.order[4]:IsShown(), "the card: four rows, a cue you cannot act on never chosen")
+    _G.UnitClass = function() return "Paladin", "PALADIN", 2 end
+    seen = {}
+    for _, k in ipairs(CU.Shown()) do seen[k] = true end
+    ok(seen.oath and seen.vigil and not seen.rip and not seen.swift, "a paladin's: Oath and Vigil, no Riptide or Swiftmend")
+    NS.DB().alpha = true
+    ok(not seen.rip and #CU.Shown() < #CU.LIST, "the secret alpha on (Arn tests with it): still only your class")
+    SlashCmdList.BISHEALING("cues all")
+    ok(CU.showAll and #CU.Shown() == #CU.LIST, "/bish cues all: every class's cues, for testing")
+    SlashCmdList.BISHEALING("cues all")
+    ok(not CU.showAll, "again: back to your class")
+    if CU.card then CU.card:Hide() end
+    _G.UnitClass, NS.DB().alpha = keepUC, keepAlpha
     c:Hide() if CU.strWin then CU.strWin:Hide() end RD.swPanel:Hide()
     r.cues, r.sw, r.swStamp = keepCues, keepSw, keepStamp
 end
