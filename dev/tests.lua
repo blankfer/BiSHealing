@@ -16594,8 +16594,10 @@ do
     _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
     BN.spoke, BN.quietUntil = {}, 0
     hs.opts.initializeFrame(hb)
-    ok(not hb.Icon:IsShown() and hb.__w == sp.heal:GetWidth() - 2,
-       "the client's button dressed as the burning box: over his whole box, Blizzard's icon hidden", hb.__w)
+    ok(not hb.Icon:IsShown() and hb.__w == BN.FLAME.px and hb.bisIcon and hb.bisModel,
+       "the client's button: a small square under his name - Hellfire's icon under a 3D fire, Blizzard's own art hidden", hb.__w)
+    local pt, rel, _, px, py = hb:GetPoint(1)
+    ok(pt == "TOPLEFT" and rel == sp.en.box and py == BN.FLAME.y, "under his callsign", tostring(pt) .. " " .. tostring(py))
     ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
     hb:GetScript("OnShow")(hb)
     ok(#heardV == 1 and heardV[1][2] == "Hellfire" and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", #heardV)

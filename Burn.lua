@@ -270,7 +270,7 @@ end)
   pointed at his unit out of a fight only. ]]
 BN.DRAW_IDS = {}
 for _, id in ipairs(BN.HELLFIRE) do BN.DRAW_IDS[id] = true end
-BN.FLAME = { edge = 2, glow = 3, tip = 1, red = { 0.95, 0.15, 0.05, 1 }, gold = { 1, 0.8, 0.2, 1 }, beat = { 0.17, 0.11 } }
+BN.FLAME = { px = 22, x = 3, y = -14, model = 198692, cam = 1.6, spin = 1.5 }   -- the fire square under his callsign
 -- THE VOICE (the games' road: the PC's own voice, C_VoiceChat.SpeakText - heard on Forever 17 Nov): "Hellfire" when the
 -- game shows his burning box, at most once every `every` s a box; db().radar.burnVoice = false keeps it quiet.
 BN.VOICE = { text = "Hellfire", every = 12, rate = 0, volume = 100 }
@@ -295,12 +295,13 @@ local function fightNow() return (InCombatLockdown and InCombatLockdown()) and t
 --- Dress the client's button as the burning box over `box` (inside initializeFrame - the one place it may be placed).
 function BN.BadgeOn(button, box, pip)
     if not (button and box) then return end
+    local F = BN.FLAME
+    -- (21 Nov 2026, Arn: "can we just add a 3d model of fire under their name with 15s numbers?" - the burning border is
+    -- gone: a small square under his callsign, the Hellfire icon under a turning 3D fireball, the client's own countdown)
     local placed = pcall(function()
-        local w, h = box:GetWidth(), box:GetHeight()
-        if not (type(w) == "number" and w > 2) and pip then w, h = pip:GetWidth() - 2, pip:GetHeight() - 2 end   -- (the box is the pip less its edge)
-        button:SetSize(type(w) == "number" and w > 2 and w or 60, type(h) == "number" and h > 2 and h or 40)
+        button:SetSize(F.px, F.px)
         button:ClearAllPoints()
-        button:SetPoint("CENTER", box, "CENTER", 0, 0)
+        button:SetPoint("TOPLEFT", box, "TOPLEFT", F.x, F.y)
     end)
     if not placed then BN.drawSeen = "button refused" return end
     pcall(function()
@@ -313,37 +314,48 @@ function BN.BadgeOn(button, box, pip)
         end
         if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
         if button.EnableMouse then button:EnableMouse(false) end   -- (his box's clicks stay his box's)
-        -- THE BORDER ON FIRE (Arn, 20 Nov: "use what we learn from the games, something simple like voice: hellfire and the
-        -- border on fire" - the wash came out pink on a purple warlock): an orange edge under a red-gold glow that
-        -- flickers, two layers at different beats so it never pulses in step - the client runs it, no Lua per frame
-        local function ring(parent, px, col, inset)
-            local hold = CreateFrame("Frame", nil, parent)
-            hold:SetPoint("TOPLEFT", parent, "TOPLEFT", -inset, inset)
-            hold:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", inset, -inset)
-            for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, px }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, px },
-                                 { "TOPLEFT", "BOTTOMLEFT", px, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", px, 0 } }) do
-                local t = hold:CreateTexture(nil, "OVERLAY")
-                t:SetColorTexture(col[1], col[2], col[3], col[4] or 1)
-                t:SetPoint(e[1], hold, e[1], 0, 0)
-                t:SetPoint(e[2], hold, e[2], 0, 0)
-                if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        -- under it all, Hellfire's own icon: what shows if the model does not draw
+        local icon = button:CreateTexture(nil, "BACKGROUND")
+        icon:SetAllPoints(button)
+        if icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        local get = C_Spell and C_Spell.GetSpellTexture
+        if get then
+            local ok, tex = pcall(get, BN.HELLFIRE[1])
+            if ok and tex then pcall(icon.SetTexture, icon, tex) end
+        end
+        button.bisIcon = icon
+        -- the 3D fire: the model census's small fireball (mh_fireball_high_01), turning
+        local okM, m = pcall(CreateFrame, "PlayerModel", nil, button)
+        if okM and m then
+            m:SetAllPoints(button)
+            pcall(m.SetModel, m, F.model)
+            if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, F.cam) end
+            if m.SetScript then
+                m.bisYaw = 0
+                m:SetScript("OnUpdate", function(self, el)
+                    self.bisYaw = (self.bisYaw + (tonumber(el) or 0) * F.spin) % 6.2832
+                    pcall(self.SetFacing, self, self.bisYaw)
+                end)
             end
-            return hold
+            button.bisModel = m
         end
-        local function flicker(frame, lo, beat)
-            if not frame.CreateAnimationGroup then return end
-            local ag = frame:CreateAnimationGroup()
-            local a = ag:CreateAnimation("Alpha")
-            a:SetFromAlpha(1) a:SetToAlpha(lo) a:SetDuration(beat)
-            ag:SetLooping("BOUNCE")
-            ag:Play()
+        -- the seconds left, written by the client (the aura's duration is secret to us; its cooldown is not ours to read)
+        if type(button.SetDurationCooldown) == "function" then
+            local ok, cd = pcall(CreateFrame, "Cooldown", nil, button, "CooldownFrameTemplate")
+            if ok and cd then
+                cd:SetAllPoints(button)
+                if cd.SetDrawSwipe then cd:SetDrawSwipe(false) end
+                if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+                if cd.SetDrawBling then cd:SetDrawBling(false) end
+                if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+                if cd.SetFrameLevel and button.GetFrameLevel then
+                    local lvl = button:GetFrameLevel()
+                    if type(lvl) == "number" then cd:SetFrameLevel(lvl + 3) end
+                end
+                pcall(button.SetDurationCooldown, button, cd)
+                button.bisCount = cd
+            end
         end
-        local F = BN.FLAME
-        -- side by side, never stacked (Arn's 23:55 shot: three ADD layers on one edge summed to WHITE) and all inside the
-        -- box (it clips what runs past its edge): orange at the edge, the red band inside it, the gold line inside that
-        ring(button, F.edge, BN.FIRE, 0)
-        flicker(ring(button, F.glow, F.red, -F.edge), 0.3, F.beat[1])
-        flicker(ring(button, F.tip, F.gold, -(F.edge + F.glow)), 0.1, F.beat[2])
         -- the voice when the game SHOWS the button (Arn: "everytime i reload it says hellfire" - the client makes the
         -- button ahead of time, at the reload; made is not shown)
         if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box) end) end
