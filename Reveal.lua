@@ -185,7 +185,15 @@ end
 
 --- Paint it: shown while Revelation is on you.
 function RV.Paint()
-    RV.Icon()
+    local on = not (NS.RD and NS.RD.Sw) or NS.RD.Sw("crit")   -- (the deck's switch, RD.SW "crit")
+    if on then RV.Icon() end
+    local c = RV.container
+    if c and c.bisOn ~= on and not fight() and c.SetEnabled then pcall(c.SetEnabled, c, on) c.bisOn = on end
+    if not on then
+        local fs0 = NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit
+        if fs0 then fs0:Hide() end
+        return false
+    end
     local up = RV.Up()
     RV.up = up
     local fs = (up or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit)) and RV.Word()

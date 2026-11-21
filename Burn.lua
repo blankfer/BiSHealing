@@ -174,8 +174,8 @@ function BN.Paint(sp, mx)
     local e = sp and sp.en
     if not (e and sp.unit) then return false end
     local unit, t = sp.unit, now()
-    local left = BN.Left(unit, t)
-    local tapOn = BN.tap[unit] and BN.tap[unit] > t or false
+    local left = BN.Sw("hell") and BN.Left(unit, t) or nil
+    local tapOn = BN.Sw("tap") and BN.tap[unit] and BN.tap[unit] > t or false
     if not left and not tapOn and not e.burn then return false end   -- (nothing made for a box that never burned)
     local B = BN.Parts(e)
     if left then
@@ -250,6 +250,7 @@ end
 BN.events:RegisterEvent("GROUP_ROSTER_UPDATE")
 BN.events:RegisterEvent("PLAYER_ENTERING_WORLD")
 BN.events:SetScript("OnEvent", function(_, event, unit, guid, id)
+    if event == "PLAYER_ENTERING_WORLD" then BN.quietUntil = (GetTime and GetTime() or 0) + 5 end
     if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
         BN.on, BN.tap = {}, {}                             -- (tokens move when the group changes)
         BN.Arm()
@@ -274,10 +275,14 @@ BN.FLAME = { edge = 2, glow = 3, tip = 1, red = { 0.95, 0.15, 0.05, 1 }, gold = 
 -- game shows his burning box, at most once every `every` s a box; db().radar.burnVoice = false keeps it quiet.
 BN.VOICE = { text = "Hellfire", every = 12, rate = 0, volume = 100 }
 BN.spoke = {}
+--- A switch on the deck's panel (RD.SW; nil = on).
+function BN.Sw(key) local RD = NS.RD return not (RD and RD.Sw) or RD.Sw(key) end
+BN.quietUntil = 0                                          -- (a /reload re-makes the buttons: no voice for a moment after it)
 function BN.Speak(key)
     local d = NS.DB and NS.DB().radar
-    if d and d.burnVoice == false then return false end
+    if (d and d.burnVoice == false) or not BN.Sw("hellvoice") or not BN.Sw("hell") then return false end
     local t = GetTime and GetTime() or 0
+    if t < BN.quietUntil then return false end
     if key and BN.spoke[key] and t - BN.spoke[key] < BN.VOICE.every then return false end
     if key then BN.spoke[key] = t end
     if not (C_VoiceChat and C_VoiceChat.SpeakText) then return false end
@@ -339,9 +344,10 @@ function BN.BadgeOn(button, box, pip)
         ring(button, F.edge, BN.FIRE, 0)
         flicker(ring(button, F.glow, F.red, -F.edge), 0.3, F.beat[1])
         flicker(ring(button, F.tip, F.gold, -(F.edge + F.glow)), 0.1, F.beat[2])
+        -- the voice when the game SHOWS the button (Arn: "everytime i reload it says hellfire" - the client makes the
+        -- button ahead of time, at the reload; made is not shown)
         if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box) end) end
     end)
-    BN.Speak(box)
     BN.drawn = (BN.drawn or 0) + 1
 end
 
@@ -349,7 +355,7 @@ end
 function BN.Container(sp)
     local FA, e = NS.FA, sp and sp.en
     if not (e and e.box and FA and FA.Available and FA.Available() and FA.AddSlot) or fightNow() then return nil end
-    local warlock = BN.Warlock(sp.unit)
+    local warlock = BN.Warlock(sp.unit) and BN.Sw("hell")
     local c = sp.burnC
     if not c then
         if not warlock then return nil end
@@ -383,7 +389,8 @@ if EN and EN.Paint then
     EN.Paint = function(sp, ...)
         local done = paint(sp, ...)
         -- the game-drawn burning box: only while a warlock is with you, and only re-pointed when the box changed hands
-        if done and BN.armed and sp and sp.unit and (not sp.burnC or sp.burnUnit ~= sp.unit) and not fightNow() then BN.Container(sp) end
+        if done and BN.armed and sp and sp.unit and (not sp.burnC or sp.burnUnit ~= sp.unit or sp.burnC.bisOn ~= BN.Sw("hell"))
+            and not fightNow() then BN.Container(sp) end
         if done and sp and sp.unit and (BN.on[sp.unit] or BN.tap[sp.unit] or (sp.en and sp.en.burn)) then
             local okM, mx = pcall(UnitHealthMax, sp.unit)
             BN.Paint(sp, okM and mx or nil)

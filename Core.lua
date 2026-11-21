@@ -2337,10 +2337,11 @@ SlashCmdList.BISHEALING = function(input)
     elseif msg == "burn" then
         NS.DO.burn()
     elseif msg == "burn voice on" or msg == "burn voice off" then
-        local d = NS.DB().radar or {}
-        NS.DB().radar = d
-        d.burnVoice = msg:find("off") and false or nil
-        Print("burn: the Hellfire voice is " .. (d.burnVoice == false and "off" or "on"))
+        local on = not msg:find("off")
+        if NS.RD and NS.RD.SetSw then NS.RD.SetSw("hellvoice", on) end   -- (the deck's switch - the panel shows it too)
+        local d = NS.DB().radar
+        if d then d.burnVoice = nil end
+        Print("burn: the Hellfire voice is " .. (on and "on" or "off"))
     elseif msg == "reveal" then
         if NS.RV and NS.RV.Status then NS.RV.Status() end
     elseif msg == "byid" then

@@ -1742,12 +1742,17 @@ RD.SW = {
     { key = "oath",   group = "PALADIN",   name = "Oath of Light cue",        tip = "Holy Light in the middle of the box of whoever carries your Oath of Light: your heals land harder there." },
     { key = "vigil",  group = "PALADIN",   name = "Light's Vigil + synergy",  tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil (that Holy Shock skips its cooldown and splashes their party), and the synergy bar on top counting its 30 s down." },
     { key = "swift",  group = "DRUID",     name = "Swiftmend + synergy",      tip = "Swiftmend in the middle of the box of whoever carries your Rejuvenation or Regrowth while it is ready, and the synergy bar on top: your newest one's time left." },
+    -- 20 Nov 2026 (Arn: "remember all these are toggles"): the warlock's Hellfire and Life Tap (Burn.lua), Revelation (Reveal.lua)
+    { key = "hell",   group = "YOUR GROUP", name = "Hellfire box",            tip = "A warlock's box catches fire while he channels Hellfire (it burns him every second). The game draws it, even in a fight." },
+    { key = "hellvoice", group = "YOUR GROUP", name = "Hellfire voice",       tip = "Your PC's voice says \"Hellfire\" when a warlock's box catches fire. At most once every 12 s a warlock." },
+    { key = "tap",    group = "YOUR GROUP", name = "Life Tap tag",            tip = "TAP in amber under a warlock's name for 3 s after he trades health for mana. Only when the game shows his cast (often not in a fight)." },
+    { key = "crit",   group = "EXTRAS",    name = "Revelation CRIT",          tip = "The Revelation weapon enchant's proc: a gold CRIT on the synergy bar while your next spell will crit. The game draws it, even in a fight." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
-             oath = true, vigil = true, swift = true },
+             oath = true, vigil = true, swift = true, hell = true, hellvoice = true, tap = true, crit = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }

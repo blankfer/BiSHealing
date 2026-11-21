@@ -16592,19 +16592,31 @@ do
     hb.Icon:Show()
     local keepVC, heardV = _G.C_VoiceChat, {}
     _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
-    BN.spoke = {}
+    BN.spoke, BN.quietUntil = {}, 0
     hs.opts.initializeFrame(hb)
     ok(not hb.Icon:IsShown() and hb.__w == sp.heal:GetWidth() - 2,
        "the client's button dressed as the burning box: over his whole box, Blizzard's icon hidden", hb.__w)
-    ok(#heardV == 1 and heardV[1][2] == "Hellfire" and heardV[1][4] == 100, "and the voice says Hellfire (voice, text, rate, volume)", #heardV)
-    local hb2 = CreateFrame("Button")
-    hs.opts.initializeFrame(hb2)
-    ok(#heardV == 1, "the same box again within " .. BN.VOICE.every .. " s: no second Hellfire")
+    ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1 and heardV[1][2] == "Hellfire" and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", #heardV)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1, "shown again within " .. BN.VOICE.every .. " s: no second Hellfire")
     TICK(BN.VOICE.every + 1)
-    NS.DB().radar.burnVoice = false
-    hs.opts.initializeFrame(CreateFrame("Button"))
-    ok(#heardV == 1, "voice off: quiet")
-    NS.DB().radar.burnVoice = nil
+    BN.quietUntil = GetTime() + 5
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1, "just after a /reload: quiet")
+    BN.quietUntil = 0
+    NS.RD.SetSw("hellvoice", false)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1 and not NS.RD.Sw("hellvoice"), "the Hellfire voice switch off: quiet")
+    NS.RD.SetSw("hellvoice", true)
+    -- the Hellfire box switch: his container off (out of a fight)
+    NS.RD.SetSw("hell", false)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == false, "the Hellfire box switch off: the game draws nothing on his box")
+    NS.RD.SetSw("hell", true)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == true, "back on")
     _G.C_VoiceChat = keepVC
     local other = { unit = "party2", heal = CreateFrame("Button") }
     other.heal:SetSize(74, 58)
