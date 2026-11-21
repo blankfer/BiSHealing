@@ -16695,7 +16695,9 @@ do
     local c = RV.container
     ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
     local rs = c.slots.BiSHealRevelation
-    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418], "its one slot: Revelation's id only")
+    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418] and rs.opts.candidateFilters.includeSpellIDs[1323377]
+       and rs.opts.candidateFilters.includeSpellIDs[1323400] and rs.opts.candidateFilters.includeSpellIDs[1323419]
+       and not rs.opts.candidateFilters.includeSpellIDs[1248806], "its one slot: Revelation's buff for every class (shaman, priest, druid, paladin...), never the passive")
     local btn = CreateFrame("Button")
     btn.Icon = btn:CreateTexture()
     btn.Icon:Show()

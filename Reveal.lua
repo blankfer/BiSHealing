@@ -19,6 +19,10 @@ NS.RV = RV
 -- non-periodic spell increased by 100%", seconds remaining) - asked first; the rest stay as a fallback. In a fight even
 -- your own aura answers nil (his BiS? probe with it up: all eight nil), so the combat text below is the road there.
 RV.IDS = { 1323418, 1248806, 1248808, 1323377, 1323392, 1323400, 1323410, 1323419 }
+-- A BUFF ID PER CLASS (21 Nov 2026, the enchant research off wowhead/forever - each page lists the spells it works on):
+-- shaman 1323418, priest 1323377, druid 1323400, paladin 1323419, mage 1248808, warlock 1323392, hunter 1323410, all
+-- 15 s, +100% crit; 1248806 is the enchant's hidden passive. The game draws whichever of them is on you.
+RV.CLASS_IDS = { 1323418, 1323377, 1323400, 1323419, 1248808, 1323392, 1323410 }
 RV.WORD = "CRIT"
 RV.COL = { 1.00, 0.83, 0.30 }
 
@@ -114,7 +118,8 @@ end
   is up - but it will DRAW it: an AuraContainer on you with one slot filtered to the buff's id, its icon and countdown
   swipe put in the middle of the synergy bar (the road the classic look's HoT icons and SelfBuff's Water Shield badge
   take). Nothing of ours decides; the client shows it while the buff is there. Built out of a fight, once the bar is. ]]
-RV.ICON_IDS = { [1323418] = true }
+RV.ICON_IDS = {}
+for _, id in ipairs(RV.CLASS_IDS) do RV.ICON_IDS[id] = true end
 --[[ OUR OWN BADGE IN THE GAME'S BUTTON (20 Nov 2026, Arn: "instead of the buff can we tell it to draw something else
   like [Revelation] in our theme"): the client hands us its aura button inside initializeFrame (the creation window -
   the one place it may be sized and placed); its own icon / border / count / swipe are hidden (the dispel pip's road)
