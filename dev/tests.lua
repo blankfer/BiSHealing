@@ -16610,19 +16610,15 @@ do
     EN.heads = { rip = q }
     NS.DB().radar.reveal = nil
     STATE.inCombat = false
+    local keepAvail = NS.FA.Available
+    NS.FA.Available = function() return false end      -- (first the word of our own: the client draws no auras)
+    RV.container = nil
     ON[1248806] = 0                                     -- the enchant's own passive, always on you
     ok(RV.Paint() == false and NS.DB().radar.reveal.passive[1248806], "the enchant's passive (duration 0) is never the buff - learned")
     ON[1248808] = 15
     ok(RV.Paint() == true and NS.DB().radar.reveal.buff == 1248808, "the proc (a real duration): up, and its id kept")
     local fs = q.rip and q.rip.crit
     ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
-    RV.container = nil
-    RV.Icon()
-    local c = RV.container
-    local slot = c and c.slots and (c.slots[1] or select(2, next(c.slots)))
-    ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "the game draws Revelation itself: a container on you, on the bar", RV.iconSeen)
-    local rs = c.slots.BiSHealRevelation
-    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418], "its one slot: Revelation's id only")
     ON[1248808] = nil
     ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
     ON[1248808] = "secret"
@@ -16647,6 +16643,24 @@ do
     fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
     ok(not RV.textUp and not fs:IsShown(), "Revelation fades: CRIT goes")
     _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName = keepInfo, keepName
+    -- THE GAME DRAWS IT (Arn: "tell it to draw something else like [Revelation] in our theme")
+    NS.FA.Available = keepAvail
+    RV.container = nil
+    RV.Paint()
+    local c = RV.container
+    ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
+    local rs = c.slots.BiSHealRevelation
+    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418], "its one slot: Revelation's id only")
+    local btn = CreateFrame("Button")
+    btn.Icon = btn:CreateTexture()
+    btn.Icon:Show()
+    rs.opts.initializeFrame(btn)                         -- (the client hands its button over while the buff is up)
+    ok(btn.bisCrit and btn.bisCrit:GetText() == "CRIT" and not btn.Icon:IsShown() and btn.__w == RV.BADGE.w,
+       "the game's button wears OUR badge: CRIT in the deck's tag look, Blizzard's icon hidden", btn.bisCrit and btn.bisCrit:GetText())
+    ON[1248808] = 15
+    RV.Paint()
+    ok(not fs:IsShown(), "with the game's badge built, our own word stays out (no second CRIT)")
+    ON[1248808] = nil
     local Cost = dofile("../_bisdev/dev/cost.lua")
     local n = Cost.Count(function() RV.Paint() end)
     ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)

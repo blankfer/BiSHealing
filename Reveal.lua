@@ -100,7 +100,7 @@ function RV.Word()
     if not B.crit then
         local fs = B.over:CreateFontString(nil, "OVERLAY")
         fs:SetFont("Fonts\\ARIALN.TTF", 12, "OUTLINE")
-        fs:SetPoint("CENTER", q, "CENTER", 12, 0)       -- (the game's own icon sits just left of it)
+        fs:SetPoint("CENTER", q, "CENTER", 0, 0)        -- (only when the game's badge could not be built)
         fs:SetTextColor(RV.COL[1], RV.COL[2], RV.COL[3], 1)
         fs:SetText(RV.WORD)
         fs:Hide()
@@ -115,6 +115,51 @@ end
   swipe put in the middle of the synergy bar (the road the classic look's HoT icons and SelfBuff's Water Shield badge
   take). Nothing of ours decides; the client shows it while the buff is there. Built out of a fight, once the bar is. ]]
 RV.ICON_IDS = { [1323418] = true }
+--[[ OUR OWN BADGE IN THE GAME'S BUTTON (20 Nov 2026, Arn: "instead of the buff can we tell it to draw something else
+  like [Revelation] in our theme"): the client hands us its aura button inside initializeFrame (the creation window -
+  the one place it may be sized and placed); its own icon / border / count / swipe are hidden (the dispel pip's road)
+  and the deck's tag look goes in: a dark box sized to its word, a gold edge, CRIT in gold. The client still shows and
+  hides the button with the buff - nothing of ours decides. ]]
+RV.BADGE = { w = 36, h = 15, size = 10, bg = { 0.04, 0.04, 0.06, 0.95 } }
+function RV.Badge(button)
+    if not button then return end
+    local B, host = RV.BADGE, RV.host
+    local placed = pcall(function()
+        button:SetSize(B.w, B.h)
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", host, "CENTER", 0, 0)
+    end)
+    if not placed then RV.iconSeen = "button refused" return end
+    pcall(function()
+        if button.GetRegions then
+            for _, r in ipairs({ button:GetRegions() }) do if r.SetTexture and r.Hide then r:Hide() end end
+        end
+        for _, k in ipairs({ "Icon", "icon", "Border", "border", "Count", "count", "Cooldown" }) do
+            local part = button[k]
+            if type(part) == "table" and part.Hide then part:Hide() end
+        end
+        if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(button)
+        bg:SetColorTexture(B.bg[1], B.bg[2], B.bg[3], B.bg[4])
+        local c = RV.COL
+        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 1 },
+                             { "TOPLEFT", "BOTTOMLEFT", 1, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 1, 0 } }) do
+            local t = button:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(c[1], c[2], c[3], 1)
+            t:SetPoint(e[1], button, e[1], 0, 0)
+            t:SetPoint(e[2], button, e[2], 0, 0)
+            if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        end
+        local fs = button:CreateFontString(nil, "OVERLAY")
+        fs:SetFont("Fonts\\ARIALN.TTF", B.size, "OUTLINE")
+        fs:SetPoint("CENTER", button, "CENTER", 0, 0)
+        fs:SetTextColor(c[1], c[2], c[3], 1)
+        fs:SetText(RV.WORD)
+        button.bisCrit = fs
+    end)
+    RV.badges = (RV.badges or 0) + 1
+end
 function RV.Icon()
     if RV.container then return RV.container end
     local EN, FA = NS.EN, NS.FA
@@ -127,11 +172,10 @@ function RV.Icon()
     local lvl = q.GetFrameLevel and q:GetFrameLevel()
     if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 4) end
     c:SetUnit("player")
-    local h = q.GetHeight and q:GetHeight()
-    local px = (type(h) == "number" and h > 6) and (h - 4) or 18
+    RV.host = q
     local slot = FA.AddSlot(c, "BiSHealRevelation", "HELPFUL", {
         candidateFilters = { includeSpellIDs = RV.ICON_IDS },
-        initializeFrame = FA.Placed(FA.HotIcon, px, "CENTER", q, -18, 0),
+        initializeFrame = RV.Badge,
     })
     if not slot then RV.iconSeen = "no slot" return nil end
     if c.SetEnabled then c:SetEnabled(true) end
@@ -146,7 +190,7 @@ function RV.Paint()
     RV.up = up
     local fs = (up or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit)) and RV.Word()
     if not fs then return up end
-    if up then fs:Show() else fs:Hide() end
+    if up and not RV.container then fs:Show() else fs:Hide() end   -- (the game's badge, when built, is the CRIT)
     return up
 end
 
