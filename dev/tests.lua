@@ -15788,9 +15788,10 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                ok(tsp.ripMark:GetText() == "Chain Heal" and tsp.cue.back:IsShown(), "the mark is the spell to cast - Chain Heal in white on a dark box (Arn: people would think a click there casts Riptide)", tsp.ripMark:GetText())
                 local q = tsp.cue
-                ok(q and q.icon:IsShown() and q.edge:IsShown() and q.edge.__w > q.icon.__w and q.edge.__color and q.edge.__color[1] == 1,
-                   "the mark edged white, bigger than before (Arn: in the middle so it does not get lost)")
+                ok(q and q.word:IsShown() and not q.icon:IsShown() and q.word.__color and q.word.__color[1] == 1 and q.word.__color[3] == 1,
+                   "white letters (every class colour under them), the icon gone - no Riptide to click")
                 -- EVERY BOX OF THAT PERSON (Arn: "rip tide is not propagating to the other frames"): the same GUID elsewhere
                 local twin
                 for _, sp in ipairs(RD.spokes) do
@@ -15863,18 +15864,18 @@ do
                     RD.cueTex = {}
                     RD.rips, RD.ripLast = {}, nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
-                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Holy Light",
+                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Holy Light",
                        "Oath of Light on a box: Holy Light in its middle (heal them there)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Light's Vigil", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
+                    ok(tsp.cue.word:GetText() == "Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
                     if other then
                         RD.lastClick, RD.lastClickAt = other, GetTime()
                         RD.CueCast("Oath of Light", GetTime())
-                        ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
+                        ok(other.cue and other.cue.word:IsShown() and not tsp.cue.word:IsShown(), "one Oath at a time: the new one moves the cue")
                     end
                     -- HOLY SHOCK ON AN ENEMY never spends the Vigil (Arn: "think of all the possible scenarios")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
@@ -15882,15 +15883,15 @@ do
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.sentTarget, RD.sentAt = "Hogger", GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
                     RD.sentTarget, RD.sentAt = nil, nil
                     -- DEAD: no cue on their box, the clock waits
                     STATE.dead[tsp.unit] = true
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "they died: no cue on a dead box")
+                    ok(not tsp.cue.word:IsShown(), "they died: no cue on a dead box")
                     STATE.dead[tsp.unit] = nil
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "back up (a quick rez): the cue back")
+                    ok(tsp.cue.word:IsShown(), "back up (a quick rez): the cue back")
                     -- OUT OF A FIGHT, THE TRUTH (dispelled, a /reload): RD.CueSeed reads your own auras off the boxes
                     do
                         local keepUA = _G.C_UnitAuras
@@ -15902,7 +15903,7 @@ do
                             return nil
                         end
                         RD.CueSeed()
-                        ok(not tsp.cue.icon:IsShown() and other.cue and other.cue.icon:IsShown() and other.cue.icon.__texture == "tex:Holy Light",
+                        ok(not tsp.cue.word:IsShown() and other.cue and other.cue.word:IsShown() and other.cue.word:GetText() == "Holy Light",
                            "out of a fight: the Vigil nobody wears any more is gone, an Oath found on someone (after a /reload) comes up")
                         NS.FM.Ranks = keepR3
                         _G.C_UnitAuras = keepUA
@@ -15914,19 +15915,19 @@ do
                     RD.swiftAt = nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Rejuvenation", GetTime())
-                    ok(tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
+                    ok(tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
                     RD.CueCast("Swiftmend", GetTime())
-                    ok(not tsp.cue.icon:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
+                    ok(not tsp.cue.word:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
                     RD.swiftAt = GetTime() - 1
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
+                    ok(tsp.cue.word:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
                     RD.SetSw("swift", false)
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "the Swiftmend switch off: no cue")
+                    ok(not tsp.cue.word:IsShown(), "the Swiftmend switch off: no cue")
                     RD.SetSw("swift", true)
                     NS.FM.Ranks = function(n) return keepRanks2(n) end
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    ok(not tsp.cue.word:IsShown(), "no Swiftmend learned: no cue")
                     -- a druid's synergy bar: the newest HoT's time left, the Swiftmend icon
                     do
                         local keepR = NS.FM.Ranks
