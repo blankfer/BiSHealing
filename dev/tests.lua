@@ -15788,9 +15788,28 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                ok(tsp.ripMark:GetText() == "Chain Heal" and tsp.cue.back:IsShown(), "the mark is the spell to cast - Chain Heal in white on a dark box (Arn: people would think a click there casts Riptide)", tsp.ripMark:GetText())
+                do   -- THE MARK GOES WHEN A CHAIN HEAL COULD NOT LAND IN TIME (Arn: "if my spell takes two seconds, we remove it at" 2 s + lag)
+                    local keepCT, keepNS = NS.FM.SeqCastTime, _G.GetNetStats
+                    NS.FM.SeqCastTime = function(sp) if sp == "Chain Heal" then return 2.0 end return keepCT(sp) end
+                    _G.GetNetStats = function() return 0, 0, 90, 90 end
+                    local lead = RD.CueLead("Chain Heal")
+                    local rk = RD.RipKey(tsp.unit)
+                    local keepEnd = RD.rips[rk]
+                    ok(math.abs(lead - (2.0 / (1 + ((NS.FM.Haste and NS.FM.Haste()) or 0) / 100) + 0.09)) < 1e-9, "the lead: your Chain Heal's cast time over your haste + 90 ms lag", lead)
+                    RD.rips[rk] = GetTime() + lead + 0.1
+                    RD.RipMarks()
+                    ok(tsp.ripMark:IsShown(), "a Chain Heal started now still lands inside the Riptide: the mark shows")
+                    TICK(0.2)
+                    RD.RipMarks()
+                    ok(not tsp.ripMark:IsShown() and RD.rips[rk], "0.1 s short of the cast + lag: the mark goes (the Riptide itself still counts on the bar)")
+                    RD.rips[rk] = keepEnd
+                    NS.FM.SeqCastTime, _G.GetNetStats = keepCT, keepNS
+                    RD.RipMarks()
+                end
                 local q = tsp.cue
-                ok(q and q.icon:IsShown() and q.edge:IsShown() and q.edge.__w > q.icon.__w and q.edge.__color and q.edge.__color[1] == 1,
-                   "the mark edged white, bigger than before (Arn: in the middle so it does not get lost)")
+                ok(q and q.word:IsShown() and not q.icon:IsShown() and q.word.__color and q.word.__color[1] == 1 and q.word.__color[3] == 1,
+                   "white letters (every class colour under them), the icon gone - no Riptide to click")
                 -- EVERY BOX OF THAT PERSON (Arn: "rip tide is not propagating to the other frames"): the same GUID elsewhere
                 local twin
                 for _, sp in ipairs(RD.spokes) do
@@ -15863,18 +15882,18 @@ do
                     RD.cueTex = {}
                     RD.rips, RD.ripLast = {}, nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
-                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Holy Light",
+                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Holy Light",
                        "Oath of Light on a box: Holy Light in its middle (heal them there)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Light's Vigil", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
+                    ok(tsp.cue.word:GetText() == "Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
                     if other then
                         RD.lastClick, RD.lastClickAt = other, GetTime()
                         RD.CueCast("Oath of Light", GetTime())
-                        ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
+                        ok(other.cue and other.cue.word:IsShown() and not tsp.cue.word:IsShown(), "one Oath at a time: the new one moves the cue")
                     end
                     -- HOLY SHOCK ON AN ENEMY never spends the Vigil (Arn: "think of all the possible scenarios")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
@@ -15882,15 +15901,15 @@ do
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.sentTarget, RD.sentAt = "Hogger", GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
                     RD.sentTarget, RD.sentAt = nil, nil
                     -- DEAD: no cue on their box, the clock waits
                     STATE.dead[tsp.unit] = true
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "they died: no cue on a dead box")
+                    ok(not tsp.cue.word:IsShown(), "they died: no cue on a dead box")
                     STATE.dead[tsp.unit] = nil
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "back up (a quick rez): the cue back")
+                    ok(tsp.cue.word:IsShown(), "back up (a quick rez): the cue back")
                     -- OUT OF A FIGHT, THE TRUTH (dispelled, a /reload): RD.CueSeed reads your own auras off the boxes
                     do
                         local keepUA = _G.C_UnitAuras
@@ -15902,7 +15921,7 @@ do
                             return nil
                         end
                         RD.CueSeed()
-                        ok(not tsp.cue.icon:IsShown() and other.cue and other.cue.icon:IsShown() and other.cue.icon.__texture == "tex:Holy Light",
+                        ok(not tsp.cue.word:IsShown() and other.cue and other.cue.word:IsShown() and other.cue.word:GetText() == "Holy Light",
                            "out of a fight: the Vigil nobody wears any more is gone, an Oath found on someone (after a /reload) comes up")
                         NS.FM.Ranks = keepR3
                         _G.C_UnitAuras = keepUA
@@ -15914,19 +15933,19 @@ do
                     RD.swiftAt = nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Rejuvenation", GetTime())
-                    ok(tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
+                    ok(tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
                     RD.CueCast("Swiftmend", GetTime())
-                    ok(not tsp.cue.icon:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
+                    ok(not tsp.cue.word:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
                     RD.swiftAt = GetTime() - 1
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
+                    ok(tsp.cue.word:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
                     RD.SetSw("swift", false)
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "the Swiftmend switch off: no cue")
+                    ok(not tsp.cue.word:IsShown(), "the Swiftmend switch off: no cue")
                     RD.SetSw("swift", true)
                     NS.FM.Ranks = function(n) return keepRanks2(n) end
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    ok(not tsp.cue.word:IsShown(), "no Swiftmend learned: no cue")
                     -- a druid's synergy bar: the newest HoT's time left, the Swiftmend icon
                     do
                         local keepR = NS.FM.Ranks
@@ -16518,6 +16537,211 @@ do
     STATE.units.party1, STATE.units.party2 = keep.units.party1, keep.units.party2
     _G.SetOverrideBindingClick, _G.ClearOverrideBindings, _G.PlaySound = keep.osb, keep.cob, keep.ps
     d.alpha, d.alphaOff, d.rhythm = keep.alpha, keep.alphaOff, keep.rhythm
+end
+
+-- A WARLOCK HURTING HIMSELF (Burn.lua, 20 Nov 2026 - Arn: "tag for single cast, 2 for channel")
+do
+    local BN, EN = NS.BN, NS.EN
+    local keep = { classes = STATE.classes, get = _G.C_UnitAuras and _G.C_UnitAuras.GetUnitAuraBySpellID,
+                   desc = _G.C_Spell and _G.C_Spell.GetSpellDescription }
+    STATE.classes = { party1 = "WARLOCK", party2 = "SHAMAN" }
+    ok(BN.Warlock("party1") and not BN.Warlock("party2") and not BN.Warlock("target"),
+       "only a warlock in your group is looked at (never your target)")
+    local WEAR = {}
+    _G.C_UnitAuras = _G.C_UnitAuras or {}
+    _G.C_UnitAuras.GetUnitAuraBySpellID = function(unit, id)
+        local w = WEAR[unit]
+        if w == "secret" then return secret() end
+        if w == id then return { spellId = id } end
+        return nil
+    end
+    _G.C_Spell.GetSpellDescription = function(id)
+        if id == 11683 then return "Ignites the area surrounding the caster, causing 139 Fire damage to himself and 139 Fire damage to all nearby enemies every 1 sec." end
+        return nil
+    end
+    BN.on, BN.tap, BN.tickCache = {}, {}, {}
+    WEAR.party1 = 11683
+    ok(BN.Look("party1") and BN.on.party1 and BN.on.party1.id == 11683, "the aura road: Hellfire rank 2 seen on him by its id")
+    ok(BN.Tick(11683) == 139 and BN.Tick(1949) == BN.TICK[1949], "a tick's burn from the spell's own words, else the table")
+    ok(BN.Left("party1") == 15 * 139, "what the rest of the channel will burn: 15 ticks of 139", BN.Left("party1"))
+    TICK(4.2)
+    ok(BN.Left("party1") == 11 * 139, "4.2 s in: 11 ticks left", BN.Left("party1"))
+    -- the box
+    local sp = { unit = "party1", heal = CreateFrame("Button") }
+    sp.heal:SetSize(74, 58)
+    local e = EN.Box(sp)
+    e.bar:SetStatusBarColor(0.53, 0.53, 0.93, 1)
+    ok(BN.Paint(sp, 4000), "a burning warlock's box paints")
+    local B = e.burn
+    local r, g = e.bar.__color[1], e.bar.__color[2]
+    local lo, hi = B.band:GetMinMaxValues()
+    ok(B.band:IsShown() and B.band:GetValue() == 11 * 139 and hi == 4000 and r == BN.FIRE[1] and g == BN.FIRE[2],
+       "the burning bar: orange, the band = what he will still lose on his max health's scale", B.band:GetValue(), hi)
+    ok(B.edges[1]:IsShown() and B.edges[4]:IsShown() and not B.tag:IsShown(), "an orange edge round the box, no TAP tag")
+    -- a hidden answer changes nothing; the aura gone ends it
+    WEAR.party1 = "secret"
+    ok(not BN.Look("party1") and BN.on.party1, "a secret answer: could not tell - the burn stays")
+    WEAR.party1 = nil
+    ok(BN.Look("party1") and not BN.on.party1, "the aura gone (a plain no): the burn ends")
+    BN.Paint(sp, 4000)
+    ok(not B.band:IsShown() and not B.edges[1]:IsShown(), "and the box is plain again")
+    -- the cast road
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949) and BN.on.party1.id == 1949, "the cast road: a plain Hellfire id starts it")
+    ok(not BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", secret()) and BN.seen.cast == "hidden id", "a secret spell id is never compared")
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949) and not BN.on.party1, "the channel stops: the burn ends")
+    -- Life Tap
+    ok(BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party1", 11689) and BN.tap.party1, "Life Tap (a plain id): the TAP tag")
+    BN.Paint(sp, 4000)
+    ok(B.tag:IsShown() and B.tag:GetText() == "TAP" and not B.band:IsShown(), "TAP in amber under his name, no burning bar",
+       tostring(B.tag:IsShown()) .. " " .. tostring(B.tag:GetText()) .. " " .. tostring(B.band:IsShown()))
+    ok(not BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party2", 11689) and not BN.tap.party2, "a shaman casting the same id: nothing")
+    TICK(BN.TAP_FOR + 0.1)
+    BN.Paint(sp, 4000)
+    ok(not B.tag:IsShown() and not BN.tap.party1, "after " .. BN.TAP_FOR .. " s the tag goes")
+    -- THE GAME DRAWS IT (Arn: "was not able to see warlock hf" - the Revelation road)
+    STATE.inCombat = false
+    local c = BN.Container(sp)
+    local hs = c and c.slots and c.slots.BiSHealHellfireBuff
+    ok(c and c.unit == "party1" and c.enabled and sp.burnC == c, "his box gets a container on him", BN.drawSeen)
+    ok(hs and hs.filter == "HELPFUL" and hs.opts.candidateFilters.includeSpellIDs[11684] and not c.slots.BiSHealHellfireAura,
+       "one HELPFUL slot (no debuff side - it lit his box with no Hellfire up), Hellfire's ids only")
+    local hb = CreateFrame("Button")
+    hb.Icon = hb:CreateTexture()
+    hb.Icon:Show()
+    local keepVC, heardV = _G.C_VoiceChat, {}
+    _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
+    BN.spoke, BN.quietUntil = {}, 0
+    hs.opts.initializeFrame(hb)
+    ok(not hb.Icon:IsShown() and hb.__w == BN.FLAME.px and hb.bisIcon and hb.bisModel,
+       "the client's button: a small square under his name - Hellfire's icon under a 3D fire, Blizzard's own art hidden", hb.__w)
+    local pt, rel, _, px, py = hb:GetPoint(1)
+    ok(pt == "TOPLEFT" and rel == sp.en.box and py == BN.FLAME.y, "under his callsign", tostring(pt) .. " " .. tostring(py))
+    ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1 and heardV[1][2]:find("^Hellfire") and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", heardV[1] and heardV[1][2])
+    local keepGUN = _G.GetUnitName
+    _G.GetUnitName = function(u) if u == "party1" then return "TIN Manicore" end return keepGUN and keepGUN(u) end
+    ok(BN.Words("party1") == "Hellfire, Tin" and BN.Words(nil) == "Hellfire", "and his name, first name in normal case: \"Hellfire, Tin\" (Arn: which warlock)", BN.Words("party1"))
+    _G.GetUnitName = function() return secret() end
+    ok(BN.Words("party1") == "Hellfire", "a hidden name: just the spell")
+    _G.GetUnitName = keepGUN
+    local fs2 = c.slots.BiSHealHellfireFlash
+    ok(fs2 and fs2.filter == "HELPFUL" and fs2.opts.candidateFilters.includeSpellIDs[1949], "a second button for the same buff: the flash over his box")
+    local fb = CreateFrame("Button")
+    fs2.opts.initializeFrame(fb)
+    ok(fb.bisFlash and fb.__w == sp.heal:GetWidth() - 2, "the flash: over his whole box, fading out", fb.__w)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1, "shown again within " .. BN.VOICE.every .. " s: no second Hellfire")
+    TICK(BN.VOICE.every + 1)
+    BN.quietUntil = GetTime() + 5
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1, "just after a /reload: quiet")
+    BN.quietUntil = 0
+    NS.RD.SetSw("hellvoice", false)
+    hb:GetScript("OnShow")(hb)
+    ok(#heardV == 1 and not NS.RD.Sw("hellvoice"), "the Hellfire voice switch off: quiet")
+    NS.RD.SetSw("hellvoice", true)
+    -- the Hellfire box switch: his container off (out of a fight)
+    NS.RD.SetSw("hell", false)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == false, "the Hellfire box switch off: the game draws nothing on his box")
+    NS.RD.SetSw("hell", true)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == true, "back on")
+    _G.C_VoiceChat = keepVC
+    local other = { unit = "party2", heal = CreateFrame("Button") }
+    other.heal:SetSize(74, 58)
+    EN.Box(other)
+    ok(BN.Container(other) == nil and not other.burnC, "a shaman's box: no container")
+    -- what a paint costs (lean and mean)
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 11684)
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n, by = Cost.Count(function() BN.Paint(sp, 4000) end)
+    ok(n <= 20, "one burning box's repaint: <= 20 client calls", n, Cost.Top(by, 4))
+    print(("   cost: a burning warlock's box, one repaint = %d calls (%s)"):format(n, Cost.Top(by, 3)))
+    -- nobody listens with no warlock in the group
+    BN.on, BN.tap = {}, {}
+    STATE.classes = { party1 = "SHAMAN" }
+    BN.armed = nil
+    ok(BN.Arm() == false and not (BN.events.__events and BN.events.__events.UNIT_AURA), "no warlock with you: not listening")
+    STATE.classes, BN.armed = keep.classes, nil
+    _G.C_UnitAuras.GetUnitAuraBySpellID, _G.C_Spell.GetSpellDescription = keep.get, keep.desc
+end
+
+-- REVELATION ON THE SYNERGY BAR (Reveal.lua, 20 Nov 2026 - Arn: "B, on the synergy bar")
+do
+    local RV, EN = NS.RV, NS.EN
+    local keepGet, keepHeads = _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads
+    local ON = {}                                       -- ON[id] = duration, or "secret"
+    _G.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+        local v = ON[id]
+        if v == nil then return nil end
+        if v == "secret" then return secret() end
+        return { spellId = id, duration = v }
+    end
+    local q = CreateFrame("Frame")
+    q:SetSize(150, 22)
+    EN.heads = { rip = q }
+    NS.DB().radar.reveal = nil
+    STATE.inCombat = false
+    local keepAvail = NS.FA.Available
+    NS.FA.Available = function() return false end      -- (first the word of our own: the client draws no auras)
+    RV.container = nil
+    ON[1248806] = 0                                     -- the enchant's own passive, always on you
+    ok(RV.Paint() == false and NS.DB().radar.reveal.passive[1248806], "the enchant's passive (duration 0) is never the buff - learned")
+    ON[1248808] = 15
+    ok(RV.Paint() == true and NS.DB().radar.reveal.buff == 1248808, "the proc (a real duration): up, and its id kept")
+    local fs = q.rip and q.rip.crit
+    ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
+    ON[1248808] = nil
+    ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
+    ON[1248808] = "secret"
+    ok(RV.Paint() == true and fs:IsShown(), "in a fight, a hidden answer about the known buff: up (a missing one answers nil)")
+    ON[1248808] = nil
+    RV.Paint()
+    -- the second road: the game's combat text ("<Revelation fades>" in Arn's shot)
+    local TEXT
+    local keepInfo, keepName = _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName
+    _G.GetCurrentCombatTextEventInfo = function() return TEXT end
+    _G.C_Spell.GetSpellName = function(id) return id == RV.IDS[1] and "Revelation" or nil end
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_START")
+    ok(RV.textUp and fs:IsShown(), "the game's combat text says Revelation starts: CRIT, even with the aura read silent")
+    TEXT = "Ancestral Fortitude"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown(), "another buff fading: CRIT stays")
+    TEXT = secret()
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown() and RV.seenText == "SPELL_AURA_END hidden name", "a hidden name is never compared")
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(not RV.textUp and not fs:IsShown(), "Revelation fades: CRIT goes")
+    _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName = keepInfo, keepName
+    -- THE GAME DRAWS IT (Arn: "tell it to draw something else like [Revelation] in our theme")
+    NS.FA.Available = keepAvail
+    RV.container = nil
+    RV.Paint()
+    local c = RV.container
+    ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
+    local rs = c.slots.BiSHealRevelation
+    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418] and rs.opts.candidateFilters.includeSpellIDs[1323377]
+       and rs.opts.candidateFilters.includeSpellIDs[1323400] and rs.opts.candidateFilters.includeSpellIDs[1323419]
+       and not rs.opts.candidateFilters.includeSpellIDs[1248806], "its one slot: Revelation's buff for every class (shaman, priest, druid, paladin...), never the passive")
+    local btn = CreateFrame("Button")
+    btn.Icon = btn:CreateTexture()
+    btn.Icon:Show()
+    rs.opts.initializeFrame(btn)                         -- (the client hands its button over while the buff is up)
+    ok(btn.bisCrit and btn.bisCrit:GetText() == "CRIT" and not btn.Icon:IsShown() and btn.__w == RV.BADGE.w,
+       "the game's button wears OUR badge: CRIT in the deck's tag look, Blizzard's icon hidden", btn.bisCrit and btn.bisCrit:GetText())
+    ON[1248808] = 15
+    RV.Paint()
+    ok(not fs:IsShown(), "with the game's badge built, our own word stays out (no second CRIT)")
+    ON[1248808] = nil
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n = Cost.Count(function() RV.Paint() end)
+    ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)
+    _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads = keepGet, keepHeads
+    NS.DB().radar.reveal = nil
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

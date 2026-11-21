@@ -1742,12 +1742,17 @@ RD.SW = {
     { key = "oath",   group = "PALADIN",   name = "Oath of Light cue",        tip = "Holy Light in the middle of the box of whoever carries your Oath of Light: your heals land harder there." },
     { key = "vigil",  group = "PALADIN",   name = "Light's Vigil + synergy",  tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil (that Holy Shock skips its cooldown and splashes their party), and the synergy bar on top counting its 30 s down." },
     { key = "swift",  group = "DRUID",     name = "Swiftmend + synergy",      tip = "Swiftmend in the middle of the box of whoever carries your Rejuvenation or Regrowth while it is ready, and the synergy bar on top: your newest one's time left." },
+    -- 20 Nov 2026 (Arn: "remember all these are toggles"): the warlock's Hellfire and Life Tap (Burn.lua), Revelation (Reveal.lua)
+    { key = "hell",   group = "YOUR GROUP", name = "Hellfire box",            tip = "A warlock's box catches fire while he channels Hellfire (it burns him every second). The game draws it, even in a fight." },
+    { key = "hellvoice", group = "YOUR GROUP", name = "Hellfire voice",       tip = "Your PC's voice says \"Hellfire\" when a warlock's box catches fire. At most once every 12 s a warlock." },
+    { key = "tap",    group = "YOUR GROUP", name = "Life Tap tag",            tip = "TAP in amber under a warlock's name for 3 s after he trades health for mana. Only when the game shows his cast (often not in a fight)." },
+    { key = "crit",   group = "EXTRAS",    name = "Revelation CRIT",          tip = "The Revelation weapon enchant's proc: a gold CRIT on the synergy bar while your next spell will crit. The game draws it, even in a fight." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
-             oath = true, vigil = true, swift = true },
+             oath = true, vigil = true, swift = true, hell = true, hellvoice = true, tap = true, crit = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
@@ -5428,6 +5433,10 @@ end
   middle of a box is kept for ONE thing - a sign that says heal THIS person now, with this. The Riptide mark is the first
   (a Riptide standing = Chain Heal starts here); the icon in the box's middle, edged white, over the health bar. ]]
 RD.CUE = { px = 20, edge = 1, col = { 1, 1, 1, 1 } }
+-- THE CUE IS A WORD, NOT AN ICON (20 Nov 2026, Arn: "the riptide buff is nice but maybe people will think if i click here
+-- ill riptide" - "maybe we write [Chain Heal] in a color that works on all class colors"): the spell to cast now, in white
+-- with a black outline on a dark box sized to it - white on black reads on every class colour the bar can be.
+RD.CUE_WORD = { font = "Fonts\\ARIALN.TTF", size = 10, padX = 3, padY = 1, back = { 0, 0, 0, 0.7 }, rip = "Chain Heal" }
 function RD.CueMark(sp)
     if sp.cue then return sp.cue end
     -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the health
@@ -5450,15 +5459,25 @@ function RD.CueMark(sp)
     m:SetPoint("CENTER", bar, "CENTER", 0, 0)
     b:SetSize(px + 2 * C.edge, px + 2 * C.edge)
     b:SetPoint("CENTER", m, "CENTER", 0, 0)
-    sp.cue = { hold = hold, edge = b, icon = m }
+    b:Hide() m:Hide()                                           -- (the icon kept for a later look; the word is the cue)
+    local W = RD.CUE_WORD
+    local back = hold:CreateTexture(nil, "OVERLAY", nil, 5)
+    back:SetColorTexture(W.back[1], W.back[2], W.back[3], W.back[4])
+    local word = hold:CreateFontString(nil, "OVERLAY", nil)
+    word:SetFont(W.font, W.size, "OUTLINE")
+    word:SetTextColor(1, 1, 1, 1)
+    word:SetPoint("CENTER", bar, "CENTER", 0, 0)
+    back:SetPoint("TOPLEFT", word, "TOPLEFT", -W.padX, W.padY)
+    back:SetPoint("BOTTOMRIGHT", word, "BOTTOMRIGHT", W.padX, -W.padY)
+    back:Hide() word:Hide()
+    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back }
     sp.ripHold = hold
     return sp.cue
 end
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
-    q.edge:SetShown(on and true or false)
-    q.icon:SetShown(on and true or false)
+    if on then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
 end
 
 --- The marks on the boxes: the Riptide icon in the middle (the heal cue) on EVERY box of whoever has one of yours standing.
@@ -5467,9 +5486,17 @@ function RD.RipMarks()
     -- EACH MARK ENDS WITH ITS OWN RIPTIDE (Arn's cousin, 16 Nov: "riptide one person and then another person but the icon
     -- stayed on two people, the second rip tide extended the timer for the first one"): the marks were cleared only at a
     -- cast or when the NEWEST one ran out; RD.ripNext = the soonest end, and the bar's ticker calls this when it comes
+    -- THE MARK GOES WHEN A CHAIN HEAL STARTED NOW COULD NOT LAND IN TIME (21 Nov 2026, Arn: "if the buff only has one
+    -- second left and the cast is 2.5 seconds, I won't benefit from that buff ... if my spell takes two seconds, we remove
+    -- it at" two seconds + the lag): shown while (its end - your Chain Heal's cast time with haste - your lag) is ahead
+    local lead = RD.CueLead(RD.CUE_WORD.rip)
     local nextAt
     for u, t in pairs(RD.rips) do
-        if t <= now then RD.rips[u] = nil elseif not nextAt or t < nextAt then nextAt = t end
+        if t <= now then RD.rips[u] = nil
+        else
+            local at = (t - lead > now) and (t - lead) or t        -- (the next change: the mark going, else the Riptide)
+            if not nextAt or at < nextAt then nextAt = at end
+        end
     end
     RD.ripNext = nextAt
     local cueNext = RD.CuePrune(now)
@@ -5478,16 +5505,17 @@ function RD.RipMarks()
     for _, sp in ipairs(RD.spokes or {}) do
         local shown = sp.unit and sp.deckPlate and sp.deckPlate:IsShown()
         local key = shown and RD.RipKey(sp.unit) or nil
-        local has = on and key and RD.rips[key]
-        local tex
+        local has = on and key and RD.rips[key] and RD.rips[key] - lead > now
+        local tex, word
         if key and RD.CueDead(sp.unit) then key, has = nil, nil end   -- (dead: nothing to heal there - the mark waits)
-        if has then tex = RD.SpellTex(RD.RIPTIDE) elseif deck and key then tex = RD.CueFor(key, now) end
-        if tex then
+        if has then tex, word = RD.SpellTex(RD.RIPTIDE), RD.CUE_WORD.rip elseif deck and key then tex, word = RD.CueFor(key, now) end
+        if tex or word then
             local q = RD.CueMark(sp)
             if q.tex ~= tex then q.tex = tex pcall(q.icon.SetTexture, q.icon, tex) end
-            if has then sp.ripMark = q.icon end
+            if q.text ~= word then q.text = word q.word:SetText(word or "") end
+            if has then sp.ripMark = q.word end
         end
-        if sp.cue then RD.CueShow(sp, tex ~= nil) end
+        if sp.cue then RD.CueShow(sp, (tex or word) ~= nil) end
     end
     RD.CueArm(cueNext)
 end
@@ -5663,13 +5691,28 @@ end
 --- The ended ones gone; answers the soonest time anything changes (an end, Swiftmend coming ready), or nil.
 function RD.CuePrune(now)
     local nextAt
-    for _, m in pairs(RD.cueMarks) do
-        for k, t in pairs(m) do
-            if t <= now then m[k] = nil elseif not nextAt or t < nextAt then nextAt = t end
+    for _, d in ipairs(RD.CUE_DEFS) do
+        local m = RD.cueMarks[d.key]
+        local lead = m and next(m) and RD.CueLead(d.show) or 0
+        for k, t in pairs(m or {}) do
+            if t <= now then m[k] = nil
+            else
+                local at = (t - lead > now) and (t - lead) or t
+                if not nextAt or at < nextAt then nextAt = at end
+            end
         end
     end
     if RD.swiftAt and RD.swiftAt > now and (not nextAt or RD.swiftAt < nextAt) then nextAt = RD.swiftAt end
     return nextAt
+end
+--- How long before a mark ends its cue must go: the payoff's cast time over your haste (an instant: 0) plus your lag -
+--- a cast started later lands after the buff is gone (Arn, 21 Nov). Plain numbers only; the book's own cast time.
+function RD.CueLead(spell)
+    local FM, EN = NS.FM, NS.EN
+    local ct = (FM and FM.SeqCastTime and spell and FM.SeqCastTime(spell)) or 2.5
+    if spell ~= "Chain Heal" and FM and FM.CAST_GUESS and ct == FM.CAST_GUESS then ct = 0 end   -- (an instant)
+    local haste = (FM and FM.Haste and FM.Haste()) or 0
+    return ct / (1 + haste / 100) + ((EN and EN.Lag and EN.Lag()) or 0)
 end
 --- The icon a person's box should show for a class cue (the highest prio standing), or nil.
 function RD.CueFor(key, now)
@@ -5677,11 +5720,11 @@ function RD.CueFor(key, now)
     for _, d in ipairs(RD.CUE_DEFS) do
         local m = RD.cueMarks[d.key]
         local t = m and m[key]
-        if t and t > now and RD.Sw(d.sw) and (d.gate ~= "swift" or RD.SwiftReady(now)) and (not best or d.prio > best.prio) then
+        if t and t - RD.CueLead(d.show) > now and RD.Sw(d.sw) and (d.gate ~= "swift" or RD.SwiftReady(now)) and (not best or d.prio > best.prio) then
             best = d
         end
     end
-    return best and RD.SpellTex(best.show) or nil
+    return best and RD.SpellTex(best.show) or nil, best and best.show or nil
 end
 --- One timer for the next change (never one per cue): the marks repainted then.
 function RD.CueArm(at)
