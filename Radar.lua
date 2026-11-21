@@ -5477,7 +5477,10 @@ end
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
-    if on then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    -- BiS Cues (21 Nov 2026): the cue card's LOOK - "icon" shows the spell's icon in the middle, else the word
+    local icon = on and q.ck and q.tex and NS.CU and NS.CU.Look(q.ck) == "icon"
+    if on and not icon then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    if icon then q.icon:Show() q.edge:Show() else q.icon:Hide() q.edge:Hide() end
 end
 
 --- The marks on the boxes: the Riptide icon in the middle (the heal cue) on EVERY box of whoever has one of yours standing.
@@ -5506,11 +5509,12 @@ function RD.RipMarks()
         local shown = sp.unit and sp.deckPlate and sp.deckPlate:IsShown()
         local key = shown and RD.RipKey(sp.unit) or nil
         local has = on and key and RD.rips[key] and RD.rips[key] - lead > now
-        local tex, word
+        local tex, word, ck
         if key and RD.CueDead(sp.unit) then key, has = nil, nil end   -- (dead: nothing to heal there - the mark waits)
-        if has then tex, word = RD.SpellTex(RD.RIPTIDE), RD.CUE_WORD.rip elseif deck and key then tex, word = RD.CueFor(key, now) end
+        if has then tex, word, ck = RD.SpellTex(RD.RIPTIDE), RD.CUE_WORD.rip, "rip" elseif deck and key then tex, word, ck = RD.CueFor(key, now) end
         if tex or word then
             local q = RD.CueMark(sp)
+            q.ck = ck
             if q.tex ~= tex then q.tex = tex pcall(q.icon.SetTexture, q.icon, tex) end
             if q.text ~= word then q.text = word q.word:SetText(word or "") end
             if has then sp.ripMark = q.word end
@@ -5724,7 +5728,7 @@ function RD.CueFor(key, now)
             best = d
         end
     end
-    return best and RD.SpellTex(best.show) or nil, best and best.show or nil
+    return best and RD.SpellTex(best.show) or nil, best and best.show or nil, best and best.sw or nil
 end
 --- One timer for the next change (never one per cue): the marks repainted then.
 function RD.CueArm(at)

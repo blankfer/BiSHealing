@@ -15574,6 +15574,10 @@ do
             local keepShown = RD.shownFor
             RD.shownFor = true                         -- the window standing in for the grid, as in the game
             d.radar.view, d.radar.sw = nil, nil
+            -- (BiS Cues, 21 Nov: the cue switches live in d.radar.cues; someone who had the deck keeps them on - CU.Stamp)
+            local keepCues = d.radar.cues
+            d.radar.cues, d.radar.swStamp = nil, d.radar.swStamp or 1
+            NS.CU.Stamp()
             for _, s in ipairs(RD.SW) do ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
             ok(RD.SwPresetNow() == "full", "and that is FULL")
             ok(RD.SetSw("names", false) == "now" and d.radar.sw.names == false and not RD.Sw("names"), "a switch off, saved, laid out now")
@@ -16545,6 +16549,7 @@ do
     local keep = { classes = STATE.classes, get = _G.C_UnitAuras and _G.C_UnitAuras.GetUnitAuraBySpellID,
                    desc = _G.C_Spell and _G.C_Spell.GetSpellDescription }
     STATE.classes = { party1 = "WARLOCK", party2 = "SHAMAN" }
+    NS.CU.DB().on.hell, NS.CU.DB().on.tap = true, true      -- (BiS Cues: both cues on, as a player who ticked them)
     ok(BN.Warlock("party1") and not BN.Warlock("party2") and not BN.Warlock("target"),
        "only a warlock in your group is looked at (never your target)")
     local WEAR = {}
@@ -16671,6 +16676,7 @@ end
 -- REVELATION ON THE SYNERGY BAR (Reveal.lua, 20 Nov 2026 - Arn: "B, on the synergy bar")
 do
     local RV, EN = NS.RV, NS.EN
+    NS.CU.DB().on.crit = true                           -- (BiS Cues: the Revelation cue on, as a player who ticked it)
     local keepGet, keepHeads = _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads
     local ON = {}                                       -- ON[id] = duration, or "secret"
     _G.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
@@ -16742,6 +16748,152 @@ do
     ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)
     _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads = keepGet, keepHeads
     NS.DB().radar.reveal = nil
+end
+
+-- BiS CUES (Cues.lua, 21 Nov 2026 - Arn's picks off the mockups page: the card, previews, the string, re-order in game)
+do
+    local CU, RD, BN = NS.CU, NS.RD, NS.BN
+    local r = NS.DB().radar
+    local keepCues, keepSw, keepStamp = r.cues, r.sw, r.swStamp
+    -- a NEW player: every cue off
+    r.cues, r.sw, r.swStamp = nil, nil, nil
+    CU.Stamp()
+    local anyOn = false
+    for _, q in ipairs(CU.LIST) do if CU.On(q.key) then anyOn = true end end
+    ok(not anyOn and not RD.Sw("hell") and not RD.Sw("hellvoice"), "a new player: every cue off (BiS Cues starts quiet)")
+    ok(RD.Sw("names"), "the deck's other switches untouched (nil still on)")
+    -- someone who had the deck, and had turned the Hellfire voice off
+    r.cues, r.sw, r.swStamp = nil, { hellvoice = false, tap = false }, 1
+    CU.Stamp()
+    ok(CU.On("hell") and not CU.On("tap") and CU.Sound("hell") == "off", "an old deck: its switches kept, the voice switch becomes Hellfire's sound")
+    ok(not CU.Stamp(), "the stamp runs once")
+    -- one truth: the switches panel and the card
+    ok(RD.SetSw("tap", true) and CU.On("tap") and RD.Sw("tap"), "the panel's switch turns the cue on")
+    CU.SetOn("tap", false)
+    ok(not RD.Sw("tap"), "the card turns it off; the panel reads the same")
+    RD.SetSw("hellvoice", true)
+    ok(CU.Sound("hell") == "voicename" and RD.Sw("hellvoice"), "the panel's voice switch: Hellfire's voice with the name")
+    RD.SwPreset("bare")
+    ok(not CU.On("hell") and not CU.On("rip"), "BARE: the cues off too")
+    RD.SwPreset("full")
+    ok(CU.On("hell") and CU.On("swift") and RD.SwPresetNow() == "full", "FULL: the cues on, and FULL still matches")
+    -- the order and the squares
+    r.cues.order = nil
+    CU.SetOn("tap", true)
+    local x1 = CU.SquareXY("hell")
+    local x2 = CU.SquareXY("tap")
+    ok(x1 == CU.SQUARE.x and x2 == CU.SQUARE.x + CU.SQUARE.px + CU.SQUARE.gap, "Hellfire's square first, Life Tap's next to it", x1 .. " " .. x2)
+    ok(CU.Move("tap", -1) == "now" and CU.Order()[1] == "tap", "re-order in game: Life Tap up")
+    ok(CU.SquareXY("tap") == CU.SQUARE.x and CU.SquareXY("hell") == x2, "the squares swap with it")
+    ok(CU.Move("tap", -1) == nil, "already first: nothing")
+    CU.SetOn("tap", false)
+    ok(CU.SquareXY("hell") == CU.SQUARE.x, "an off cue before it gives up its square")
+    STATE.inCombat = true
+    ok(CU.Move("tap", 1) == "after" and CU.pending, "in a fight: saved, laid out when it ends")
+    STATE.inCombat = false
+    fire(CU.events, "PLAYER_REGEN_ENABLED")
+    ok(not CU.pending, "the fight's end lays it out")
+    -- looks and sounds
+    ok(CU.SetLook("hell", "word") == "now" and CU.Look("hell") == "word" and CU.ModelOf("hell") == nil, "Hellfire as the word")
+    ok(CU.SetLook("hell", "nonsense") == nil and CU.Look("hell") == "word", "an unknown look: refused")
+    ok(CU.SetSound("hell", "kit:8959") and CU.Sound("hell") == "kit:8959", "a game sound")
+    local played
+    local keepPS = _G.PlaySound
+    _G.PlaySound = function(id, ch) played = { id, ch } return true end
+    CU.spoke = {}
+    ok(CU.Say("hell", "party1") and played and played[1] == 8959 and played[2] == "SFX", "the cue plays its game sound on the SFX channel")
+    played = nil
+    ok(not CU.Say("hell", "party1") and not played, "the same box again within 12 s: quiet")
+    ok(CU.Say("hell", "party1", true) and played, "TRY plays it anyway")
+    CU.SetOn("tap", false)
+    played = nil
+    ok(not CU.Say("tap", "party1") and not played, "an off cue never sounds")
+    _G.PlaySound = keepPS
+    ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "voicename", "BACK TO DEFAULT: the fireball and the voice")
+    ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
+    -- the middle cue's look
+    local sp = { cue = { word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
+                         icon = CreateFrame("Frame"):CreateTexture(), edge = CreateFrame("Frame"):CreateTexture(), ck = "rip", tex = 136037 } }
+    CU.SetLook("rip", "icon")
+    RD.CueShow(sp, true)
+    ok(sp.cue.icon:IsShown() and not sp.cue.word:IsShown(), "Riptide's cue as the icon: the icon, no word")
+    CU.SetLook("rip", "word")
+    RD.CueShow(sp, true)
+    ok(sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "as the word: the word, no icon")
+    RD.CueShow(sp, false)
+    ok(not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "no cue: neither")
+    -- the string
+    ok(CU.UnB64(CU.B64("a")) == "a" and CU.UnB64(CU.B64("ab")) == "ab" and CU.UnB64(CU.B64("abc")) == "abc", "base64 there and back, every padding")
+    ok(CU.B64("Man") == "TWFu" and CU.B64("Ma") == "TWE=", "the standard alphabet (what the browser's btoa writes)")
+    local back = CU.FromJSON(CU.JSON({ v = 1, order = { "hell", "tap" }, on = { hell = true }, look = { hell = "word" }, s = 'a"b\\c' }))
+    ok(back and back.v == 1 and back.order[2] == "tap" and back.on.hell == true and back.s == 'a"b\\c', "JSON there and back")
+    local bad, why = CU.FromJSON("{\"v\":1,")
+    ok(bad == nil and type(why) == "string", "broken JSON: nil and a reason", why)
+    CU.SetOn("hell", true) CU.SetOn("tap", true) CU.SetOn("rip", false) CU.SetLook("tap", "icon") CU.SetSound("hell", "kit:3090")
+    r.cues.order = { "tap", "hell" }
+    local s = CU.Export()
+    ok(s:match("^BiSCues1p:") ~= nil, "export: the plain form (until the game's gzip is proven)", s:sub(1, 20))
+    r.cues = { v = 1, stamp = 1 }
+    ok(CU.Import(s) == #CU.LIST, "import it back")
+    ok(CU.On("hell") and CU.On("tap") and not CU.On("rip") and CU.Look("tap") == "icon" and CU.Sound("hell") == "kit:3090"
+       and CU.Order()[1] == "tap", "everything as it was: on, look, sound, order")
+    local browser = "BiSCues1p:" .. CU.B64('{"v":1,"order":["swift","nonsense"],"on":{"swift":true,"nonsense":true},"look":{"swift":"rocket"},"extra":5}')
+    ok(CU.Import(browser) and CU.On("swift") and not CU.On("hell") and CU.Order()[1] == "swift" and CU.Look("swift") == "word",
+       "a string from elsewhere: unknown cues, looks and fields dropped")
+    local n0, w0 = CU.Import("hello")
+    ok(n0 == nil and w0:find("BiSCues1"), "not a cue string: refused, with a reason", w0)
+    local n1, w1 = CU.Import("BiSCues1p:" .. CU.B64('{"v":2}'))
+    ok(n1 == nil and w1:find("newer"), "a newer version's string: refused", w1)
+    local n2, w2 = CU.Import("BiSCues1:AAAA")
+    ok(n2 == nil and type(w2) == "string", "the zipped form without the game's unzip: refused, with a reason", w2)
+    -- the slash words keep the string's capitals
+    SlashCmdList.BISHEALING("import " .. s)
+    ok(CU.On("hell") and CU.Order()[1] == "tap", "/bish import <string>: the capitals survive the slash command")
+    -- the card
+    RD.BuildSwitches()
+    ok(RD.swPanel and RD.swPanel.cues, "the switches panel has a BiS CUES button")
+    RD.swPanel:Show()
+    RD.swPanel.cues:GetScript("OnClick")(RD.swPanel.cues)
+    local c = CU.card
+    ok(c and c:IsShown() and c.points[1][2] == RD.swPanel, "it opens the card beside the switches panel")
+    CU.sel = "hell"
+    CU.Paint()
+    ok(c.order[1].key == "tap" and c.order[2].key == "hell", "the order list in row order")
+    c.order[2].down:GetScript("OnClick")(c.order[2].down)
+    ok(CU.Order()[3] == "hell", "the down arrow moves Hellfire down")
+    c.look.q:SetText("fire")
+    c.look.q:GetScript("OnTextChanged")(c.look.q)
+    ok(c.look.rows[1].id == "model:198692" and not c.look.rows[2]:IsShown(), "search: 'fire' finds the Fireball only")
+    c.look.q:SetText("")
+    c.look.q:GetScript("OnTextChanged")(c.look.q)
+    c.sound.chips[3]:GetScript("OnClick")(c.sound.chips[3])
+    ok(c.sound.rows[1].id and c.sound.rows[1].id:match("^kit:") and c.sound.cat == "Bells", "a chip: only that category", c.sound.cat)
+    c.look.rows[2]:GetScript("OnClick")(c.look.rows[2])
+    ok(CU.Look("hell") == c.look.rows[2].id, "a click on a look picks it")
+    c.def:GetScript("OnClick")(c.def)
+    ok(CU.Look("hell") == "model:198692", "BACK TO DEFAULT")
+    c.export:GetScript("OnClick")(c.export)
+    ok(CU.strWin and CU.strWin:IsShown() and CU.strWin.edit:GetText():match("^BiSCues1p:"), "EXPORT shows the string to copy")
+    c.import:GetScript("OnClick")(c.import)
+    CU.strWin.edit:SetText(s)
+    CU.strWin.go:GetScript("OnClick")(CU.strWin.go)
+    ok(CU.strWin.status:GetText():find("Done"), "IMPORT takes a paste", CU.strWin.status:GetText())
+    -- the Hellfire badge: its square, its look
+    local box = CreateFrame("Frame")
+    local btn = CreateFrame("Button")
+    BN.badges = {}
+    CU.DB().order = { "tap", "hell" } CU.SetOn("tap", true) CU.SetOn("hell", true)
+    BN.BadgeOn(btn, box, nil, { unit = "party1" })
+    local pt = btn.points[1]
+    ok(pt and pt[4] == CU.SquareXY("hell", BN.FLAME.px) and pt[4] > CU.SQUARE.x, "the game's Hellfire button sits in its square (second, after Life Tap)", pt and pt[4])
+    CU.SetLook("hell", "word")
+    ok(btn.bisWord:IsShown() and not btn.bisIcon:IsShown(), "the word look: FIRE, no icon")
+    CU.SetLook("hell", "icon")
+    ok(btn.bisIcon:IsShown() and not btn.bisWord:IsShown() and (not btn.bisModel or not btn.bisModel:IsShown()), "the icon look: no turning model")
+    CU.Move("hell", -1)
+    ok(btn.points[1][4] == CU.SQUARE.x, "re-ordered out of a fight: the button moves to its new square")
+    c:Hide() if CU.strWin then CU.strWin:Hide() end RD.swPanel:Hide()
+    r.cues, r.sw, r.swStamp = keepCues, keepSw, keepStamp
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

@@ -2336,6 +2336,14 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "cues" or msg:match("^cues ") or msg == "export" or msg:match("^import") then
+        -- BiS Cues (Cues.lua): the card; the string out and in
+        -- (the string is base64 - its capitals matter, so the import gets what was typed, not the lowered msg)
+        if NS.CU then
+            local typed = tostring(input or ""):match("^%s*(.-)%s*$")
+            if msg == "export" or msg:match("^import") then NS.CU.Slash(typed:gsub("^%S+", string.lower))
+            else NS.CU.Slash((msg:gsub("^cues%s*", ""))) end
+        else Print("cues: not loaded") end
     elseif msg == "burn voice on" or msg == "burn voice off" then
         local on = not msg:find("off")
         if NS.RD and NS.RD.SetSw then NS.RD.SetSw("hellvoice", on) end   -- (the deck's switch - the panel shows it too)

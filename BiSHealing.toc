@@ -45,6 +45,8 @@ MiniBars.lua
 Burn.lua
 # Revelation (the weapon enchant's proc: your next spell crits) = a gold CRIT on the synergy bar
 Reveal.lua
+# BiS Cues: one card for every cue - its look, its sound, its place in the cue row; the import string
+Cues.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

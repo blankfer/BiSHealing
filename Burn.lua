@@ -115,6 +115,7 @@ function BN.Cast(event, unit, id)
         if event == "UNIT_SPELLCAST_CHANNEL_STOP" then return stop(unit) end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and BN.LIFETAP[sid] then
         BN.tap[unit] = now() + BN.TAP_FOR
+        if NS.CU then NS.CU.Say("tap", unit) end            -- (BiS Cues: Life Tap's sound, off unless picked)
         return true
     end
     return false
@@ -160,7 +161,7 @@ function BN.Parts(e)
     end
     local tag = e.box:CreateFontString(nil, "OVERLAY")
     tag:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
-    tag:SetPoint("TOPLEFT", e.box, "TOPLEFT", 4, -15)        -- under the callsign (RD.DECK_TAG y -4, size 9)
+    BN.PlaceTag(tag, e.box)                                  -- under the callsign, in Life Tap's square of the cue row
     tag:SetTextColor(BN.AMBER[1], BN.AMBER[2], BN.AMBER[3], 1)
     tag:SetText("TAP")
     tag:Hide()
@@ -292,9 +293,15 @@ function BN.Words(unit)
     return BN.VOICE.text
 end
 function BN.Speak(key, unit)
+    local t = GetTime and GetTime() or 0
+    -- BiS Cues (21 Nov 2026): Hellfire's sound is the cue card's pick - the voice with his name (as before), the voice,
+    -- a game sound, or off
+    if NS.CU then
+        if t < BN.quietUntil then return false end
+        return NS.CU.Say("hell", unit)
+    end
     local d = NS.DB and NS.DB().radar
     if (d and d.burnVoice == false) or not BN.Sw("hellvoice") or not BN.Sw("hell") then return false end
-    local t = GetTime and GetTime() or 0
     if t < BN.quietUntil then return false end
     if key and BN.spoke[key] and t - BN.spoke[key] < BN.VOICE.every then return false end
     if key then BN.spoke[key] = t end
@@ -311,12 +318,16 @@ function BN.BadgeOn(button, box, pip, sp)
     local F = BN.FLAME
     -- (21 Nov 2026, Arn: "can we just add a 3d model of fire under their name with 15s numbers?" - the burning border is
     -- gone: a small square under his callsign, the Hellfire icon under a turning 3D fireball, the client's own countdown)
+    -- (BiS Cues: its square in the cue row, in the cue order - CU.SquareXY)
+    local x, y = F.x, F.y
+    if NS.CU then x, y = NS.CU.SquareXY("hell", F.px) end
     local placed = pcall(function()
         button:SetSize(F.px, F.px)
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", box, "TOPLEFT", F.x, F.y)
+        button:SetPoint("TOPLEFT", box, "TOPLEFT", x, y)
     end)
     if not placed then BN.drawSeen = "button refused" return end
+    BN.badges[#BN.badges + 1] = { button = button, box = box }
     pcall(function()
         if button.GetRegions then
             for _, r in ipairs({ button:GetRegions() }) do if r.SetTexture and r.Hide then r:Hide() end end
@@ -369,11 +380,61 @@ function BN.BadgeOn(button, box, pip, sp)
                 button.bisCount = cd
             end
         end
+        -- the cue card's LOOK as the word: FIRE in white on a dark square (made now, shown by BN.Relook)
+        local w = button:CreateFontString(nil, "OVERLAY")
+        w:SetFont("Fonts\\ARIALN.TTF", 9, "OUTLINE")
+        w:SetPoint("CENTER", button, "CENTER", 0, 0)
+        w:SetText(NS.CU and NS.CU.Word("hell") or "FIRE")
+        button.bisWord = w
         -- the voice when the game SHOWS the button (Arn: "everytime i reload it says hellfire" - the client makes the
         -- button ahead of time, at the reload; made is not shown)
         if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box, sp and sp.unit) end) end
     end)
+    BN.Relook(button)
     BN.drawn = (BN.drawn or 0) + 1
+end
+
+--- BiS Cues: the badges made so far (each the client's button, kept to re-place and re-dress out of a fight).
+BN.badges = {}
+--- Dress one badge (or all) in the cue card's look: the turning model, the spell's icon, or the word.
+function BN.Relook(button)
+    local CU = NS.CU
+    local look = CU and CU.Look("hell") or "model"
+    local model = CU and CU.ModelOf("hell") or (not CU and BN.FLAME.model) or nil
+    local list = button and { { button = button } } or BN.badges
+    for _, b in ipairs(list) do
+        local btn = b.button
+        if btn.bisModel then
+            if model then pcall(btn.bisModel.SetModel, btn.bisModel, model) btn.bisModel:Show() else btn.bisModel:Hide() end
+        end
+        if btn.bisIcon then if look == "word" then btn.bisIcon:Hide() else btn.bisIcon:Show() end end
+        if btn.bisWord then if look == "word" then btn.bisWord:Show() else btn.bisWord:Hide() end end
+    end
+    return #list
+end
+--- Out of a fight: every badge to its square in the cue order, and the TAP tags with them. Answers how many moved.
+function BN.Relayout()
+    if fightNow() then return 0 end
+    local n = 0
+    local F = BN.FLAME
+    local x, y = F.x, F.y
+    if NS.CU then x, y = NS.CU.SquareXY("hell", F.px) end
+    for _, b in ipairs(BN.badges) do
+        if pcall(function() b.button:ClearAllPoints() b.button:SetPoint("TOPLEFT", b.box, "TOPLEFT", x, y) end) then n = n + 1 end
+    end
+    BN.Relook()
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        local B = sp.en and sp.en.burn
+        if B and B.tag then BN.PlaceTag(B.tag, sp.en.box) end
+    end
+    return n
+end
+--- The TAP tag in Life Tap's square of the cue row.
+function BN.PlaceTag(tag, box)
+    local x, y = 4, -15
+    if NS.CU then x, y = NS.CU.SquareXY("tap", BN.FLAME.px) x, y = x + 1, y - 1 end
+    tag:ClearAllPoints()
+    tag:SetPoint("TOPLEFT", box, "TOPLEFT", x, y)
 end
 
 --- The flash: the client's second button over his whole box, a bright edge that fades out in `flashT` s each time it shows.
