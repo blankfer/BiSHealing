@@ -473,14 +473,15 @@ async function selfTest() {
   var LOOKS = [
     ["icon", "Spell icon"],
     ["word", "Payoff word"],
-    ["model:Fireball", "3D: Fireball (sample)"],
-    ["model:HolyGlow", "3D: Holy glow (sample)"],
-    ["model:WaterSwirl", "3D: Water swirl (sample)"]
+    ["model:198692", "3D: Fireball"]
   ];
+  // (the same lists as Cues.lua's CU.LOOKS / CU.SOUNDS - the game drops anything it does not know)
   var KITS = [
-    ["kit:8959", "Game sound: raid warning (sample)"],
-    ["kit:8960", "Game sound: ready check (sample)"],
-    ["kit:888", "Game sound: level up (sample)"]
+    ["kit:8959", "Game sound: raid warning"],
+    ["kit:8960", "Game sound: ready check"],
+    ["kit:3090", "Game sound: thunder"],
+    ["kit:1506", "Game sound: lightning crack"],
+    ["kit:6161", "Game sound: devilsaur roar"]
   ];
   var PEOPLE = [
     { name: "MOO",  cls: "warrior", role: "TANK", g: 1, hp: 58, max: 9800, mid: "rip" },
