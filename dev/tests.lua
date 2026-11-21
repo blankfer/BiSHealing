@@ -15789,6 +15789,24 @@ do
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
                 ok(tsp.ripMark:GetText() == "Chain Heal" and tsp.cue.back:IsShown(), "the mark is the spell to cast - Chain Heal in white on a dark box (Arn: people would think a click there casts Riptide)", tsp.ripMark:GetText())
+                do   -- THE MARK GOES WHEN A CHAIN HEAL COULD NOT LAND IN TIME (Arn: "if my spell takes two seconds, we remove it at" 2 s + lag)
+                    local keepCT, keepNS = NS.FM.SeqCastTime, _G.GetNetStats
+                    NS.FM.SeqCastTime = function(sp) if sp == "Chain Heal" then return 2.0 end return keepCT(sp) end
+                    _G.GetNetStats = function() return 0, 0, 90, 90 end
+                    local lead = RD.CueLead("Chain Heal")
+                    local rk = RD.RipKey(tsp.unit)
+                    local keepEnd = RD.rips[rk]
+                    ok(math.abs(lead - (2.0 / (1 + ((NS.FM.Haste and NS.FM.Haste()) or 0) / 100) + 0.09)) < 1e-9, "the lead: your Chain Heal's cast time over your haste + 90 ms lag", lead)
+                    RD.rips[rk] = GetTime() + lead + 0.1
+                    RD.RipMarks()
+                    ok(tsp.ripMark:IsShown(), "a Chain Heal started now still lands inside the Riptide: the mark shows")
+                    TICK(0.2)
+                    RD.RipMarks()
+                    ok(not tsp.ripMark:IsShown() and RD.rips[rk], "0.1 s short of the cast + lag: the mark goes (the Riptide itself still counts on the bar)")
+                    RD.rips[rk] = keepEnd
+                    NS.FM.SeqCastTime, _G.GetNetStats = keepCT, keepNS
+                    RD.RipMarks()
+                end
                 local q = tsp.cue
                 ok(q and q.word:IsShown() and not q.icon:IsShown() and q.word.__color and q.word.__color[1] == 1 and q.word.__color[3] == 1,
                    "white letters (every class colour under them), the icon gone - no Riptide to click")
