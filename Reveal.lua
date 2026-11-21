@@ -15,7 +15,10 @@ NS = NS or {}
 local RV = {}
 NS.RV = RV
 
-RV.IDS = { 1248806, 1248808, 1323377, 1323392, 1323400, 1323410, 1323418, 1323419 }
+-- THE BUFF IS 1323418 (Arn's tooltip, 20 Nov: "Revelation, Spell ID: 1323418 - Critical Strike chance of your next
+-- non-periodic spell increased by 100%", seconds remaining) - asked first; the rest stay as a fallback. In a fight even
+-- your own aura answers nil (his BiS? probe with it up: all eight nil), so the combat text below is the road there.
+RV.IDS = { 1323418, 1248806, 1248808, 1323377, 1323392, 1323400, 1323410, 1323419 }
 RV.WORD = "CRIT"
 RV.COL = { 1.00, 0.83, 0.30 }
 
