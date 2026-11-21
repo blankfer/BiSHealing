@@ -16594,6 +16594,41 @@ do
     _G.C_UnitAuras.GetUnitAuraBySpellID, _G.C_Spell.GetSpellDescription = keep.get, keep.desc
 end
 
+-- REVELATION ON THE SYNERGY BAR (Reveal.lua, 20 Nov 2026 - Arn: "B, on the synergy bar")
+do
+    local RV, EN = NS.RV, NS.EN
+    local keepGet, keepHeads = _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads
+    local ON = {}                                       -- ON[id] = duration, or "secret"
+    _G.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+        local v = ON[id]
+        if v == nil then return nil end
+        if v == "secret" then return secret() end
+        return { spellId = id, duration = v }
+    end
+    local q = CreateFrame("Frame")
+    q:SetSize(150, 22)
+    EN.heads = { rip = q }
+    NS.DB().radar.reveal = nil
+    STATE.inCombat = false
+    ON[1248806] = 0                                     -- the enchant's own passive, always on you
+    ok(RV.Paint() == false and NS.DB().radar.reveal.passive[1248806], "the enchant's passive (duration 0) is never the buff - learned")
+    ON[1248808] = 15
+    ok(RV.Paint() == true and NS.DB().radar.reveal.buff == 1248808, "the proc (a real duration): up, and its id kept")
+    local fs = q.rip and q.rip.crit
+    ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
+    ON[1248808] = nil
+    ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
+    ON[1248808] = "secret"
+    ok(RV.Paint() == true and fs:IsShown(), "in a fight, a hidden answer about the known buff: up (a missing one answers nil)")
+    ON[1248808] = nil
+    RV.Paint()
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n = Cost.Count(function() RV.Paint() end)
+    ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)
+    _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads = keepGet, keepHeads
+    NS.DB().radar.reveal = nil
+end
+
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
       or ("!! BiS Healing: " .. fail .. " of " .. checks .. " failed"))
 os.exit(fail == 0 and 0 or 1)

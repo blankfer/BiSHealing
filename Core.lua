@@ -2108,7 +2108,7 @@ function NS.DO.help()
     Print("  |cffb980ffoverword|r off / any / half / 75%   |cffb980ffoverbutton|r left / right / wheel / thumb1 / thumb2")
     Print("  |cffb980ffwheel|r frames / ours / everywhere  where the wheel binds work")
     Print("  |cffb980ffpad|r on / off  heal with a controller (D-pad lights a person, A B X Y = your binds)")
-    Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r |cffb980ffburn|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
+    Print("  |cffb980ffrange|r |cffb980ffoverheal|r |cffb980ffhealabsorb|r |cffb980ffburn|r |cffb980ffreveal|r  measurements  |cffb980ffhits reset|r|cff968ead/rst|r  count again")
     Print("  the grey word after a command is the short way to type it")
 end
 
@@ -2336,6 +2336,8 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "reveal" then
+        if NS.RV and NS.RV.Status then NS.RV.Status() end
     elseif msg == "byid" then
         NS.DO.byid()
     elseif msg == "curve" then
