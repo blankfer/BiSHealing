@@ -269,7 +269,7 @@ end)
   pointed at his unit out of a fight only. ]]
 BN.DRAW_IDS = {}
 for _, id in ipairs(BN.HELLFIRE) do BN.DRAW_IDS[id] = true end
-BN.FLAME = { edge = 2, glow = 3, tip = 1, red = { 1, 0.18, 0.05, 0.9 }, gold = { 1, 0.85, 0.3, 0.9 }, beat = { 0.17, 0.11 } }
+BN.FLAME = { edge = 2, glow = 3, tip = 1, red = { 0.95, 0.15, 0.05, 1 }, gold = { 1, 0.8, 0.2, 1 }, beat = { 0.17, 0.11 } }
 -- THE VOICE (the games' road: the PC's own voice, C_VoiceChat.SpeakText - heard on Forever 17 Nov): "Hellfire" when the
 -- game shows his burning box, at most once every `every` s a box; db().radar.burnVoice = false keeps it quiet.
 BN.VOICE = { text = "Hellfire", every = 12, rate = 0, volume = 100 }
@@ -322,7 +322,6 @@ function BN.BadgeOn(button, box, pip)
                 t:SetPoint(e[1], hold, e[1], 0, 0)
                 t:SetPoint(e[2], hold, e[2], 0, 0)
                 if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
-                if t.SetBlendMode then t:SetBlendMode("ADD") end
             end
             return hold
         end
@@ -335,9 +334,11 @@ function BN.BadgeOn(button, box, pip)
             ag:Play()
         end
         local F = BN.FLAME
+        -- side by side, never stacked (Arn's 23:55 shot: three ADD layers on one edge summed to WHITE) and all inside the
+        -- box (it clips what runs past its edge): orange at the edge, the red band inside it, the gold line inside that
         ring(button, F.edge, BN.FIRE, 0)
-        flicker(ring(button, F.glow, F.red, 1), 0.25, F.beat[1])
-        flicker(ring(button, F.tip, F.gold, 2), 0.1, F.beat[2])
+        flicker(ring(button, F.glow, F.red, -F.edge), 0.3, F.beat[1])
+        flicker(ring(button, F.tip, F.gold, -(F.edge + F.glow)), 0.1, F.beat[2])
         if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box) end) end
     end)
     BN.Speak(box)
