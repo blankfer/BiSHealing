@@ -56,10 +56,10 @@ for name, kind in pairs(FX.SPELLS) do FX.NAME[kind] = name end
 FX.KEY = { vigil = "fxvigil", mend = "fxmend", poh = "fxpoh", wild = "fxwild" }
 FX.KEYS = { "fxvigil", "fxmend", "fxpoh", "fxwild" }
 FX.SWITCHES = {
-    { key = "fxvigil", group = "CLASS EFFECTS", name = "Light's Vigil burst",     tip = "Paladin. When your Holy Shock lands on someone carrying your Light's Vigil, gold rays from their box to every box it also healed, and a gold ring on each." },
-    { key = "fxmend",  group = "CLASS EFFECTS", name = "Prayer of Mending hops",  tip = "Priest. Each time your Prayer of Mending heals someone and jumps on, a white arc from the last box it healed to the new one, with the heals it has left when the game says." },
-    { key = "fxpoh",   group = "CLASS EFFECTS", name = "Prayer of Healing pulse", tip = "Priest. A white ring on every box your Prayer of Healing healed." },
-    { key = "fxwild",  group = "CLASS EFFECTS", name = "Wild Growth bloom",       tip = "Druid. A soft green glow on every box your Wild Growth reached, fading over its 7 seconds." },
+    { key = "fxvigil", group = "CLASS EFFECTS", class = "PALADIN", name = "Light's Vigil burst",     tip = "Paladin. When your Holy Shock lands on someone carrying your Light's Vigil, gold rays from their box to every box it also healed, and a gold ring on each." },
+    { key = "fxmend",  group = "CLASS EFFECTS", class = "PRIEST", name = "Prayer of Mending hops",  tip = "Priest. Each time your Prayer of Mending heals someone and jumps on, a white arc from the last box it healed to the new one, with the heals it has left when the game says." },
+    { key = "fxpoh",   group = "CLASS EFFECTS", class = "PRIEST", name = "Prayer of Healing pulse", tip = "Priest. A white ring on every box your Prayer of Healing healed." },
+    { key = "fxwild",  group = "CLASS EFFECTS", class = "DRUID", name = "Wild Growth bloom",       tip = "Druid. A soft green glow on every box your Wild Growth reached, fading over its 7 seconds." },
 }
 
 FX.SAME = 0.06            -- one frame (the Chain Heal path's RD.BOUNCE_SAME)

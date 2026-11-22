@@ -504,6 +504,8 @@ local function newFrame(kind, name, parent)
             Show     = function(self2) self2.__shown = true end,
             Hide     = function(self2) self2.__shown = false end,
             IsShown  = function(self2) return self2.__shown end,
+            -- the client's label has SetShown too (21 Nov 2026: an auto no-op here left a hidden group tag "shown")
+            SetShown = function(self2, v) self2.__shown = v and true or false end,
             __parent = self,
             GetParent = function(self2) return self2.__parent end,
             __size   = FONT_SIZE[template or ""] or 12,
@@ -15575,17 +15577,23 @@ do
             RD.shownFor = true                         -- the window standing in for the grid, as in the game
             d.radar.view, d.radar.sw = nil, nil
             -- (BiS Cues, 21 Nov: the cue switches live in d.radar.cues; someone who had the deck keeps them on - CU.Stamp)
-            local keepCues = d.radar.cues
             d.radar.cues, d.radar.swStamp = nil, d.radar.swStamp or 1
             NS.CU.Stamp()
-            for _, s in ipairs(RD.SW) do ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            for _, s in ipairs(RD.SW) do
+                -- (the raid layout's two start OFF: a new part of the layout nobody asked for yet - sheet 6)
+                if s.off then ok(not RD.Sw(s.key), "nothing switched yet: " .. s.key .. " OFF (nobody's deck changes)")
+                else ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            end
             ok(RD.SwPresetNow() == "full", "and that is FULL")
             ok(RD.SetSw("names", false) == "now" and d.radar.sw.names == false and not RD.Sw("names"), "a switch off, saved, laid out now")
             local sp1 = RD.spokes[RD.conOrder[1]]
             ok(sp1.deckTag and not sp1.deckTag:IsShown(), "names off: no name on the boxes")
             ok(RD.SetSw("nonsense", false) == nil, "an unknown switch: nothing")
             ok(RD.SwPreset("bare") == "now" and RD.SwPresetNow() == "bare", "BARE: everything off")
-            for _, s in ipairs(RD.SW) do ok(d.radar.sw[s.key] == false, "bare: " .. s.key .. " off") end
+            for _, s in ipairs(RD.SW) do
+                if s.layout then ok(d.radar.sw[s.key] == nil, "bare: the layout switch " .. s.key .. " left as it was (presets are the look)")
+                else ok(d.radar.sw[s.key] == false, "bare: " .. s.key .. " off") end
+            end
             ok(RD.slots[1].rb == nil, "kicks off: no kick button armed anywhere")
             ok(not RD.tide or not RD.tide:IsShown(), "tools off: the tools out of sight")
             ok(not (EN.rail and EN.rail:IsShown()), "fuel off: no fuel strip")
@@ -15629,7 +15637,7 @@ do
             RD.frame:SetScript("OnDragStart", keepDS)
             ok(started == 1, "a drag on the band moves the window (the window's own drag)")
             -- the panel
-            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == #RD.SW, "the switches button opens the list, a row each")
+            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class)")
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
             ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
             ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
@@ -16389,6 +16397,380 @@ do
     _G.GetUnitName = keepGUN
     if NS.AlphaApply then NS.AlphaApply() end
     if RD.On() then RD.Arm() end
+end
+
+-- RAID GROUPS AND THE SIZE TIERS (21 Nov 2026, BiS Cues sheets 6 and 7; Arn: "which box is group 2?" and "dragging the
+-- window narrower never piles icons"; then: "the bar cant have clickable things on frame or people will miss click and the
+-- bar must always go to the end of the box no empty space")
+do
+    local RD, d = NS.RD, NS.DB()
+    local keep = { units = STATE.units, classes = STATE.classes, roles = STATE.roles, look = d.look, alpha = d.alpha,
+                   raid = _G.IsInRaid, num = _G.GetNumGroupMembers, info = _G.GetRaidRosterInfo, isu = _G.UnitIsUnit,
+                   umax = _G.UnitHealthMax, shown = RD.shownFor, gun = _G.GetUnitName }
+    STATE.units = { player = true, party1 = true, party2 = true, party3 = true, party4 = true }
+    STATE.classes = { party1 = "WARRIOR", party2 = "MAGE", party3 = "PRIEST", party4 = "HUNTER" }
+    STATE.roles = nil
+    d.look, d.alpha = "radar", true
+    d.radar = d.radar or {}
+    d.radar.view, d.radar.sw, d.radar.deckW, d.radar.boxH, d.radar.deckSort, RD.FORCE_DISC = nil, nil, nil, nil, nil, false
+    RD.shownFor = true                                   -- the window standing in for the grid, as in the game
+
+    -- the boxes as one line each, in the same words as the dump taken from the deck BEFORE this change (21 Nov)
+    local function r(fr) if not fr then return "-" end local q = fr.points and fr.points[1]
+        return q and string.format("%s:%.1f,%.1f,%sx%s,%s", tostring(q[1]), q[4] or 0, q[5] or 0, tostring(fr.__w), tostring(fr.__h),
+                                   fr:IsShown() and "s" or "h") or "nopt" end
+    local function dump()
+        local out = {}
+        for i, sp in ipairs(RD.spokes) do
+            if sp.deckPlate and sp.deckPlate:IsShown() then
+                local cs = {}
+                for _, c in ipairs(sp.cures or {}) do cs[#cs + 1] = r(c.box) end
+                out[#out + 1] = string.format("%d %s P%s H%s K%s C[%s] T%s", i, tostring(sp.unit), r(sp.deckPlate), r(sp.heal),
+                    r(sp.bogey), table.concat(cs, ";"), tostring(sp.deckTag and sp.deckTag.text.__w))
+            end
+        end
+        out[#out + 1] = "frame " .. tostring(RD.frame.__w) .. "x" .. tostring(RD.frame.__h)
+        return table.concat(out, "|")
+    end
+    local TODAY = table.concat({
+        "1 player PCENTER:54.5,-136.0,93x58,s HCENTER:54.5,-124.5,91x33,s KCENTER:21.0,-153.0,22x22,s C[CENTER:88.0,-153.0,22x22,s;CENTER:64.0,-153.0,22x22,s] T87",
+        "2 party1 PCENTER:70.5,-69.0,125x70,s HCENTER:70.5,-57.5,123x45,s KCENTER:21.0,-92.0,22x22,s C[CENTER:120.0,-92.0,22x22,s;CENTER:96.0,-92.0,22x22,s] T119",
+        "3 party2 PCENTER:150.5,-136.0,93x58,s HCENTER:150.5,-124.5,91x33,s KCENTER:117.0,-153.0,22x22,s C[CENTER:184.0,-153.0,22x22,s;CENTER:160.0,-153.0,22x22,s] T87",
+        "4 party3 PCENTER:246.5,-136.0,93x58,s HCENTER:246.5,-124.5,91x33,s KCENTER:213.0,-153.0,22x22,s C[CENTER:280.0,-153.0,22x22,s;CENTER:256.0,-153.0,22x22,s] T87",
+        "5 party4 PCENTER:343.0,-136.0,94x58,s HCENTER:343.0,-124.5,92x33,s KCENTER:309.0,-153.0,22x22,s C[CENTER:377.0,-153.0,22x22,s;CENTER:353.0,-153.0,22x22,s] T88",
+        "6 target PCENTER:198.5,-69.0,125x70,s HCENTER:198.5,-57.5,123x45,s KCENTER:21.0,-214.0,22x22,h C[CENTER:248.0,-92.0,22x22,s;CENTER:224.0,-92.0,22x22,s] T119",
+        "7 targettarget PCENTER:327.0,-69.0,126x70,s HCENTER:327.0,-57.5,124x45,s KCENTER:98.0,-214.0,22x22,h C[CENTER:377.0,-92.0,22x22,s;CENTER:353.0,-92.0,22x22,s] T120",
+        "frame 398x201" }, "|")
+
+    -- THE COLD START: a login with nothing clicked is today's party deck, to the pixel
+    fire(RD.events, "PLAYER_ENTERING_WORLD")
+    ok(RD.Deck() and dump() == TODAY, "a fake login with nothing clicked: the party deck exactly as before the raid-group work", dump())
+    ok(RD.Sw("gtag") == false and RD.Sw("cols") == false and RD.DeckSort() == "tanks" and d.radar.sw == nil and d.radar.deckSort == nil,
+       "and nothing new is on: no group tags, groups as rows, tanks then groups - none of it written")
+    local anyG = false
+    for _, sp in ipairs(RD.spokes) do if sp.deckTag and sp.deckTag.group and sp.deckTag.group:IsShown() then anyG = true end end
+    ok(not anyG, "no G tag on any box")
+    -- from here on everybody has a long two-part name (Forever's), so the name's room is really tested
+    _G.GetUnitName = function(u) return "Quandaledingle" .. tostring(u):gsub("%A", "") .. " Surname" end
+
+    -- THE SETTINGS
+    ok(RD.SetDeckSort("group") == "now" and d.radar.deckSort == "group" and RD.DeckSort() == "group", "the sort saved per character")
+    ok(RD.Deck() and RD.deckTanks == 0, "by group: nobody lifted into a tank row")
+    local seq = {}
+    for k = 1, 4 do local _, nx = RD.NextSort() seq[k] = nx end
+    ok(table.concat(seq, ",") == "class,maxhp,tanks,group", "a click moves to the next sort, round and round", table.concat(seq, ","))
+    ok(RD.SetDeckSort("tanks") and d.radar.deckSort == nil, "tanks, then groups is the default: nothing kept for it")
+    ok(RD.SetDeckSort("nonsense") == nil and RD.DeckSort() == "tanks", "an unknown sort: nothing")
+    RD.SetRaidSettings({ gtag = true, cols = true, sort = "class", junk = 1 })
+    local rs = RD.RaidSettings()
+    ok(rs.gtag == true and rs.cols == true and rs.sort == "class", "the BiS Cues string's raid part: written and read back")
+    RD.SwPreset("bare")
+    ok(RD.Sw("gtag") and RD.Sw("cols"), "a preset is the look: it leaves the raid layout alone")
+    RD.SwPreset("full")
+    ok(RD.SwPresetNow() == "full", "and FULL still reads as FULL with the layout switches on")
+    RD.SwReset()
+    ok(not RD.Sw("gtag") and not RD.Sw("cols") and RD.DeckSort() == "tanks", "RESET: the raid layout back to its own")
+    -- the panel: a row each for the two switches, and the sort row that cycles
+    RD.ToggleSwitches()
+    local p = RD.swPanel
+    ok(p.sortRow and p.sortRow.text.__text == "Sort: Tanks, then groups", "the panel's sort row says the sort now",
+       p.sortRow and p.sortRow.text.__text)
+    p.sortRow:GetScript("OnClick")(p.sortRow)
+    ok(RD.DeckSort() == "group" and p.sortRow.text.__text == "Sort: By group", "a click: the next sort, and the row says so")
+    local gRow
+    for _, row in ipairs(p.rows) do if row.key == "gtag" then gRow = row end end
+    ok(gRow and not gRow.box.fill:IsShown(), "the group tag row, unticked")
+    gRow:GetScript("OnClick")(gRow)
+    ok(RD.Sw("gtag") and gRow.box.fill:IsShown(), "clicked: group tags on")
+    RD.SwReset()
+    if p:IsShown() then RD.ToggleSwitches() end
+
+    -- THE ORDER (out of a fight, the same answer every time)
+    local units = { "player", "party1", "party2", "party3", "party4" }
+    local o = RD.DeckOrder(units, 5, "class", false)
+    local names = {}
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "party1,player,party3,party4,party2",
+       "by class: warrior, shaman (you), priest, hunter, mage", table.concat(names, ","))
+    local mx = { player = 3000, party1 = 9000, party2 = 4000, party3 = 4000, party4 = 1000 }
+    _G.UnitHealthMax = function(u) return mx[u] end
+    o = RD.DeckOrder(units, 5, "maxhp", false)
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "party1,party2,party3,player,party4", "by max health, a tie by place", table.concat(names, ","))
+    _G.UnitHealthMax = function() return secretNumber() end
+    o = RD.DeckOrder(units, 5, "maxhp", false)
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "player,party1,party2,party3,party4", "max health unreadable (a secret): group order",
+       table.concat(names, ","))
+    _G.UnitHealthMax = keep.umax
+
+    -- A RAID: n people, group of each from `groupOf`; raid7 a named tank (group 2); raid1 is you
+    local function raid(n, groupOf, pets)
+        _G.IsInRaid = function() return true end
+        _G.GetNumGroupMembers = function() return n end
+        _G.GetRaidRosterInfo = function(i) if i <= n then return "n" .. i, 0, groupOf(i) end return nil end
+        _G.UnitIsUnit = function(a, b) return a == b or (a == "raid1" and b == "player") or (b == "raid1" and a == "player") end
+        local cls = { "WARRIOR", "PRIEST", "MAGE", "ROGUE", "HUNTER", "DRUID", "WARLOCK", "PALADIN", "SHAMAN" }
+        STATE.units, STATE.classes = { player = true }, {}
+        for i = 1, n do STATE.units["raid" .. i] = true STATE.classes["raid" .. i] = cls[(i * 7) % 9 + 1] end
+        for i = 1, pets or 0 do STATE.units["raidpet" .. i] = true end
+        STATE.roles = { raid7 = "TANK" }
+        RD.Arm()
+    end
+    local function even(i) return math.ceil(i / 5) end
+    -- 23 people, group 2 only three strong (6-8), the others five: the groups after it must not shift
+    local function holes(i) if i <= 5 then return 1 elseif i <= 8 then return 2 end return math.ceil((i - 8) / 5) + 2 end
+
+    raid(23, holes)
+    local function spOf(u) for _, sp in ipairs(RD.spokes) do if sp.unit == u and sp.deckPlate and sp.deckPlate:IsShown() then return sp end end end
+    local function rect(fr)                              -- left, top, right, bottom: px from the window's top-left, down positive
+        local q = fr and fr.points and fr.points[1]
+        if not (q and fr.__w and fr.__h) then return nil end
+        return q[4] - fr.__w / 2, -q[5] - fr.__h / 2, q[4] + fr.__w / 2, -q[5] + fr.__h / 2
+    end
+    local function lefttop(u) local l, t = rect(spOf(u).deckPlate) return l, t end
+    ok(RD.raid and RD.deckTanks == 1 and spOf("raid7") and select(2, lefttop("raid7")) < select(2, lefttop("raid6")),
+       "tanks, then groups: the named tank lifted to the top row")
+    local _, t6 = lefttop("raid6")
+    local _, t8 = lefttop("raid8")
+    local l9, t9 = lefttop("raid9")
+    local l1, t1 = lefttop("raid1")
+    ok(t6 == t8 and t9 > t6 and l9 == l1, "group 2 (three people, the tank lifted) keeps its own row; group 3 starts a new one under it")
+    local sp6 = spOf("raid6")
+    local blockW = RD.deckInnerW
+    ok(sp6 and math.abs(sp6.deckPlate.__w - spOf("raid1").deckPlate.__w) < 2,
+       "a block of five spots, two of them empty: the boxes as wide as a full group's (never stretched to fill)")
+    -- the hover: a box lights its group mates, and only them
+    local sp11 = spOf("raid11")
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local washCost = Cost.Count(function() RD.GroupWash(sp11, true) end)
+    print(("   cost: the group mates' wash, one hover = %d calls (enter / leave only, never a ticker)"):format(washCost))
+    ok(washCost <= 12, "the wash costs a handful of calls a hover", washCost)
+    RD.GroupWash(sp11, false)
+    sp11.heal:GetScript("OnEnter")(sp11.heal)
+    local lit, wrong = 0, 0
+    for _, sp in ipairs(RD.spokes) do
+        local m = sp.deckPlate and sp.deckPlate.mate
+        if m and m:IsShown() then if sp.raidGroup == 3 and sp ~= sp11 then lit = lit + 1 else wrong = wrong + 1 end end
+    end
+    ok(lit == 4 and wrong == 0, "hovering a box in group 3: its four group mates lit, nobody else", lit .. " / " .. wrong)
+    sp11.heal:GetScript("OnLeave")(sp11.heal)
+    lit = 0
+    for _, sp in ipairs(RD.spokes) do if sp.deckPlate and sp.deckPlate.mate and sp.deckPlate.mate:IsShown() then lit = lit + 1 end end
+    ok(lit == 0 and sp11.heal.__wasMouseover, "the mouse leaves: the wash goes (and the client's own mouseover still ran)")
+    -- the G tag
+    RD.SetSw("gtag", true)
+    local g11 = spOf("raid11").deckTag
+    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 8, "group tags on: G3 in the corner",
+       g11.group and g11.group.__text)
+    ok(spOf("raid7").deckTag.group.__text == "G2", "the lifted tank too says his group")
+    RD.SetSw("gtag", false)
+    ok(not spOf("raid11").deckTag.group:IsShown(), "off again: gone")
+
+    -- A FIGHT: the order is frozen; a sort picked in one waits for its end, and nothing secure is touched (the mock refuses)
+    local before = table.concat(RD.conOrder, ",")
+    STATE.inCombat = true
+    fire(RD.events, "PLAYER_REGEN_DISABLED")
+    local okC, res = pcall(RD.SetDeckSort, "class")
+    ok(okC and res == "after" and RD.pending and table.concat(RD.conOrder, ",") == before,
+       "a sort picked in a fight: nothing moves until it ends", tostring(res))
+    STATE.dead = STATE.dead or {}
+    local okD = pcall(fire, RD.events, "UNIT_HEALTH", "raid9")
+    ok(okD and table.concat(RD.conOrder, ",") == before, "a death mid-fight: no box moves")
+    STATE.inCombat = false
+    fire(RD.events, "PLAYER_REGEN_ENABLED")
+    ok(not RD.pending and RD.DeckSort() == "class" and table.concat(RD.conOrder, ",") ~= before, "the fight over: the new order")
+    RD.SetDeckSort("tanks")
+
+    --[[ THE TEST ACROSS WIDTHS (sheet 7): at every width from the floor to 1200 px, every 7 px, for a party of 5 and raids
+      of 10, 25 (group 2 short) and 40 (with pets), groups as rows and as columns, a group sort and a scattering one:
+        1 every box inside the window            2 no two boxes overlapping       3 no box under its minimum
+        4 nothing overlapping inside a box (name / group tag / paw / extra tag / kick / cures), each inside its box
+        5 each raid group on one row (or column), its tag touching nothing
+        6 the same group always gives the same order (whatever the width)
+        A the health bar is the box's whole inner width (Arn: "the bar must always go to the end of the box")
+        B no clickable button on the bar (Arn: "the bar cant have clickable things on frame"), all icons one size, 16..22 ]]
+    local function sweep(label, setup, groupSort, cols)
+        setup()
+        RD.SetSw("cols", cols)
+        RD.SetSw("gtag", true)
+        local bad = { inside = 0, overlap = 0, min = 0, inner = 0, group = 0, order = 0, bar = 0, click = 0, icon = 0 }
+        local firstOrder, seen, layouts, tiers = nil, {}, 0, {}
+        local w = RD.FloorInner()
+        while w <= 1200 do
+            RD.SetDeckWidth(w)
+            RD.ConsoleLayout()
+            layouts = layouts + 1
+            local FW, FH = RD.frame.__w, RD.frame.__h
+            local boxes, iconW = {}, nil
+            for _, sp in ipairs(RD.spokes) do
+                if sp.deckPlate and sp.deckPlate:IsShown() and sp.heal:IsShown() then
+                    if sp.unit and sp.unit:find("^raid%d") and not (sp.tideTag and sp.tideTag:IsShown()) then RD.TideTag(sp, 10) end   -- an extra tag where it fits
+                    boxes[#boxes + 1] = sp
+                end
+            end
+            for a = 1, #boxes do
+                local sp = boxes[a]
+                local L, T, R, B = rect(sp.deckPlate)
+                if sp.room then tiers[sp.room.tier] = true end
+                if L < -0.01 or T < -0.01 or R > FW + 0.01 or B > FH + 0.01 then bad.inside = bad.inside + 1 end
+                if (R - L) < NS.FG.BOX_MIN_W - 0.01 or (B - T) < 28 then bad.min = bad.min + 1 end
+                for b2 = a + 1, #boxes do
+                    local l2, t2, r2, b3 = rect(boxes[b2].deckPlate)
+                    if L < r2 - 0.01 and l2 < R - 0.01 and T < b3 - 0.01 and t2 < B - 0.01 then bad.overlap = bad.overlap + 1 end
+                end
+                -- A: the bar edge to edge
+                local hl, ht, hr, hb = rect(sp.heal)
+                if math.abs(hl - (L + 1)) > 0.01 or math.abs(hr - (R - 1)) > 0.01 then bad.bar = bad.bar + 1 end
+                -- the parts inside the box, as rectangles in the window
+                local parts = {}
+                local tag = sp.deckTag
+                if tag and tag:IsShown() then
+                    if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then
+                        if tag.text.__size < 8 then bad.inner = bad.inner + 1 end
+                        parts[#parts + 1] = { L + RD.DECK_TAG.x, T - RD.DECK_TAG.y, L + RD.DECK_TAG.x + tag.text.__w, T - RD.DECK_TAG.y + 9, "name" }
+                    end
+                    if tag.group and tag.group:IsShown() then
+                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + 8, "gtag" }
+                        seen.gtag = true
+                    end
+                    if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then seen.name = true end
+                end
+                if sp.deckPaw and sp.deckPaw:IsShown() then
+                    parts[#parts + 1] = { R - 2 - sp.deckPaw.__w, T + 1, R - 2, T + 1 + sp.deckPaw.__h, "paw" }
+                    seen.paw = true
+                end
+                if sp.tideTag and sp.tideTag:IsShown() then
+                    seen.tide = true
+                    local ty = T - (RD.DECK_TAG.y - RD.DECK_TAG.size - 3)
+                    parts[#parts + 1] = { L + RD.DECK_TAG.x, ty, L + RD.DECK_TAG.x + sp.tideTag.__w, ty + sp.tideTag.__h, "tide" }
+                    if ty + sp.tideTag.__h > hb + 0.01 then bad.inner = bad.inner + 1 end     -- on the bar, never in the icon row
+                end
+                local clicks = {}
+                if sp.bogey and sp.bogey:IsShown() then clicks[#clicks + 1] = sp.bogey end
+                for _, c in ipairs(sp.cures or {}) do if c.box:IsShown() then clicks[#clicks + 1] = c.box end end
+                for _, c in ipairs(clicks) do
+                    local cl, ct, cr, cb = rect(c)
+                    parts[#parts + 1] = { cl, ct, cr, cb, "icon" }
+                    -- B: never on the bar
+                    if cl < hr - 0.01 and hl < cr - 0.01 and ct < hb - 0.01 and ht < cb - 0.01 then bad.click = bad.click + 1 end
+                    iconW = iconW or c.__w
+                    if c.__w ~= iconW or c.__w < 16 or c.__w > 22 then bad.icon = bad.icon + 1 end   -- Arn's numbers, not ours
+                end
+                for i1 = 1, #parts do
+                    local q = parts[i1]
+                    if q[1] < L - 0.01 or q[3] > R + 0.01 or q[2] < T - 0.01 or q[4] > B + 0.01 then bad.inner = bad.inner + 1 end
+                    for i2 = i1 + 1, #parts do
+                        local s = parts[i2]
+                        if q[1] < s[3] - 0.01 and s[1] < q[3] - 0.01 and q[2] < s[4] - 0.01 and s[2] < q[4] - 0.01 then bad.inner = bad.inner + 1 end
+                    end
+                end
+            end
+            -- 5: a raid group on one line, nobody else's box inside its span
+            if RD.raid and groupSort then
+                local span = {}
+                for _, sp in ipairs(boxes) do
+                    local g = sp.raidGroup
+                    if g and not (sp.unit == "raid7") then                -- (raid7: the lifted tank, in the top row)
+                        local L, T, R, B = rect(sp.deckPlate)
+                        local s = span[g]
+                        if not s then span[g] = { L, T, R, B } else
+                            if (cols and math.abs(s[1] - L) > 0.01) or (not cols and math.abs(s[2] - T) > 0.01) then bad.group = bad.group + 1 end
+                            s[1], s[2], s[3], s[4] = math.min(s[1], L), math.min(s[2], T), math.max(s[3], R), math.max(s[4], B)
+                        end
+                    end
+                end
+                for _, sp in ipairs(boxes) do
+                    local L, T, R, B = rect(sp.deckPlate)
+                    for g, s in pairs(span) do
+                        if sp.raidGroup ~= g and sp.unit ~= "raid7" and L < s[3] - 0.01 and s[1] < R - 0.01 and T < s[4] - 0.01 and s[2] < B - 0.01 then
+                            bad.group = bad.group + 1
+                        end
+                    end
+                end
+            end
+            -- 6: the order never depends on the width
+            local ord = table.concat(RD.conOrder or {}, ",")
+            firstOrder = firstOrder or ord
+            if ord ~= firstOrder then bad.order = bad.order + 1 end
+            w = w + 7
+        end
+        local o1 = table.concat(RD.conOrder or {}, ",")
+        RD.Arm()
+        if table.concat(RD.conOrder or {}, ",") ~= o1 then bad.order = bad.order + 1 end
+        local tl = {}
+        for k in pairs(tiers) do tl[#tl + 1] = k end
+        table.sort(tl)
+        local what = label .. " (" .. layouts .. " widths, tiers " .. table.concat(tl, "/") .. ")"
+        ok(bad.inside == 0, what .. ": every box inside the window", bad.inside)
+        ok(bad.overlap == 0, what .. ": no two boxes overlap", bad.overlap)
+        ok(bad.min == 0, what .. ": no box under its minimum (22 x 28)", bad.min)
+        ok(bad.inner == 0, what .. ": nothing overlaps inside a box, everything inside it, names 8 pt or more", bad.inner)
+        ok(bad.group == 0, what .. ": each group on one " .. (cols and "column" or "row") .. ", its tag touching nothing", bad.group)
+        ok(bad.order == 0, what .. ": the same group always gives the same order", bad.order)
+        ok(bad.bar == 0, what .. ": the health bar runs the box's whole inner width", bad.bar)
+        ok(bad.click == 0, what .. ": no kick or cure on the bar", bad.click)
+        ok(bad.icon == 0, what .. ": every icon one size, 16 to 22 px", bad.icon)
+        ok(seen.name and (not RD.raid or (seen.gtag and seen.tide)), what .. ": the names, group tags and MANA TIDE were really there to test")
+        RD.SetDeckWidth(nil)
+        return tiers, seen
+    end
+    local function party()
+        _G.IsInRaid, _G.GetNumGroupMembers, _G.GetRaidRosterInfo, _G.UnitIsUnit = keep.raid, keep.num, keep.info, keep.isu
+        STATE.units = { player = true, party1 = true, party2 = true, party3 = true, party4 = true }
+        STATE.classes = { party1 = "WARRIOR", party2 = "MAGE", party3 = "PRIEST", party4 = "HUNTER" }
+        STATE.roles = nil
+        RD.Arm()
+    end
+    sweep("a party of 5", party, false, false)
+    sweep("a raid of 10", function() raid(10, even) end, true, false)
+    sweep("a raid of 10, columns", function() raid(10, even) end, true, true)
+    sweep("a raid of 23, group 2 short", function() raid(23, holes) end, true, false)
+    sweep("a raid of 23, group 2 short, columns", function() raid(23, holes) end, true, true)
+    local t40, s40 = sweep("a raid of 40 with pets", function() raid(40, even, 3) end, true, false)
+    ok(t40.full and t40.one and t40.floor, "the sweep walked through the size tiers (full, one cure, floor)")
+    ok(s40.paw, "and the pets' paws were there too")
+    sweep("a raid of 40, columns", function() raid(40, even, 3) end, true, true)
+    RD.SetDeckSort("class")
+    sweep("a raid of 40 by class (groups scatter)", function() raid(40, even) end, false, false)
+    RD.SetDeckSort("maxhp")
+    sweep("a raid of 25 by max health, columns", function() raid(25, even) end, false, true)
+    RD.SetDeckSort("tanks")
+
+    -- THE TIERS, by hand: what each keeps
+    local full, one, kick, floor = RD.BoxRoom(80, 33, 22), RD.BoxRoom(60, 33, 22), RD.BoxRoom(36, 33, 16), RD.BoxRoom(22, 33, 16)
+    ok(full.cures == 2 and full.name == "full" and full.tags and full.extras, "FULL: two cures, the whole name, the tags")
+    ok(one.cures == 1 and one.name == "cut" and not one.tags and not one.extras, "ONE CURE: the second cure gone, the name cut, no tags")
+    ok(kick.cures == 0 and kick.name == "cut", "too narrow for a cure beside the kick: the kick alone keeps its spot")
+    ok(floor.cures == 0 and floor.name == false, "the floor: the bar and the kick, no name")
+    ok(RD.IconPx(80) == 22 and RD.IconPx(22) == 16 and RD.IconPx(40) == 17, "one icon size from the smallest box, held to 16..22")
+    RD.SetSw("cols", false)
+    raid(40, even)
+    RD.SetDeckWidth(RD.FloorInner())
+    RD.ConsoleLayout()
+    local s1 = spOf("raid2")
+    ok(s1 and s1.room.tier == "floor" and s1.deckTag.text.__text == "" and RD.BoxHas(s1, "extras") == false,
+       "a 40 at the floor: the boxes at the floor, no names, no extras", s1 and s1.room.tier)
+    RD.SetDeckWidth(300)
+    RD.ConsoleLayout()
+    s1 = spOf("raid2")
+    local shownCures = 0
+    for _, c in ipairs(s1.cures or {}) do if c.box:IsShown() then shownCures = shownCures + 1 end end
+    ok(s1.room.tier == "one" and #s1.deckTag.text.__text <= RD.NAME_CUT and shownCures <= 1, "at 300: one cure, the name cut to four letters",
+       s1.deckTag.text.__text)
+    RD.SetDeckWidth(nil)
+    RD.ConsoleLayout()
+    shownCures = 0
+    s1 = spOf("raid2")
+    for _, c in ipairs(s1.cures or {}) do if c.box:IsShown() then shownCures = shownCures + 1 end end
+    ok(s1.room.tier == "full" and shownCures == #(s1.cures or {}), "its own width again: both cures back")
+
+    _G.IsInRaid, _G.GetNumGroupMembers, _G.GetRaidRosterInfo, _G.UnitIsUnit = keep.raid, keep.num, keep.info, keep.isu
+    _G.UnitHealthMax, _G.GetUnitName = keep.umax, keep.gun
+    STATE.units, STATE.classes, STATE.roles, d.look, d.alpha = keep.units, keep.classes, keep.roles, keep.look, keep.alpha
+    d.radar.sw, d.radar.deckSort, d.radar.deckW = nil, nil, nil
+    RD.shownFor, RD.FORCE_DISC = keep.shown, true
+    RD.Arm()
 end
 
 -- THE TARGET RHYTHM TEST (19 Nov 2026, Arn: "build the test tool for the target rhythm" - a mage spams one button that
@@ -17210,6 +17592,32 @@ do
     d.sw, d.fxStamp, d.swStamp, d.view = keep.sw, keep.fxStamp, keep.swStamp, keep.view
     FX.Arm()
     FX.mendWords = nil
+end
+
+-- BiS>Cues: the raid layout's switches ride the string (dev/CUES.md "raid")
+do
+    local CU, RD = NS.CU, NS.RD
+    local r = NS.DB().radar
+    local keepSw, keepSort = r.sw, r.deckSort
+    RD.SetRaidSettings({ gtag = true, sort = "class", cols = true })
+    local s = CU.Export()
+    RD.SetRaidSettings({ gtag = false, sort = "tanks", cols = false })
+    ok(CU.Import(s), "a string with the raid layout in it imports")
+    local t = RD.RaidSettings()
+    ok(t.gtag == true and t.sort == "class" and t.cols == true, "group tags, the sort and columns came back with it")
+    r.sw, r.deckSort = keepSw, keepSort
+    RD.SwApply()
+    -- the switches panel: your class's groups only
+    local keepUC = _G.UnitClass
+    _G.UnitClass = function() return "Shaman", "SHAMAN", 7 end
+    local byKey = {}
+    for _, s in ipairs(RD.SW) do byKey[s.key] = s end
+    ok(RD.SwForMe(byKey.totems) and RD.SwForMe(byKey.rip) and not RD.SwForMe(byKey.oath) and not RD.SwForMe(byKey.swift)
+       and not RD.SwForMe(byKey.fxvigil) and not RD.SwForMe(byKey.fxwild) and RD.SwForMe(byKey.names) and RD.SwForMe(byKey.hell),
+       "a shaman's switches: SHAMAN and everyone's, no paladin / druid / priest rows or effects")
+    _G.UnitClass = function() return "Priest", "PRIEST", 5 end
+    ok(RD.SwForMe(byKey.fxmend) and RD.SwForMe(byKey.fxpoh) and not RD.SwForMe(byKey.totems), "a priest's: the Prayer effects, no totems")
+    _G.UnitClass = keepUC
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

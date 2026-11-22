@@ -464,7 +464,7 @@ function CU.Table()
         if c.sound[q.key] then t.sound[q.key] = c.sound[q.key] end
     end
     local RD = NS.RD
-    if RD and RD.GroupSettings then t.raid = RD.GroupSettings() end   -- (sheet 6's switches, when they are in)
+    if RD and RD.RaidSettings then t.raid = RD.RaidSettings() end   -- (sheet 6's switches, when they are in)
     return t
 end
 --- The export string: the plain form until a probe proves the client's gzip matches the browser's.
@@ -517,7 +517,7 @@ function CU.Import(s)
         n = n + 1
     end
     local RD = NS.RD
-    if type(t.raid) == "table" and RD and RD.SetGroupSettings then pcall(RD.SetGroupSettings, t.raid) end
+    if type(t.raid) == "table" and RD and RD.SetRaidSettings then pcall(RD.SetRaidSettings, t.raid) end
     CU.Apply()
     return n
 end
