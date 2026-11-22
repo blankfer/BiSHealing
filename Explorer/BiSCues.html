@@ -242,7 +242,7 @@ var CUES = [
     sub: "A warlock in your group is burning everyone with Hellfire. A fire square with seconds left, on his box." },
   { key: "tap",   name: "Life Tap",      cat: "group",   kind: "square", word: "TAP",  say: "Life Tap",
     sub: "A warlock in your group traded health for mana and wants a heal." },
-  { key: "crit",  name: "Revelation",    cat: "procs",   kind: "square", word: "CRIT", say: "Revelation",
+  { key: "crit",  name: "Revelation",    cat: "procs",   kind: "square", word: "CRIT", say: "Crit",
     sub: "Your own Revelation is up: your next heal lands big." },
   { key: "rip",   name: "Riptide",       cat: "shaman",  kind: "middle", word: "Chain Heal", say: "Chain Heal",
     sub: "Riptide is on them: Chain Heal from that box." },
@@ -267,22 +267,27 @@ function cueOf(k) { for (var i = 0; i < CUES.length; i++) if (CUES[i].key === k)
 function isSquare(k) { var c = cueOf(k); return !!c && c.kind === "square"; }
 function squareKeys() { return CUES.filter(function (c) { return c.kind === "square"; }).map(function (c) { return c.key; }); }
 function defaults() {
-  return { order: squareKeys(), on: {}, look: {}, sound: {},
+  return { order: squareKeys(), on: {}, look: {}, sound: {}, voice: {},
            raid: { gtag: false, sort: "tanks", cols: false }, withRaid: false };
 }
 function validLook(v) { return v === "icon" || v === "word" || (typeof v === "string" && /^model:[A-Za-z0-9_.-]{1,40}$/.test(v)); }
-function validSound(v) { return v === "voice" || v === "voicename" || v === "off" || (typeof v === "string" && /^kit:[0-9]{1,9}$/.test(v)); }
+function validSound(v) { return v === "off" || (typeof v === "string" && /^kit:[0-9]{1,9}$/.test(v)); }
 function lookOf(st, k) { return st.look[k] || "icon"; }
-function soundOf(st, k) { return st.sound[k] || "voice"; }
+function validVoice(v) { return v === "off" || v === "spell" || v === "name"; }
+function soundOf(st, k) { return st.sound[k] || "off"; }
+function voiceOf(st, k) { return st.voice[k] || "spell"; }
+/* a string from before sound and voice were two picks: what its one pick meant */
+function splitOld(v) { return v === "voicename" ? [null, "name"] : v === "voice" ? [null, "spell"] : [v, "off"]; }
 
-/* settings -> the JSON object of dev/CUES.md (key order v, order, on, look, sound, raid) */
+/* settings -> the JSON object of dev/CUES.md (key order v, order, on, look, sound, voice, raid) */
 function toObj(st) {
-  var o = { v: 1, order: st.order.slice(), on: {}, look: {}, sound: {} };
+  var o = { v: 1, order: st.order.slice(), on: {}, look: {}, sound: {}, voice: {} };
   CUES.forEach(function (c) {
-    var k = c.key, on = !!st.on[k], lk = lookOf(st, k), sd = soundOf(st, k);
+    var k = c.key, on = !!st.on[k], lk = lookOf(st, k), sd = soundOf(st, k), vo = voiceOf(st, k);
     if (on) o.on[k] = true;
     if (on || lk !== "icon") o.look[k] = lk;
-    if (on || sd !== "voice") o.sound[k] = sd;
+    if (on || sd !== "off") o.sound[k] = sd;
+    if (on || vo !== "spell") o.voice[k] = vo;
   });
   if (st.withRaid) o.raid = { gtag: !!st.raid.gtag, sort: st.raid.sort, cols: !!st.raid.cols };
   return o;
@@ -319,9 +324,18 @@ function fromObj(o) {
     if (validLook(v)) st.look[k] = v;
     else notes.push(c.name + ": look " + JSON.stringify(v) + " is not known, using the spell icon.");
   });
+  var old = o.voice === undefined;
   each("sound", function (k, v, c) {
-    if (validSound(v)) st.sound[k] = v;
-    else notes.push(c.name + ": sound " + JSON.stringify(v) + " is not known, using the voice.");
+    if (old && (v === "voice" || v === "voicename" || validSound(v))) {
+      var two = splitOld(v);
+      if (two[0] && two[0] !== "off") st.sound[k] = two[0];
+      if (two[1] !== "spell") st.voice[k] = two[1];
+    } else if (validSound(v)) { if (v !== "off") st.sound[k] = v; }
+    else notes.push(c.name + ": sound " + JSON.stringify(v) + " is not known, using none.");
+  });
+  each("voice", function (k, v, c) {
+    if (validVoice(v)) { if (v !== "spell") st.voice[k] = v; }
+    else notes.push(c.name + ": voice " + JSON.stringify(v) + " is not known, using the spell.");
   });
   Object.keys(dropped).forEach(function (k) { notes.push("Left out a cue this page does not know: " + JSON.stringify(k) + "."); });
   if (o.raid && typeof o.raid === "object" && !Array.isArray(o.raid)) {
@@ -405,9 +419,10 @@ async function selfTest() {
   CUES.forEach(function (c) { b.on[c.key] = true; });
   b.order = ["crit", "tap", "hell"];
   b.look = { hell: "model:Fireball", tap: "word", crit: "icon", rip: "word", oath: "model:HolyGlow" };
-  b.sound = { hell: "voicename", tap: "off", crit: "kit:8959", rip: "voice", vigil: "voicename" };
+  b.sound = { hell: "kit:1506", crit: "kit:8959" };
+  b.voice = { hell: "name", tap: "off", crit: "off", vigil: "name" };
   b.raid = { gtag: true, sort: "maxhp", cols: true }; b.withRaid = true;
-  var c = defaults(); c.on.tap = true; c.look.swift = "word"; c.sound.oath = "off";
+  var c = defaults(); c.on.tap = true; c.look.swift = "word"; c.voice.oath = "off";
   c.raid = { gtag: false, sort: "class", cols: false }; c.withRaid = true;
   var d = defaults(); d.on.crit = true; d.on.rip = true; d.withRaid = false;
   var cases = [["all off", a], ["all on, mixed picks", b], ["one on, raid block", c], ["no raid block", d]];
@@ -425,7 +440,7 @@ async function selfTest() {
   }
   var u = "Grüße ✓ 漢字 🔥";
   check("base64 keeps UTF-8 text", unutf8(bytesFromB64(b64FromBytes(utf8(u)))) === u);
-  var plan = '{ "v": 1, "order": ["hell", "tap", "crit"], "on": { "hell": true }, "look": { "hell": "icon" }, "sound": { "hell": "voice" }, "raid": { "gtag": true, "sort": "tanks", "cols": false } }';
+  var plan = '{ "v": 1, "order": ["hell", "tap", "crit"], "on": { "hell": true }, "look": { "hell": "icon" }, "sound": { "hell": "kit:1506" }, "voice": { "hell": "name" }, "raid": { "gtag": true, "sort": "tanks", "cols": false } }';
   var r = await importString(P_PLAIN + b64FromBytes(utf8(plan)));
   check("the plan's example reads right", r.state.on.hell === true && !r.state.on.tap && r.state.withRaid && r.state.raid.gtag === true && r.state.raid.sort === "tanks" && r.state.raid.cols === false);
   check("the plan's example writes back the same", toJSON(r.state) === JSON.stringify(JSON.parse(plan)), toJSON(r.state));
@@ -433,9 +448,12 @@ async function selfTest() {
   check("empty lists from the game ([] for {})", r.state.order.join(",") === "crit,hell,tap" && Object.keys(r.state.on).length === 0 && !r.state.withRaid);
   r = await importString("  " + P_PLAIN + b64FromBytes(utf8('{"v":1,"on":{"hell":true,"zap":true},"look":{"hell":"glitter"},"sound":{"tap":"kit:abc"},"extra":5,"raid":{"sort":"height"}}')).replace(/(.{10})/g, "$1\n") + "  ");
   check("an unknown cue is left out", !own(r.state.on, "zap") && r.state.on.hell === true);
-  check("a bad look or sound falls back", lookOf(r.state, "hell") === "icon" && soundOf(r.state, "tap") === "voice" && r.state.raid.sort === "tanks");
+  check("a bad look or sound falls back", lookOf(r.state, "hell") === "icon" && soundOf(r.state, "tap") === "off" && r.state.raid.sort === "tanks");
   check("each thing left out gets a note", r.notes.length === 4, r.notes.join(" | "));
   check("line breaks inside a pasted string are fine", r.kind === "plain");
+  r = await importString(P_PLAIN + b64FromBytes(utf8('{"v":1,"on":{"hell":true,"tap":true},"sound":{"hell":"voicename","tap":"kit:3090","crit":"voice","rip":"off"}}')));
+  check("a string from before the split: one pick becomes two", voiceOf(r.state, "hell") === "name" && soundOf(r.state, "hell") === "off" && soundOf(r.state, "tap") === "kit:3090"
+    && voiceOf(r.state, "tap") === "off" && voiceOf(r.state, "crit") === "spell" && voiceOf(r.state, "rip") === "off" && r.notes.length === 0, r.notes.join(" | "));
   var bad = [
     ["empty box", ""],
     ["no prefix", "hello"],
@@ -557,12 +575,11 @@ async function selfTest() {
     options(look, LOOKS, lookOf(st, c.key));
     look.addEventListener("change", function () { if (look.value === "icon") delete st.look[c.key]; else st.look[c.key] = look.value; changed(); });
     var sound = el("select", { "aria-label": c.name + " sound" });
-    options(sound, [
-      ["voicename", 'Voice: "' + c.say + ", " + SAMPLE[c.key] + '"'],
-      ["voice", 'Voice: "' + c.say + '"'],
-      ["off", "Off"]
-    ].concat(KITS), soundOf(st, c.key));
-    sound.addEventListener("change", function () { if (sound.value === "voice") delete st.sound[c.key]; else st.sound[c.key] = sound.value; changed(); });
+    options(sound, [["off", "Off"]].concat(KITS), soundOf(st, c.key));
+    sound.addEventListener("change", function () { if (sound.value === "off") delete st.sound[c.key]; else st.sound[c.key] = sound.value; changed(); });
+    var voice = el("select", { "aria-label": c.name + " voice" });
+    options(voice, [["off", "Off"], ["spell", '"' + c.say + '"'], ["name", '"' + c.say + ", " + SAMPLE[c.key] + '"']], voiceOf(st, c.key));
+    voice.addEventListener("change", function () { if (voice.value === "spell") delete st.voice[c.key]; else st.voice[c.key] = voice.value; changed(); });
     var tag = c.kind === "square"
       ? el("span", { cls: "tag sqt", text: "SQUARE " + (st.order.indexOf(c.key) + 1) })
       : el("span", { cls: "tag mdt", text: "MIDDLE: " + c.word.toUpperCase() });
@@ -573,6 +590,7 @@ async function selfTest() {
       el("div", { cls: "ctl" }, [
         el("label", { cls: "pick" }, ["LOOK", look]),
         el("label", { cls: "pick" }, ["SOUND", sound]),
+        el("label", { cls: "pick" }, ["VOICE", voice]),
         el("button", { type: "button", text: "TRY", title: "Hear the sound and flash it in the preview", onclick: function () { tryCue(c); } })
       ])
     ]);
@@ -587,13 +605,14 @@ async function selfTest() {
     renderPick(); changed();
   }
   function tryCue(c) {
-    var sd = soundOf(st, c.key), say = sd === "voicename" ? c.say + ", " + SAMPLE[c.key] : sd === "voice" ? c.say : "";
+    var sd = soundOf(st, c.key), vo = voiceOf(st, c.key), say = vo === "name" ? c.say + ", " + SAMPLE[c.key] : vo === "spell" ? c.say : "";
     if (say && window.speechSynthesis && window.SpeechSynthesisUtterance) {
       try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(say)); } catch (e) {}
-    } else if (sd.indexOf("kit:") === 0) {
+    }
+    if (sd.indexOf("kit:") === 0) {
       flashMsg("Game sounds play in the game only. TRY on the in-game card plays it.");
-    } else if (sd === "off") {
-      flashMsg(c.name + " has no sound.");
+    } else if (!say) {
+      flashMsg(c.name + " has no sound and no voice.");
     }
     if (!st.on[c.key]) { flashMsg(c.name + " is off: tick it to see it in the preview."); return; }
     var n = document.querySelector('#deck [data-cue="' + c.key + '"]');

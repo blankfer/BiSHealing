@@ -15856,19 +15856,19 @@ do
                     RD.RipMarks()
                     ok(twin.ripMark and twin.ripMark:IsShown(), "the same person in another box (the TARGET pair): marked there too")
                     do   -- the cue card's sound for a middle cue: once when the mark comes on, one person = one sound
-                        local CU, keepS, keepVC, said = NS.CU, NS.CU.DB().sound.rip, _G.C_VoiceChat, {}
+                        local CU, keepS, keepVC, said = NS.CU, NS.CU.DB().voice.rip, _G.C_VoiceChat, {}
                         _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
-                        CU.DB().sound.rip, CU.spoke, RD.cueTold, NS.BN.quietUntil = "voice", {}, {}, 0
+                        CU.DB().voice.rip, CU.spoke, RD.cueTold, NS.BN.quietUntil = "spell", {}, {}, 0
                         RD.RipMarks()
                         ok(#said == 1 and said[1] == "Chain Heal", "Riptide's sound: once, though two boxes wear the mark", #said)
                         RD.RipMarks()
                         CU.spoke = {}
                         RD.RipMarks()
                         ok(#said == 1, "repainted while it stands: not said again", #said)
-                        CU.DB().sound.rip, RD.cueTold = nil, {}
+                        CU.DB().voice.rip, RD.cueTold = nil, {}
                         RD.RipMarks()
                         ok(#said == 1, "no sound picked (the default): none")
-                        CU.DB().sound.rip, _G.C_VoiceChat, CU.spoke = keepS, keepVC, {}
+                        CU.DB().voice.rip, _G.C_VoiceChat, CU.spoke = keepS, keepVC, {}
                     end
                     STATE.guids[twin.unit] = keepG
                     RD.RipMarks()
@@ -17188,7 +17188,7 @@ do
         btn:GetScript("OnShow")(btn)
         ok(#said == 1, "just after a loading screen: quiet")
         NS.BN.quietUntil = 0
-        NS.DB().radar.cues.sound.crit = nil
+        NS.DB().radar.cues.sound.crit, NS.DB().radar.cues.voice.crit = nil, nil
         btn:GetScript("OnShow")(btn)
         ok(#said == 1, "no sound picked: none")
         ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "the word look: the CRIT tag")
@@ -17226,14 +17226,14 @@ do
     -- someone who had the deck, and had turned the Hellfire voice off
     r.cues, r.sw, r.swStamp = nil, { hellvoice = false, tap = false }, 1
     CU.Stamp()
-    ok(CU.On("hell") and not CU.On("tap") and CU.Sound("hell") == "off", "an old deck: its switches kept, the voice switch becomes Hellfire's sound")
+    ok(CU.On("hell") and not CU.On("tap") and CU.Voice("hell") == "off", "an old deck: its switches kept, the voice switch becomes Hellfire's sound")
     ok(not CU.Stamp(), "the stamp runs once")
     -- one truth: the switches panel and the card
     ok(RD.SetSw("tap", true) and CU.On("tap") and RD.Sw("tap"), "the panel's switch turns the cue on")
     CU.SetOn("tap", false)
     ok(not RD.Sw("tap"), "the card turns it off; the panel reads the same")
     RD.SetSw("hellvoice", true)
-    ok(CU.Sound("hell") == "voicename" and RD.Sw("hellvoice"), "the panel's voice switch: Hellfire's voice with the name")
+    ok(CU.Voice("hell") == "name" and RD.Sw("hellvoice"), "the panel's voice switch: Hellfire's voice with the name")
     RD.SwPreset("bare")
     ok(not CU.On("hell") and not CU.On("rip"), "BARE: the cues off too")
     RD.SwPreset("full")
@@ -17270,7 +17270,7 @@ do
     played = nil
     ok(not CU.Say("tap", "party1") and not played, "an off cue never sounds")
     _G.PlaySound = keepPS
-    ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "voicename", "BACK TO DEFAULT: the fireball and the voice")
+    ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "off" and CU.Voice("hell") == "name", "BACK TO DEFAULT: the fireball and the voice")
     ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
     -- the middle cue's look
     local sp = { cue = { hold = CreateFrame("Frame"), word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
@@ -17332,7 +17332,7 @@ do
     ok(c.look.rows[1].id == "model:198692" and not c.look.rows[2]:IsShown(), "search: 'fire' finds the Fireball only")
     c.look.q:SetText("")
     c.look.q:GetScript("OnTextChanged")(c.look.q)
-    c.sound.chips[3]:GetScript("OnClick")(c.sound.chips[3])
+    c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])
     ok(c.sound.rows[1].id and c.sound.rows[1].id:match("^kit:") and c.sound.cat == "Bells", "a chip: only that category", c.sound.cat)
     -- TRY only plays (Arn, 21 Nov: trying Lightning crack picked it, and Hellfire stopped saying the name)
     do
@@ -17344,15 +17344,37 @@ do
         row1.try:GetScript("OnClick")(row1.try)
         ok(#kits == 1 and "kit:" .. kits[1] == row1.id and CU.Sound("hell") == was and CU.DB().sound.hell ~= row1.id,
             "TRY plays the sound and picks nothing", CU.Sound("hell"))
-        c.sound.chips[1]:GetScript("OnClick")(c.sound.chips[1])
-        local v = c.sound.rows[1]
-        ok(v.id == "voicename", "the voice heads the list", v.id)
-        v.try:GetScript("OnClick")(v.try)
-        ok(said[1] == "Hellfire, Tin", "TRY on the voice says the spell and a name", said[1])
-        v:GetScript("OnClick")(v)
-        ok(CU.Sound("hell") == "voicename", "the row itself picks")
+        -- sound and voice, two picks (Arn: "yes make sound and voice separate")
+        row1:GetScript("OnClick")(row1)
+        ok(CU.Sound("hell") == row1.id and CU.Voice("hell") == "name", "a sound picked: the voice stays on")
+        c.voices[3]:GetScript("OnClick")(c.voices[3])
+        ok(said[1] == "Hellfire, Tin" and CU.Voice("hell") == "name", "SPELL + NAME says it", said[1])
+        kits, said = {}, {}
+        ok(CU.Say("hell", nil, true) and #kits == 1 and #said == 1, "a cue heard: the sound and the voice, both", #kits .. " " .. #said)
+        c.voices[2]:GetScript("OnClick")(c.voices[2])
+        ok(CU.Voice("hell") == "spell" and said[2] == "Hellfire", "SPELL: the spell alone", said[2])
+        ok(c.code:GetText():find(" k%d+%+v "), "the faint code says both", c.code:GetText())
+        c.voices[1]:GetScript("OnClick")(c.voices[1])
+        kits, said = {}, {}
+        ok(CU.Say("hell", nil, true) and #kits == 1 and #said == 0, "voice OFF: the sound alone")
+        CU.SetSound("hell", "off")
+        ok(not CU.Say("hell", nil, true) and #kits == 1, "both off: nothing")
+        ok(not RD.Sw("hellvoice"), "and the switches panel's voice reads off")
+        -- an old save and an old string: one pick becomes two
+        local keepDB = NS.DB().radar.cues
+        NS.DB().radar.cues = { v = 1, stamp = 1, on = {}, look = {}, order = {}, sound = { hell = "voice", crit = "voicename", tap = "kit:1506", rip = "off" } }
+        ok(CU.Voice("hell") == "spell" and CU.Sound("hell") == "off" and CU.Voice("crit") == "name" and CU.Sound("tap") == "kit:1506"
+           and CU.Voice("tap") == "off" and CU.Voice("rip") == "off", "a save from before the split reads as it sounded")
+        CU.Import("BiSCues1p:" .. CU.B64('{"v":1,"on":{"hell":true},"sound":{"hell":"voicename","tap":"kit:3090"}}'))
+        ok(CU.Voice("hell") == "name" and CU.Sound("hell") == "off" and CU.Sound("tap") == "kit:3090" and CU.Voice("tap") == "off", "an old string too")
+        CU.Import("BiSCues1p:" .. CU.B64('{"v":1,"on":{"hell":true},"sound":{"hell":"kit:1506"},"voice":{"hell":"name","tap":"loud"}}'))
+        ok(CU.Voice("hell") == "name" and CU.Sound("hell") == "kit:1506" and CU.Voice("tap") == "off", "a new string: both picks; an unknown voice dropped")
+        local back = CU.Decode(CU.Export())
+        ok(back.voice.hell == "name" and back.sound.hell == "kit:1506", "and out again")
+        NS.DB().radar.cues = keepDB
+        CU.SetVoice("hell", "name")
         _G.PlaySound, _G.C_VoiceChat = keepPS, keepVC
-        c.sound.chips[3]:GetScript("OnClick")(c.sound.chips[3])
+        c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])
     end
     c.look.rows[2]:GetScript("OnClick")(c.look.rows[2])
     ok(CU.Look("hell") == c.look.rows[2].id, "a click on a look picks it")
@@ -17381,15 +17403,20 @@ do
     local bp = {}
     for _, p in ipairs(pv.bar.points) do bp[p[1]] = p end
     ok(bp.TOPLEFT and bp.BOTTOMRIGHT and bp.BOTTOMRIGHT[2] == pv, "the preview's bar runs edge to edge (anchored to both corners)")
-    local edgeR = 300 + 124
+    local edgeR = 314 + 138
     local past = false
     for _, b in ipairs(c.sound.chips) do
         local pt = b.points[1]
         if pt[4] + b.__w > edgeR + 0.5 then past = true end
     end
-    ok(not past and c.sound.extra > 0, "the sound chips wrap to a second line instead of running off the card")
-    ok(c.sound.rows[1].points[1][5] == -94 - 50 - c.sound.extra, "and the list moves down under them")
-    ok(c.code and c.code:GetText():find("hell on m198692 vn", 1, true) and c.code:GetText():find(NS.VERSION, 1, true),
+    ok(not past and edgeR <= CU.CARD_W - 6, "the sound chips stay inside the card (a second line when they don't fit)")
+    ok(c.sound.rows[1].points[1][5] == -116 - 50 - c.sound.extra, "and the list moves down under them")
+    ok(math.abs(CU.CARD_W / CU.CARD_H - 1.43) < 0.01, "the card keeps the family's shape", CU.CARD_W .. "x" .. CU.CARD_H)
+    local lastRow = c.sound.rows[CU.ROWS]
+    ok(-lastRow.points[1][5] + 15 <= CU.CARD_H - 44, "the last row clear of the faint code line", -lastRow.points[1][5] + 15)
+    local v3 = c.voices[3]
+    ok(v3.points[1][4] + v3.__w <= CU.CARD_W - 6 and -v3.points[1][5] + 17 <= 116, "the voice buttons inside the card, over the lists")
+    ok(c.code and c.code:GetText():find("hell on m198692 ", 1, true) and c.code:GetText():find(NS.VERSION, 1, true),
        "the faint code: the build, and Hellfire's settings", c.code and c.code:GetText())
     c.export:GetScript("OnClick")(c.export)
     ok(CU.strWin and CU.strWin:IsShown() and CU.strWin.edit:GetText():match("^BiSCues1p:"), "EXPORT shows the string to copy")

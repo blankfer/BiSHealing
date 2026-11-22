@@ -12,7 +12,7 @@
     player; whoever had the deck before keeps what the deck's own switches said (CU.Stamp, once).
   - The deck's switches for these cues (RD.Sw "hell", "tap", "crit", "rip", "oath", "vigil", "swift", and "hellvoice") read
     and write HERE (CU.Wrap) - one truth, so the switches panel and the card can never disagree.
-  - LOOK: "icon" | "word" | "model:<file id>" (CU.LOOKS, only models proven to draw). SOUND: "voicename" | "voice" |
+  - LOOK: "icon" | "word" | "model:<file id>" (CU.LOOKS, only models proven to draw). VOICE: "off" | "spell" | "name"; SOUND:
     "kit:<id>" | "off" (CU.SOUNDS; game sound kits play on Forever, 23 Oct). CU.Say plays a cue's sound, at most once every
     CU.EVERY s for the same cue on the same box.
   - THE CARD (CU.Card): beside the switches panel - the order list (tick = on, up / down arrows move its square), the
@@ -29,7 +29,7 @@ NS.CU = CU
 CU.EVERY = 12                                       -- the same cue on the same box speaks at most this often
 CU.LIST = {
     { key = "hell",  name = "Hellfire",    cat = "YOUR GROUP", kind = "square", spell = 1949,  word = "FIRE",
-      look = "model:198692", sound = "voicename", say = "Hellfire",
+      look = "model:198692", sound = "off", voice = "name", say = "Hellfire",
       tip = "A warlock in your group burning himself with Hellfire. The game draws it, even in a fight." },
     { key = "tap",   name = "Life Tap",    cat = "YOUR GROUP", kind = "square", spell = 1454,  word = "TAP",
       look = "word", sound = "off", say = "Life Tap",
@@ -87,9 +87,14 @@ CU.LOOKS = {
     { id = "word", name = "Payoff word", cat = "Icon" },
     { id = "model:198692", name = "Fireball", cat = "Fire" },
 }
+-- SOUND AND VOICE ARE TWO PICKS (Arn, 21 Nov: "yes make sound and voice separate" - one pick meant Lightning crack took the
+-- name's place)
+CU.VOICES = {
+    { id = "off", name = "OFF" },
+    { id = "spell", name = "SPELL" },
+    { id = "name", name = "SPELL + NAME" },
+}
 CU.SOUNDS = {
-    { id = "voicename", name = "Voice: spell and name", cat = "Voice" },
-    { id = "voice", name = "Voice: spell", cat = "Voice" },
     { id = "kit:8959", name = "Raid warning", cat = "Bells" },
     { id = "kit:8960", name = "Ready check", cat = "Bells" },
     { id = "kit:3090", name = "Thunder", cat = "Storm" },
@@ -105,6 +110,14 @@ local function fight() return (InCombatLockdown and InCombatLockdown()) and true
 local function plain(v) if v == nil or (NS.Secret and NS.Secret(v)) then return nil end return v end
 local function say(msg) if NS.Print then NS.Print(msg) end end
 
+--- What an old single pick (the voice or a game sound, one or the other) means as two: sound, voice.
+function CU.Split(sd)
+    if sd == "voicename" then return nil, "name" end
+    if sd == "voice" then return nil, "spell" end
+    if type(sd) == "string" then return sd, "off" end
+    return nil, nil
+end
+
 --- The saved table (per character, beside the deck's own settings).
 function CU.DB()
     local d = NS.DB and NS.DB() or {}
@@ -116,6 +129,13 @@ function CU.DB()
     c.look = type(c.look) == "table" and c.look or {}
     c.sound = type(c.sound) == "table" and c.sound or {}
     c.order = type(c.order) == "table" and c.order or {}
+    if type(c.voice) ~= "table" then                         -- (a save from before the split, once)
+        c.voice = {}
+        for k, sd in pairs(c.sound) do
+            local a, b = CU.Split(sd)
+            c.sound[k], c.voice[k] = a, b                     -- (only existing keys written: pairs allows it)
+        end
+    end
     return c
 end
 
@@ -133,7 +153,7 @@ function CU.Stamp()
         for _, q in ipairs(CU.LIST) do
             if c.on[q.key] == nil then c.on[q.key] = sw[q.key] ~= false end
         end
-        if sw.hellvoice == false or r.burnVoice == false then c.sound.hell = "off" end
+        if sw.hellvoice == false or r.burnVoice == false then c.voice.hell = "off" end
     end
     return true
 end
@@ -157,6 +177,11 @@ function CU.Sound(key)
     local q = CU.BY[key]
     local v = CU.DB().sound[key]
     return type(v) == "string" and v or (q and q.sound) or "off"
+end
+function CU.Voice(key)
+    local q = CU.BY[key]
+    local v = CU.DB().voice[key]
+    return type(v) == "string" and v or (q and q.voice) or "off"
 end
 function CU.Word(key) local q = CU.BY[key] return q and q.word or "" end
 function CU.ModelOf(key)
@@ -277,9 +302,14 @@ function CU.SetSound(key, id)
     CU.DB().sound[key] = id
     return CU.Apply()
 end
+function CU.SetVoice(key, id)
+    if not CU.BY[key] or not known(CU.VOICES, id) then return nil end
+    CU.DB().voice[key] = id
+    return CU.Apply()
+end
 function CU.Default(key)
     local c = CU.DB()
-    c.look[key], c.sound[key] = nil, nil
+    c.look[key], c.sound[key], c.voice[key] = nil, nil, nil
     return CU.Apply()
 end
 --- Move a cue one place up (-1) or down (+1) among the cues the card lists: its square moves with it (a cue another
@@ -329,8 +359,7 @@ function CU.Apply()
     return "now"
 end
 
---- A cue's sound: the voice (with the person's name for "voicename"), a game sound, or nothing. `force` (TRY) skips the
---- once-every-12-s rule.
+--- A cue heard: its game sound and its voice, each on its own pick. `force` (TRY) skips the once-every-12-s rule.
 CU.spoke = {}
 --- A moment after a loading screen nothing speaks (the client re-makes its buttons: BN.quietUntil).
 function CU.Quiet()
@@ -340,25 +369,27 @@ end
 function CU.Say(key, unit, force)
     local q = CU.BY[key]
     if not q or (not force and not CU.On(key)) then return false end
-    local s = CU.Sound(key)
-    if s == "off" then return false end
+    local s, v = CU.Sound(key), CU.Voice(key)
+    if s == "off" and v == "off" then return false end
     local t = GetTime and GetTime() or 0
     local k = key .. ":" .. tostring(unit or "")
     if not force and CU.spoke[k] and t - CU.spoke[k] < CU.EVERY then return false end
     CU.spoke[k] = t
-    return CU.Play(q, s, unit)
+    local played = CU.Play(s)
+    local spoke = CU.Speak(q, v, unit)
+    return played or spoke
 end
---- One sound of the list, played for this cue (nothing is picked): a game sound, or the voice.
-function CU.Play(q, s, unit)
-    if s == "off" then return false end
-    local kit = s:match("^kit:(%d+)$")
-    if kit then
-        if not PlaySound then return false end
-        return (pcall(PlaySound, tonumber(kit), "SFX"))
-    end
-    if not (C_VoiceChat and C_VoiceChat.SpeakText) then return false end
+--- One sound of the list, played (nothing is picked).
+function CU.Play(s)
+    local kit = type(s) == "string" and s:match("^kit:(%d+)$")
+    if not (kit and PlaySound) then return false end
+    return (pcall(PlaySound, tonumber(kit), "SFX"))
+end
+--- The voice, as picked: "spell" or "name" (the spell and who).
+function CU.Speak(q, v, unit)
+    if v == "off" or not (C_VoiceChat and C_VoiceChat.SpeakText) then return false end
     local words = q.say
-    if s == "voicename" then words = CU.Named(q.say, unit) end
+    if v == "name" then words = CU.Named(q.say, unit) end
     CU.said = (CU.said or 0) + 1
     return (pcall(C_VoiceChat.SpeakText, 0, words, CU.VOICE.rate, CU.VOICE.volume))
 end
@@ -384,13 +415,13 @@ function CU.Wrap()
     local sw, setSw, preset = RD.Sw, RD.SetSw, RD.SwPreset
     RD.Sw = function(key)
         if CU.BY[key] then return CU.On(key) end
-        if key == "hellvoice" then return CU.On("hell") and CU.Sound("hell") ~= "off" end
+        if key == "hellvoice" then return CU.On("hell") and CU.Voice("hell") ~= "off" end
         return sw(key)
     end
     RD.SetSw = function(key, on)
         if CU.BY[key] then CU.DB().on[key] = on and true or false return RD.SwApply() end
         if key == "hellvoice" then
-            CU.DB().sound.hell = on and (CU.BY.hell.sound) or "off"
+            CU.DB().voice.hell = on and (CU.BY.hell.voice) or "off"
             return RD.SwApply()
         end
         return setSw(key, on)
@@ -400,7 +431,7 @@ function CU.Wrap()
         if p then
             local c = CU.DB()
             for _, q in ipairs(CU.LIST) do c.on[q.key] = p[q.key] == true end
-            if p.hell and not p.hellvoice then c.sound.hell = "off" elseif p.hellvoice then c.sound.hell = nil end
+            if p.hell and not p.hellvoice then c.voice.hell = "off" elseif p.hellvoice then c.voice.hell = nil end
         end
         return preset(name)
     end
@@ -560,11 +591,12 @@ end
 
 --- The settings as the string's table (dev/CUES.md).
 function CU.Table()
-    local c, t = CU.DB(), { v = 1, order = CU.Order(), on = {}, look = {}, sound = {} }
+    local c, t = CU.DB(), { v = 1, order = CU.Order(), on = {}, look = {}, sound = {}, voice = {} }
     for _, q in ipairs(CU.LIST) do
         if CU.On(q.key) then t.on[q.key] = true end
         if c.look[q.key] then t.look[q.key] = c.look[q.key] end
         if c.sound[q.key] then t.sound[q.key] = c.sound[q.key] end
+        if c.voice[q.key] then t.voice[q.key] = c.voice[q.key] end
     end
     local RD = NS.RD
     if RD and RD.RaidSettings then t.raid = RD.RaidSettings() end   -- (sheet 6's switches, when they are in)
@@ -616,7 +648,10 @@ function CU.Import(s)
         local lk = type(t.look) == "table" and t.look[k]
         c.look[k] = known(CU.LOOKS, lk) and lk or nil
         local sd = type(t.sound) == "table" and t.sound[k]
+        local vo
+        if type(t.voice) == "table" then vo = t.voice[k] else sd, vo = CU.Split(sd) end    -- (a string from before the split)
         c.sound[k] = known(CU.SOUNDS, sd) and sd or nil
+        c.voice[k] = known(CU.VOICES, vo) and vo or nil
         n = n + 1
     end
     local RD = NS.RD
@@ -628,7 +663,7 @@ end
 -- ===================================================================================================================
 -- THE CARD
 -- ===================================================================================================================
-CU.CARD_W, CU.CARD_H = 430, 300                      -- (1.43:1, the family's window shape)
+CU.CARD_W, CU.CARD_H = 460, 322                      -- (1.43:1, the family's window shape)
 CU.ROWS = 6                                          -- picker rows shown; the wheel scrolls
 CU.sel = "hell"
 local FONT = "Fonts\\ARIALN.TTF"
@@ -751,12 +786,12 @@ local function picker(card, kind, x, y, w)
         -- Lightning crack picked it, and it took the voice's place): its own button; the rest of the row picks
         row.try = button(row, 26, 13, "TRY", function()
             local q = CU.BY[CU.sel]
-            if row.id and q then CU.Play(q, row.id, "Tin") end
+            if row.id and q then CU.Play(row.id) end
         end)
         row.try:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         row:SetScript("OnClick", function(self)
             if not self.id then return end
-            if kind == "look" then CU.SetLook(CU.sel, self.id) else CU.SetSound(CU.sel, self.id) CU.Try() end
+            if kind == "look" then CU.SetLook(CU.sel, self.id) else CU.SetSound(CU.sel, self.id) CU.Play(self.id) end
         end)
         row:EnableMouseWheel(true)
         row:SetScript("OnMouseWheel", function(_, delta) P.top = math.max(0, P.top - (delta or 0)) CU.PaintPicker(P) end)
@@ -955,8 +990,26 @@ function CU.Card()
     c.try:SetPoint("TOPLEFT", c, "TOPLEFT", 326, -42)
     c.def = button(c, 90, 18, "BACK TO DEFAULT", function() CU.Default(CU.sel) end)
     c.def:SetPoint("TOPLEFT", c, "TOPLEFT", 326, -64)
-    c.look = picker(c, "look", 168, -94, 124)
-    c.sound = picker(c, "sound", 300, -94, 124)
+    -- the voice: its own pick, over the two lists
+    c.voiceHead = text(c, 10, CYAN)
+    c.voiceHead:SetPoint("TOPLEFT", c, "TOPLEFT", 168, -95)
+    c.voiceHead:SetText("VOICE")
+    c.voices = {}
+    local vx = 208
+    for i, o in ipairs(CU.VOICES) do
+        local w = 14 + #o.name * 6
+        local b = button(c, w, 17, o.name, function()
+            CU.SetVoice(CU.sel, o.id)
+            local q = CU.BY[CU.sel]
+            if q then CU.Speak(q, o.id, "Tin") end
+        end)
+        b:SetPoint("TOPLEFT", c, "TOPLEFT", vx, -91)
+        b.id = o.id
+        c.voices[i] = b
+        vx = vx + w + 5
+    end
+    c.look = picker(c, "look", 168, -116, 138)
+    c.sound = picker(c, "sound", 314, -116, 138)
     -- the string
     c.export = button(c, 74, 18, "EXPORT", function() CU.ShowString("export") end)
     c.export:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 8)
@@ -1000,6 +1053,11 @@ function CU.Paint()
     c.note:SetText((fight() and "after this fight") or (CU.On(CU.sel) and "" or "this cue is off"))
     CU.PaintPicker(c.look)
     CU.PaintPicker(c.sound)
+    for _, b in ipairs(c.voices) do
+        local on = b.id == CU.Voice(CU.sel)
+        b.text:SetTextColor(on and CYAN[1] or DIM[1], on and CYAN[2] or DIM[2], on and CYAN[3] or DIM[3], 1)
+        for _, e in ipairs(b.edges) do e:SetColorTexture(CYAN[1] * (on and 1 or 0.3), CYAN[2] * (on and 1 or 0.3), CYAN[3] * (on and 1 or 0.3), 1) end
+    end
     CU.PaintPreview()
     if c.code then c.code:SetText(CU.Code()) end
     return true
@@ -1007,13 +1065,13 @@ end
 
 --- The faint code: build | chosen cue: on, look, sound, square | order (first letters, capital = on) | Hellfire's game
 --- buttons | fight | class effects. Short codes on purpose - it is for Claude reading a screenshot, not for reading.
-local SOUND_CODE = { voicename = "vn", voice = "v", off = "x" }
+local VOICE_CODE = { name = "vn", spell = "v", off = "x" }
 function CU.Code()
     local key = CU.sel
     local look = CU.Look(key)
     local lk = look == "icon" and "i" or look == "word" and "w" or ("m" .. (look:match("%d+") or "?"))
     local sd = CU.Sound(key)
-    sd = SOUND_CODE[sd] or ("k" .. (sd:match("%d+") or "?"))
+    sd = (sd == "off" and "" or ("k" .. (sd:match("%d+") or "?") .. "+")) .. (VOICE_CODE[CU.Voice(key)] or "?")
     local q = CU.BY[key]
     local sq = q and q.kind == "square" and ("@" .. CU.SquareXY(key)) or (q and q.kind or "")
     local ord = {}

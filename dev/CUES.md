@@ -29,7 +29,10 @@ db().cues = {
   order = { "hell", "tap", "crit" },        -- the cue row's squares, left to right (keys of CU.LIST)
   on = { hell = true },                     -- nil / false = off (DEFAULT OFF)
   look = { hell = "icon" },                 -- "icon" | "word" | "model:<fileId or displayId>" ; nil = "icon"
-  sound = { hell = "voice" },               -- "voice" | "voicename" | "kit:<soundKitId>" | "off" ; nil = "voice"
+  sound = { hell = "kit:1506" },            -- "kit:<soundKitId>" | "off" ; nil = the cue's own (CU.LIST)
+  voice = { hell = "name" },                -- "off" | "spell" | "name" (the spell and who); nil = the cue's own. Two picks
+                                            -- since 21 Nov (Arn: "make sound and voice separate"); an older save or string
+                                            -- had one in `sound` ("voice" | "voicename" too): CU.Split / splitOld
 }
 ```
 
@@ -51,7 +54,8 @@ The JSON:
   "order": ["hell", "tap", "crit"],
   "on":    { "hell": true },
   "look":  { "hell": "icon" },
-  "sound": { "hell": "voice" },
+  "sound": { "hell": "kit:1506" },
+  "voice": { "hell": "name" },
   "raid":  { "gtag": true, "sort": "tanks", "cols": false } }
 ```
 
