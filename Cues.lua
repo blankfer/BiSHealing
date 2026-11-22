@@ -201,6 +201,61 @@ function CU.Wear(m, file)
     if file then m:Show() modelLoad(m) else m:Hide() m.bisUp = nil end
 end
 
+--- A CUE'S FACE: the picked icon or turning model on a dark square, for any cue that has a word of its own (Arn, 21 Nov:
+--- "no talking on revelation crit" - and his Life Tap icon and the rest did nothing either: only Hellfire obeyed the card).
+function CU.Face(parent, key, px)
+    local f = { key = key, px = px }
+    local sq = CreateFrame("Frame", nil, parent)
+    sq:SetSize(px, px)
+    if sq.SetFrameLevel and parent.GetFrameLevel then
+        local lvl = parent:GetFrameLevel()
+        if type(lvl) == "number" then sq:SetFrameLevel(lvl + 5) end
+    end
+    local bg = sq:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(sq)
+    bg:SetColorTexture(0, 0, 0, 0.75)
+    local icon = sq:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints(sq)
+    if icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    icon:Hide()
+    sq:Hide()
+    f.sq, f.icon = sq, icon
+    return f
+end
+--- Show (or put away) a face as its cue's look says. Answers true when the face stands for the cue - its word stays out.
+function CU.FaceShow(f, on)
+    if not f then return false end
+    local look = on and CU.Look(f.key) or nil
+    if f.shown == look and f.wore == f.key then return f.faced end
+    f.shown, f.wore = look, f.key
+    local model = look and CU.ModelOf(f.key) or nil
+    local icon = look == "icon"
+    f.faced = (model ~= nil) or icon
+    if icon then
+        local q = CU.BY[f.key]
+        local get = C_Spell and C_Spell.GetSpellTexture
+        local ok, tex = false, nil
+        if get and q then ok, tex = pcall(get, q.spell) end
+        if ok and plain(tex) then pcall(f.icon.SetTexture, f.icon, tex) end
+        f.icon:Show()
+    else f.icon:Hide() end
+    if f.faced then f.sq:Show() else f.sq:Hide() end
+    if model and not f.model then
+        local okM, m = pcall(CreateFrame, "PlayerModel", nil, f.sq)
+        if okM and m then
+            m:SetAllPoints(f.sq)
+            m.yaw = 0
+            m:SetScript("OnUpdate", function(self, el)
+                self.yaw = (self.yaw + (tonumber(el) or 0) * 1.5) % 6.2832
+                pcall(self.SetFacing, self, self.yaw)
+            end)
+            f.model = m
+        end
+    end
+    if f.model then CU.Wear(f.model, model) end
+    return f.faced
+end
+
 --- Change a cue: on/off, look, sound. Each answers "now" or "after" (this fight).
 function CU.SetOn(key, on)
     if not CU.BY[key] then return nil end
@@ -268,6 +323,7 @@ function CU.Apply()
     if fight() then CU.pending = true return "after" end
     CU.pending = nil
     if BN and BN.Relayout then BN.Relayout() end
+    if NS.RV and NS.RV.Relook then NS.RV.Relook() end
     if RD and RD.RipMarks and RD.spokes then pcall(RD.RipMarks) end
     if RD and RD.SwApply then RD.SwApply() end
     return "now"
@@ -276,6 +332,11 @@ end
 --- A cue's sound: the voice (with the person's name for "voicename"), a game sound, or nothing. `force` (TRY) skips the
 --- once-every-12-s rule.
 CU.spoke = {}
+--- A moment after a loading screen nothing speaks (the client re-makes its buttons: BN.quietUntil).
+function CU.Quiet()
+    local u = NS.BN and NS.BN.quietUntil
+    return type(u) == "number" and GetTime and GetTime() < u or false
+end
 function CU.Say(key, unit, force)
     local q = CU.BY[key]
     if not q or (not force and not CU.On(key)) then return false end

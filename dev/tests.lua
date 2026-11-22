@@ -15855,6 +15855,21 @@ do
                     STATE.guids[twin.unit] = UnitGUID(tsp.unit)
                     RD.RipMarks()
                     ok(twin.ripMark and twin.ripMark:IsShown(), "the same person in another box (the TARGET pair): marked there too")
+                    do   -- the cue card's sound for a middle cue: once when the mark comes on, one person = one sound
+                        local CU, keepS, keepVC, said = NS.CU, NS.CU.DB().sound.rip, _G.C_VoiceChat, {}
+                        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+                        CU.DB().sound.rip, CU.spoke, RD.cueTold, NS.BN.quietUntil = "voice", {}, {}, 0
+                        RD.RipMarks()
+                        ok(#said == 1 and said[1] == "Chain Heal", "Riptide's sound: once, though two boxes wear the mark", #said)
+                        RD.RipMarks()
+                        CU.spoke = {}
+                        RD.RipMarks()
+                        ok(#said == 1, "repainted while it stands: not said again", #said)
+                        CU.DB().sound.rip, RD.cueTold = nil, {}
+                        RD.RipMarks()
+                        ok(#said == 1, "no sound picked (the default): none")
+                        CU.DB().sound.rip, _G.C_VoiceChat, CU.spoke = keepS, keepVC, {}
+                    end
                     STATE.guids[twin.unit] = keepG
                     RD.RipMarks()
                     ok(not (twin.ripMark and twin.ripMark:IsShown()), "someone else in that box: no mark")
@@ -17004,6 +17019,20 @@ do
     BN.Paint(sp, 4000)
     ok(B.tag:IsShown() and B.tag:GetText() == "TAP" and not B.band:IsShown(), "TAP in amber under his name, no burning bar",
        tostring(B.tag:IsShown()) .. " " .. tostring(B.tag:GetText()) .. " " .. tostring(B.band:IsShown()))
+    do   -- the cue card's look for Life Tap (Arn's card said "icon", and the box still said TAP)
+        local CU, keepL = NS.CU, NS.CU.DB().look.tap
+        CU.DB().look.tap = "icon"
+        BN.Paint(sp, 4000)
+        ok(B.tapFace.sq:IsShown() and B.tapFace.icon:IsShown() and not B.tag:IsShown(), "Life Tap as the icon: the icon, no TAP")
+        CU.DB().look.tap = "model:198692"
+        BN.Paint(sp, 4000)
+        ok(B.tapFace.model and B.tapFace.model.__drawn == 198692 and not B.tapFace.icon:IsShown() and not B.tag:IsShown(), "as a model: the model")
+        CU.DB().look.tap = "word"
+        BN.Paint(sp, 4000)
+        ok(B.tag:IsShown() and not B.tapFace.sq:IsShown(), "as the word: TAP again")
+        CU.DB().look.tap = keepL
+        BN.Paint(sp, 4000)
+    end
     ok(not BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party2", 11689) and not BN.tap.party2, "a shaman casting the same id: nothing")
     TICK(BN.TAP_FOR + 0.1)
     BN.Paint(sp, 4000)
@@ -17144,6 +17173,33 @@ do
     rs.opts.initializeFrame(btn)                         -- (the client hands its button over while the buff is up)
     ok(btn.bisCrit and btn.bisCrit:GetText() == "CRIT" and not btn.Icon:IsShown() and btn.__w == RV.BADGE.w,
        "the game's button wears OUR badge: CRIT in the deck's tag look, Blizzard's icon hidden", btn.bisCrit and btn.bisCrit:GetText())
+    -- the cue card's sound and look (Arn, 21 Nov: "no talking on revelation crit")
+    do
+        local CU, keepVC, said = NS.CU, _G.C_VoiceChat, {}
+        local keepC = NS.DB().radar.cues
+        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+        NS.DB().radar.cues = { v = 1, stamp = 1, on = { crit = true }, sound = { crit = "voice" }, look = {} }
+        CU.spoke, NS.BN.quietUntil = {}, 0
+        btn:GetScript("OnShow")(btn)
+        ok(#said == 1 and said[1] == "Crit", "the game shows its Revelation button: the voice says Crit", said[1])
+        btn:GetScript("OnShow")(btn)
+        ok(#said == 1, "shown again at once (the bar came and went): not said twice")
+        CU.spoke, NS.BN.quietUntil = {}, GetTime() + 5
+        btn:GetScript("OnShow")(btn)
+        ok(#said == 1, "just after a loading screen: quiet")
+        NS.BN.quietUntil = 0
+        NS.DB().radar.cues.sound.crit = nil
+        btn:GetScript("OnShow")(btn)
+        ok(#said == 1, "no sound picked: none")
+        ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "the word look: the CRIT tag")
+        CU.SetLook("crit", "icon")
+        ok(btn.bisFace.sq:IsShown() and btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "the icon look: the spell's icon, no tag")
+        CU.SetLook("crit", "model:198692")
+        ok(btn.bisFace.model and btn.bisFace.model.__drawn == 198692 and not btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "a model look: the fireball")
+        CU.SetLook("crit", "word")
+        ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "and back to the word")
+        _G.C_VoiceChat, NS.DB().radar.cues, CU.spoke = keepVC, keepC, {}
+    end
     ON[1248808] = 15
     RV.Paint()
     ok(not fs:IsShown(), "with the game's badge built, our own word stays out (no second CRIT)")
@@ -17217,7 +17273,7 @@ do
     ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "voicename", "BACK TO DEFAULT: the fireball and the voice")
     ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
     -- the middle cue's look
-    local sp = { cue = { word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
+    local sp = { cue = { hold = CreateFrame("Frame"), word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
                          icon = CreateFrame("Frame"):CreateTexture(), edge = CreateFrame("Frame"):CreateTexture(), ck = "rip", tex = 136037 } }
     CU.SetLook("rip", "icon")
     RD.CueShow(sp, true)
@@ -17225,8 +17281,13 @@ do
     CU.SetLook("rip", "word")
     RD.CueShow(sp, true)
     ok(sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "as the word: the word, no icon")
+    CU.SetLook(sp.cue.ck, "model:198692")
+    RD.CueShow(sp, true)
+    ok(sp.cue.face and sp.cue.face.sq:IsShown() and sp.cue.face.model.__drawn == 198692 and not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(),
+       "a middle cue with a model: the model, no word, no icon")
     RD.CueShow(sp, false)
-    ok(not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "no cue: neither")
+    ok(not sp.cue.word:IsShown() and not sp.cue.icon:IsShown() and not sp.cue.face.sq:IsShown(), "no cue: none of it")
+    CU.SetLook(sp.cue.ck, "icon")
     -- the string
     ok(CU.UnB64(CU.B64("a")) == "a" and CU.UnB64(CU.B64("ab")) == "ab" and CU.UnB64(CU.B64("abc")) == "abc", "base64 there and back, every padding")
     ok(CU.B64("Man") == "TWFu" and CU.B64("Ma") == "TWE=", "the standard alphabet (what the browser's btoa writes)")

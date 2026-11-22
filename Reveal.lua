@@ -148,6 +148,7 @@ function RV.Badge(button)
         bg:SetAllPoints(button)
         bg:SetColorTexture(B.bg[1], B.bg[2], B.bg[3], B.bg[4])
         local c = RV.COL
+        button.bisTag = { bg }                               -- (the tag: put away when the card's look is an icon or a model)
         for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 1 },
                              { "TOPLEFT", "BOTTOMLEFT", 1, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 1, 0 } }) do
             local t = button:CreateTexture(nil, "BORDER")
@@ -155,6 +156,7 @@ function RV.Badge(button)
             t:SetPoint(e[1], button, e[1], 0, 0)
             t:SetPoint(e[2], button, e[2], 0, 0)
             if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+            button.bisTag[#button.bisTag + 1] = t
         end
         local fs = button:CreateFontString(nil, "OVERLAY")
         fs:SetFont("Fonts\\ARIALN.TTF", B.size, "OUTLINE")
@@ -162,8 +164,33 @@ function RV.Badge(button)
         fs:SetTextColor(c[1], c[2], c[3], 1)
         fs:SetText(RV.WORD)
         button.bisCrit = fs
+        button.bisTag[#button.bisTag + 1] = fs
+        -- the cue card's look and sound (Arn, 21 Nov: "no talking on revelation crit"): the client shows the button when
+        -- the buff is there - that is the moment to speak, and nothing else in a fight may say so
+        if NS.CU and NS.CU.Face then
+            button.bisFace = NS.CU.Face(button, "crit", RV.FACE_PX)
+            button.bisFace.sq:SetPoint("CENTER", button, "CENTER", 0, 0)
+        end
+        if button.HookScript then pcall(button.HookScript, button, "OnShow", RV.Speak) end
     end)
     RV.badges = (RV.badges or 0) + 1
+    RV.buttons[#RV.buttons + 1] = button
+    RV.Relook()
+end
+RV.FACE_PX = 20
+RV.buttons = {}
+--- The cue card's sound for Revelation, once per CU.EVERY (the button's showing, the combat text, or the read aura).
+function RV.Speak()
+    local CU = NS.CU
+    if not CU or CU.Quiet() then return false end
+    return CU.Say("crit", "player")
+end
+--- Dress every badge in the card's look: the CRIT tag, the spell's icon, or a turning model.
+function RV.Relook()
+    for _, b in ipairs(RV.buttons) do
+        local faced = NS.CU and NS.CU.FaceShow(b.bisFace, true) or false
+        for _, part in ipairs(b.bisTag or {}) do if faced then part:Hide() else part:Show() end end
+    end
 end
 function RV.Icon()
     if RV.container then return RV.container end
@@ -200,6 +227,7 @@ function RV.Paint()
         return false
     end
     local up = RV.Up()
+    if up and not RV.up then RV.Speak() end
     RV.up = up
     local fs = (up or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit)) and RV.Word()
     if not fs then return up end

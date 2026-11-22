@@ -166,6 +166,10 @@ function BN.Parts(e)
     tag:SetText("TAP")
     tag:Hide()
     B.band, B.tag = band, tag
+    if NS.CU and NS.CU.Face then                              -- the card's look for Life Tap: the icon or a model in its square
+        B.tapFace = NS.CU.Face(e.box, "tap", BN.FLAME.px)
+        BN.PlaceFace(B.tapFace, e.box)
+    end
     e.burn = B
     return B
 end
@@ -194,7 +198,8 @@ function BN.Paint(sp, mx)
         if B.pulse then B.pulse:Stop() end
     end
     for _, x in ipairs(B.edges) do x:SetShown(left ~= nil) end
-    if tapOn then B.tag:Show() else B.tag:Hide() end
+    local faced = NS.CU and NS.CU.FaceShow(B.tapFace, tapOn) or false
+    if tapOn and not faced then B.tag:Show() else B.tag:Hide() end
     if not tapOn then BN.tap[unit] = nil end
     return left ~= nil or tapOn
 end
@@ -439,9 +444,17 @@ function BN.Relayout()
     BN.Relook()
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
         local B = sp.en and sp.en.burn
-        if B and B.tag then BN.PlaceTag(B.tag, sp.en.box) end
+        if B and B.tag then
+            BN.PlaceTag(B.tag, sp.en.box)
+            if B.tapFace then BN.PlaceFace(B.tapFace, sp.en.box) end
+        end
     end
     return n
+end
+function BN.PlaceFace(face, box)
+    local x, y = NS.CU.SquareXY("tap", BN.FLAME.px)
+    face.sq:ClearAllPoints()
+    face.sq:SetPoint("TOPLEFT", box, "TOPLEFT", x, y)
 end
 --- The TAP tag in Life Tap's square of the cue row.
 function BN.PlaceTag(tag, box)

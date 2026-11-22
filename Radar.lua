@@ -5807,15 +5807,26 @@ function RD.CueMark(sp)
     sp.ripHold = hold
     return sp.cue
 end
+RD.CUE_FACE = 22
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
     -- BiS Cues (21 Nov 2026): the cue card's LOOK - "icon" shows the spell's icon in the middle, else the word
     local icon = on and q.ck and q.tex and NS.CU and NS.CU.Look(q.ck) == "icon"
-    if on and not icon then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    local model = on and q.ck and NS.CU and NS.CU.ModelOf(q.ck) or nil        -- (a model: its own dark square, CU.Face)
+    if model and not q.face then
+        q.face = NS.CU.Face(q.hold, q.ck, RD.CUE_FACE)
+        q.face.sq:SetPoint("CENTER", q.icon, "CENTER", 0, 0)
+    end
+    if q.face then
+        if q.ck then q.face.key = q.ck end
+        NS.CU.FaceShow(q.face, model ~= nil)
+    end
+    if on and not icon and not model then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
     if icon then q.icon:Show() q.edge:Show() else q.icon:Hide() q.edge:Hide() end
 end
 
+RD.cueTold = {}                                    -- "rip:<person>" whose mark is up: its sound is not said again
 --- The marks on the boxes: the Riptide icon in the middle (the heal cue) on EVERY box of whoever has one of yours standing.
 function RD.RipMarks()
     local now = GetTime()
@@ -5838,6 +5849,7 @@ function RD.RipMarks()
     local cueNext = RD.CuePrune(now)
     local deck = RD.Deck()
     local on = deck and RD.Sw("rip")
+    local told, still = RD.cueTold, {}
     for _, sp in ipairs(RD.spokes or {}) do
         local shown = sp.unit and sp.deckPlate and sp.deckPlate:IsShown()
         local key = shown and RD.RipKey(sp.unit) or nil
@@ -5851,9 +5863,16 @@ function RD.RipMarks()
             if q.tex ~= tex then q.tex = tex pcall(q.icon.SetTexture, q.icon, tex) end
             if q.text ~= word then q.text = word q.word:SetText(word or "") end
             if has then sp.ripMark = q.word end
+            -- the card's sound, once when the mark comes on somebody (off unless picked; one person, however many boxes)
+            local id = ck and key and (ck .. ":" .. key) or nil
+            if id then
+                if not told[id] and not still[id] and NS.CU and not NS.CU.Quiet() then NS.CU.Say(ck, sp.unit) end
+                still[id] = true
+            end
         end
         if sp.cue then RD.CueShow(sp, (tex or word) ~= nil) end
     end
+    RD.cueTold = still
     RD.CueArm(cueNext)
 end
 
