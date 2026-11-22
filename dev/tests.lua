@@ -799,8 +799,31 @@ _G.SecureHandlerSetFrameRef = function(f, label, ref)
     f.__refs = f.__refs or {}
     f.__refs[label] = ref
 end
+-- A 3D MODEL, DIRTY (21 Nov 2026, Arn: the cue card's fireball "appeared for a second but disappeared after i switched"):
+-- hiding it drops what it drew, a load puts the camera back at its own place, and showing runs OnShow. The old mock had no
+-- model at all - any call answered, so "is the fireball there" was the flag our own code had set.
+function MOCK_MODEL(m)
+    function m:SetModel(file) self.__drawn, self.__cam, self.__loads = file, nil, (self.__loads or 0) + 1 end
+    function m:ClearModel() self.__drawn, self.__cam = nil, nil end
+    function m:SetCamDistanceScale(v) if self.__drawn then self.__cam = v end end
+    function m:Show()
+        local was = self.__shown
+        self.__shown = true
+        if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+    end
+    function m:Hide()
+        local was = self.__shown
+        self.__shown, self.__drawn, self.__cam = false, nil, nil
+        if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+    end
+    -- the window it sits in closes and opens: the client runs the model's own OnHide / OnShow too
+    function m:__ParentHide() self.__drawn, self.__cam = nil, nil if self.__scripts.OnHide then self.__scripts.OnHide(self) end end
+    function m:__ParentShow() if self.__scripts.OnShow then self.__scripts.OnShow(self) end end
+    return m
+end
 _G.CreateFrame = function(kind, name, parent, template)
     local f = _G.CreateFrameUnguarded(kind, name, parent, template)
+    if kind == "PlayerModel" and type(f) == "table" then MOCK_MODEL(f) end
     if type(f) == "table" and type(template) == "string" and template:find("Secure", 1, true) then lockdownGuard(f) end
     return f
 end
@@ -17256,8 +17279,24 @@ do
     ok(CU.Look("hell") == "model:198692", "BACK TO DEFAULT")
     -- Arn's 21 Nov shot: the fireball never showed, the bar stopped short, a chip ran off the card
     local pv = c.preview
-    ok(pv.model and pv.model:IsShown() and not pv.icon:IsShown() and pv.model.bisFile == 198692,
-       "the preview: the Fireball model on its own dark square (no icon over it)")
+    ok(pv.model and pv.model:IsShown() and not pv.icon:IsShown() and pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM,
+       "the preview: the Fireball model on its own dark square (no icon over it)", pv.model and pv.model.__drawn)
+    local loads0 = pv.model.__loads
+    CU.Paint() CU.Paint()
+    ok(pv.model.__loads == loads0 and pv.model.__drawn == 198692, "repainting does not load it again (a fire that restarts flickers)", pv.model.__loads)
+    CU.sel = "tap" CU.Paint()
+    ok(pv.model.__drawn == nil and pv.icon:IsShown(), "another cue: its icon, no fireball")
+    CU.sel = "hell" CU.Paint()
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM and not pv.icon:IsShown(),
+       "and back: the fireball is drawn again, camera and all (Arn, 21 Nov: it disappeared after he switched)", pv.model.__drawn)
+    CU.SetLook("hell", "icon") CU.SetLook("hell", "model:198692")
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM, "a look to the icon and back: drawn again")
+    pv.model:__ParentHide() pv.model:__ParentShow()
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM, "the card closed and opened: drawn again")
+    pv.model.__cam = nil
+    pv.model:GetScript("OnModelLoaded")(pv.model)
+    ok(pv.model.__cam == CU.MODEL_CAM, "a late load: the camera goes back after it")
+    ok(CU.Code():find("mdl 198692sc", 1, true), "the faint code says what the model is doing", CU.Code())
     local bp = {}
     for _, p in ipairs(pv.bar.points) do bp[p[1]] = p end
     ok(bp.TOPLEFT and bp.BOTTOMRIGHT and bp.BOTTOMRIGHT[2] == pv, "the preview's bar runs edge to edge (anchored to both corners)")
@@ -17292,6 +17331,9 @@ do
     CU.SetLook("hell", "model:198692")
     ok(not btn.bisIcon:IsShown() and btn.bisDark:IsShown() and (not btn.bisModel or btn.bisModel:IsShown()),
        "the Fireball look: the fireball on a dark square, no Hellfire icon under it (Arn's 21 Nov shot)")
+    ok(btn.bisModel.__drawn == 198692 and btn.bisModel.__cam == CU.MODEL_CAM, "and it is really drawn, camera back", btn.bisModel.__drawn)
+    btn.bisModel:__ParentHide() btn.bisModel:__ParentShow()
+    ok(btn.bisModel.__drawn == 198692 and btn.bisModel.__cam == CU.MODEL_CAM, "the game hides and shows the badge (Hellfire again): the fire is drawn again")
     CU.Move("hell", -1)
     ok(btn.points[1][4] == CU.SQUARE.x, "re-ordered out of a fight: the button moves to its new square")
     -- only what your class can act on (Arn: "we wont see ones that arent our class ... like oath and light vigil")

@@ -164,6 +164,43 @@ function CU.ModelOf(key)
     return id and tonumber(id) or nil
 end
 
+--- A MODEL THAT HIDES IS A MODEL TO LOAD AGAIN (Arn, 21 Nov: "the fireball appeared for a second but disappeared after i
+--- switched" - it was loaded once and only shown again after). Every showing loads it afresh, and the camera goes back
+--- once per load (a load puts the camera at its own place: at 22 px, inside the fireball = nothing). Both the card's
+--- sample and the game's Hellfire badge wear their model through here.
+CU.modelLoads = 0
+local function modelCam(m)
+    if m.bisCamSet or not m.SetCamDistanceScale then return end
+    m.bisCamSet = true
+    pcall(m.SetCamDistanceScale, m, CU.MODEL_CAM)
+end
+local function modelLoad(m)
+    if not m.bisWant or m.bisUp == m.bisWant then return end
+    m.bisUp, m.bisCamSet = m.bisWant, nil
+    CU.modelLoads = CU.modelLoads + 1
+    if m.ClearModel then pcall(m.ClearModel, m) end
+    pcall(m.SetModel, m, m.bisWant)
+    modelCam(m)
+end
+--- Set a model frame up once (its own scripts only: no script of it is anyone else's).
+function CU.ModelReady(m)
+    if m.bisReady then return end
+    m.bisReady = true
+    pcall(m.SetScript, m, "OnHide", function(self) self.bisUp = nil end)
+    pcall(m.SetScript, m, "OnShow", function(self) self.bisUp = nil modelLoad(self) end)
+    pcall(m.SetScript, m, "OnModelLoaded", function(self)      -- (a late load: its camera came with it)
+        self.bisCamSet = nil
+        modelCam(self)
+    end)
+end
+--- Wear this file's model, or none.
+function CU.Wear(m, file)
+    if not m then return end
+    CU.ModelReady(m)
+    m.bisWant = file
+    if file then m:Show() modelLoad(m) else m:Hide() m.bisUp = nil end
+end
+
 --- Change a cue: on/off, look, sound. Each answers "now" or "after" (this fight).
 function CU.SetOn(key, on)
     if not CU.BY[key] then return nil end
@@ -766,18 +803,7 @@ function CU.PaintPreview()
         pv.word:SetPoint("CENTER", pv.bar, "CENTER", 0, 0)
     end
     local model = CU.ModelOf(key)
-    if pv.model then
-        -- (the in-game badge's road, BN.BadgeOn: the model, then the camera pulled back - without it the 22 px square
-        -- shows the inside of the fireball, i.e. nothing; Arn's 21 Nov shot: "i cant just get a fireball there")
-        if model then
-            if pv.model.bisFile ~= model then
-                pcall(pv.model.SetModel, pv.model, model)
-                pv.model.bisFile = model
-            end
-            if pv.model.SetCamDistanceScale then pcall(pv.model.SetCamDistanceScale, pv.model, CU.MODEL_CAM) end
-            pv.model:Show()
-        else pv.model:Hide() end
-    end
+    CU.Wear(pv.model, model)
     if tex then pcall(pv.icon.SetTexture, pv.icon, tex) end
     if look == "icon" then pv.icon:Show() else pv.icon:Hide() end   -- (a model stands on its own dark square)
     if model or look == "icon" then pv.sq:Show() pv.sqBg:Show() else pv.sq:Hide() end
@@ -932,9 +958,11 @@ function CU.Code()
         for _, k in ipairs({ "fxvigil", "fxmend", "fxpoh", "fxwild" }) do fx = fx .. (FX.Sw(k) and "1" or "0") end
     end
     local look2 = RD and RD.Deck and (pcall(RD.Deck) and RD.Deck()) and "deck" or (NS.FG and NS.FG.Look and NS.FG.Look()) or "?"
-    return string.format("%s | %s %s %s %s %s | %s | burn %s | %s | fx %s | %s",
+    local pm = CU.card and CU.card.preview and CU.card.preview.model
+    local mdl = not pm and "none" or (tostring(pm.bisUp or "-") .. (pm:IsShown() and "s" or "h") .. (pm.bisCamSet and "c" or "") .. CU.modelLoads)
+    return string.format("%s | %s %s %s %s %s | %s | burn %s | %s | fx %s | %s | mdl %s",
         NS.Mark and NS.Mark() or tostring(NS.VERSION), key, CU.On(key) and "on" or "off", lk, sd, sq,
-        table.concat(ord, " "), burn, fight() and "FIGHT" or "calm", fx, tostring(look2))
+        table.concat(ord, " "), burn, fight() and "FIGHT" or "calm", fx, tostring(look2), mdl)
 end
 
 --- TRY: the chosen cue's sound now, and the preview box flashes.

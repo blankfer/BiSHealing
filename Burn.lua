@@ -358,8 +358,11 @@ function BN.BadgeOn(button, box, pip, sp)
         local okM, m = pcall(CreateFrame, "PlayerModel", nil, button)
         if okM and m then
             m:SetAllPoints(button)
-            pcall(m.SetModel, m, F.model)
-            if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, F.cam) end
+            if NS.CU then NS.CU.ModelReady(m)                 -- (BN.Relook dresses it: loaded at every showing)
+            else
+                pcall(m.SetModel, m, F.model)
+                if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, F.cam) end
+            end
             if m.SetScript then
                 m.bisYaw = 0
                 m:SetScript("OnUpdate", function(self, el)
@@ -411,7 +414,9 @@ function BN.Relook(button)
     for _, b in ipairs(list) do
         local btn = b.button
         if btn.bisModel then
-            if model then pcall(btn.bisModel.SetModel, btn.bisModel, model) btn.bisModel:Show() else btn.bisModel:Hide() end
+            if CU then CU.Wear(btn.bisModel, model)
+            elseif model then pcall(btn.bisModel.SetModel, btn.bisModel, model) btn.bisModel:Show()
+            else btn.bisModel:Hide() end
         end
         -- the spell's icon only for the "icon" look (Arn, 21 Nov: "the hellfire spell icon comes out when i choose fireball
         -- too" - it sat under the fireball as a fallback); a model stands on its own dark square
