@@ -17362,6 +17362,14 @@ do
     RD.swPanel.cues:GetScript("OnClick")(RD.swPanel.cues)
     local c = CU.card
     ok(c and c:IsShown() and c.points[1][2] == RD.swPanel, "it opens the card beside the switches panel")
+    do   -- the family's colours (Arn, 21 Nov: "bis>cues has this blue tint to it")
+        local P = RD.PLATE
+        ok(c.bg.__color[1] == P[1] and c.bg.__color[2] == P[2] and c.bg.__color[3] == P[3], "the card stands on the deck's own black, as the switches panel does")
+        local ar, ag, ab = 0.73, 0.50, 1.00
+        if BiSTheme and BiSTheme.rgb then ar, ag, ab = BiSTheme.rgb("accent") end
+        local tc = c.title.__color
+        ok(tc and math.abs(tc[1] - ar) < 0.01 and math.abs(tc[2] - ag) < 0.01 and math.abs(tc[3] - ab) < 0.01, "and its title wears the theme's accent, never a colour of its own", tc and (tc[1] .. " " .. tc[2] .. " " .. tc[3]))
+    end
     CU.sel = "hell"
     CU.Paint()
     ok(c.order[1].key == "tap" and c.order[2].key == "hell", "the order list in row order")

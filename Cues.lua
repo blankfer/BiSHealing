@@ -677,10 +677,27 @@ CU.CARD_W, CU.CARD_H = 460, 322                      -- (1.43:1, the family's wi
 CU.ROWS = 6                                          -- picker rows shown; the wheel scrolls
 CU.sel = "hell"
 local FONT = "Fonts\\ARIALN.TTF"
-local INK = { 0.91, 0.92, 0.96 }
-local DIM = { 0.55, 0.58, 0.69 }
-local CYAN = { 0.25, 0.82, 1.00 }
-local PINK = { 1.00, 0.31, 0.66 }
+-- THE FAMILY'S COLOURS, never our own (Arn, 21 Nov: "our ui strays sometimes need a way to unify it like bis>cues has this
+-- blue tint to it"; "bis healing black background wokrs becuause we can hide boxes"): the deck's black under everything
+-- (RD.PLATE, as the switches panel beside it) and BiSTheme's tokens over it, asked when the card is built - the theme may
+-- load after us. A switched-off part leaves no hole on black.
+local FALL = { ink = { 0.93, 0.91, 0.96 }, dim = { 0.56, 0.53, 0.65 }, accent = { 0.73, 0.50, 1.00 }, gold = { 0.90, 0.75, 0.29 },
+    good = { 0.31, 0.82, 0.81 }, line2 = { 0.23, 0.20, 0.38 }, sunken = { 0.13, 0.11, 0.24 } }
+local INK, DIM, ACC, GOLD, GOOD, LINE, SUNK, BLACK = FALL.ink, FALL.dim, FALL.accent, FALL.gold, FALL.good, FALL.line2, FALL.sunken, { 0.02, 0.02, 0.03 }
+function CU.Tones()
+    local T = _G.BiSTheme
+    local function tone(name)
+        if T and T.rgb then
+            local ok, r, g, b = pcall(T.rgb, name)
+            if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return { r, g, b } end
+        end
+        return FALL[name]
+    end
+    INK, DIM, ACC, GOLD = tone("ink"), tone("dim"), tone("accent"), tone("gold")
+    GOOD, LINE, SUNK = tone("good"), tone("line2"), tone("sunken")
+    local P = NS.RD and NS.RD.PLATE
+    if type(P) == "table" and type(P[1]) == "number" then BLACK = { P[1], P[2], P[3] } end
+end
 
 local function text(parent, size, col, layer)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
@@ -705,13 +722,13 @@ end
 local function hoverRow(row)
     row.wash = row:CreateTexture(nil, "BACKGROUND")
     row.wash:SetAllPoints(row)
-    row.wash:SetColorTexture(CYAN[1], CYAN[2], CYAN[3], 0.14)
+    row.wash:SetColorTexture(ACC[1], ACC[2], ACC[3], 0.14)
     row.wash:Hide()
     row.bar = row:CreateTexture(nil, "ARTWORK")
     row.bar:SetPoint("TOPLEFT", row, "TOPLEFT")
     row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT")
     row.bar:SetWidth(2)
-    row.bar:SetColorTexture(PINK[1], PINK[2], PINK[3], 1)
+    row.bar:SetColorTexture(ACC[1], ACC[2], ACC[3], 1)
     row.bar:Hide()
     row:HookScript("OnEnter", function(self) self.wash:Show() self.bar:Show() end)
     row:HookScript("OnLeave", function(self) if not self.sel then self.wash:Hide() self.bar:Hide() end end)
@@ -719,13 +736,13 @@ end
 local function button(parent, w, h, label, onClick)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(w, h)
-    b.edges = edges(b, { CYAN[1] * 0.5, CYAN[2] * 0.5, CYAN[3] * 0.5, 1 })
+    b.edges = edges(b, { ACC[1] * 0.5, ACC[2] * 0.5, ACC[3] * 0.5, 1 })
     b.text = text(b, 10, INK)
     b.text:SetPoint("CENTER")
     b.text:SetText(label)
     b.hl = b:CreateTexture(nil, "HIGHLIGHT")
     b.hl:SetAllPoints(b)
-    b.hl:SetColorTexture(CYAN[1], CYAN[2], CYAN[3], 0.22)
+    b.hl:SetColorTexture(ACC[1], ACC[2], ACC[3], 0.22)
     b:SetScript("OnClick", onClick)
     return b
 end
@@ -734,7 +751,7 @@ end
 local function picker(card, kind, x, y, w)
     local list = kind == "look" and CU.LOOKS or CU.SOUNDS
     local P = { kind = kind, list = list, cat = "All", top = 0 }
-    P.head = text(card, 10, CYAN)
+    P.head = text(card, 10, ACC)
     P.head:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
     P.head:SetText(kind == "look" and "LOOK" or "SOUND")
     P.pick = text(card, 10, INK)
@@ -748,8 +765,8 @@ local function picker(card, kind, x, y, w)
     q:SetTextInsets(4, 4, 0, 0)
     q.bg = q:CreateTexture(nil, "BACKGROUND")
     q.bg:SetAllPoints(q)
-    q.bg:SetColorTexture(0.10, 0.11, 0.17, 1)
-    q.edges = edges(q, { 0.16, 0.19, 0.31, 1 })
+    q.bg:SetColorTexture(SUNK[1], SUNK[2], SUNK[3], 1)
+    q.edges = edges(q, LINE)
     q.hint = text(q, 9, DIM)
     q.hint:SetPoint("LEFT", q, "LEFT", 5, 0)
     q.hint:SetText(kind == "look" and "search looks..." or "search sounds...")
@@ -774,7 +791,7 @@ local function picker(card, kind, x, y, w)
         if cx > x and cx + wd > x + w then cx, cy, P.extra = x, cy - 15, P.extra + 15 end
         b:SetSize(wd, 13)
         b:SetPoint("TOPLEFT", card, "TOPLEFT", cx, cy)
-        b.edges = edges(b, { 0.16, 0.19, 0.31, 1 })
+        b.edges = edges(b, LINE)
         b.text = text(b, 9, DIM)
         b.text:SetPoint("CENTER")
         b.text:SetText(c)
@@ -835,7 +852,7 @@ function CU.PaintPicker(P)
         row.sel = o and o.id == cur or false
         if o then
             row.text:SetText(o.name)
-            row.text:SetTextColor(row.sel and CYAN[1] or INK[1], row.sel and CYAN[2] or INK[2], row.sel and CYAN[3] or INK[3], 1)
+            row.text:SetTextColor(row.sel and ACC[1] or INK[1], row.sel and ACC[2] or INK[2], row.sel and ACC[3] or INK[3], 1)
             row:Show()
             row.wash:SetShown(row.sel) row.bar:SetShown(row.sel)
             row.try:SetShown(P.kind == "sound" and o.id ~= "off")
@@ -845,7 +862,7 @@ function CU.PaintPicker(P)
     end
     for _, b in ipairs(P.chips) do
         local on = b.cat == P.cat
-        b.text:SetTextColor(on and CYAN[1] or DIM[1], on and CYAN[2] or DIM[2], on and CYAN[3] or DIM[3], 1)
+        b.text:SetTextColor(on and ACC[1] or DIM[1], on and ACC[2] or DIM[2], on and ACC[3] or DIM[3], 1)
     end
 end
 
@@ -856,8 +873,8 @@ local function buildPreview(card, x, y)
     pv:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
     pv.bg = pv:CreateTexture(nil, "BACKGROUND")
     pv.bg:SetAllPoints(pv)
-    pv.bg:SetColorTexture(0.05, 0.06, 0.10, 1)
-    pv.edges = edges(pv, { 0.15, 0.17, 0.27, 1 })
+    pv.bg:SetColorTexture(BLACK[1], BLACK[2], BLACK[3], 1)
+    pv.edges = edges(pv, LINE)
     -- the bar runs edge to edge, always (Arn, 21 Nov: "the bar must always go to the end of the box no empty space")
     pv.bar = pv:CreateTexture(nil, "BORDER")
     pv.bar:SetPoint("TOPLEFT", pv, "TOPLEFT", 1, -1)
@@ -941,11 +958,11 @@ local function buildOrder(card)
         row.tick = CreateFrame("Button", nil, row)
         row.tick:SetSize(11, 11)
         row.tick:SetPoint("LEFT", row, "LEFT", 5, 0)
-        row.tick.edges = edges(row.tick, { 0.55, 0.58, 0.69, 1 })
+        row.tick.edges = edges(row.tick, DIM)
         row.tick.fill = row.tick:CreateTexture(nil, "ARTWORK")
         row.tick.fill:SetPoint("TOPLEFT", row.tick, "TOPLEFT", 2, -2)
         row.tick.fill:SetPoint("BOTTOMRIGHT", row.tick, "BOTTOMRIGHT", -2, 2)
-        row.tick.fill:SetColorTexture(0.24, 0.81, 0.43, 1)
+        row.tick.fill:SetColorTexture(GOOD[1], GOOD[2], GOOD[3], 1)
         row.tick:SetScript("OnClick", function() if row.key then CU.SetOn(row.key, not CU.On(row.key)) end end)
         row.text = text(row, 10, INK)
         row.text:SetPoint("LEFT", row.tick, "RIGHT", 6, 0)
@@ -971,6 +988,7 @@ end
 
 function CU.Card()
     if CU.card then return CU.card end
+    CU.Tones()
     local c = CreateFrame("Frame", "BiSHealingCues", UIParent)
     c:SetSize(CU.CARD_W, CU.CARD_H)
     c:SetFrameStrata("DIALOG")
@@ -979,16 +997,16 @@ function CU.Card()
     c:EnableMouse(true)
     c.bg = c:CreateTexture(nil, "BACKGROUND")
     c.bg:SetAllPoints(c)
-    c.bg:SetColorTexture(0.05, 0.04, 0.09, 0.97)
-    c.edges = edges(c, { CYAN[1] * 0.6, CYAN[2] * 0.6, CYAN[3] * 0.6, 1 })
-    c.title = text(c, 12, CYAN)
+    c.bg:SetColorTexture(BLACK[1], BLACK[2], BLACK[3], 0.97)
+    c.edges = edges(c, { ACC[1] * 0.6, ACC[2] * 0.6, ACC[3] * 0.6, 1 })
+    c.title = text(c, 12, ACC)
     c.title:SetPoint("TOPLEFT", c, "TOPLEFT", 8, -7)
     c.title:SetText("BiS>Cues")
-    c.note = text(c, 9, { 1, 0.75, 0.3 })
+    c.note = text(c, 9, GOLD)
     c.note:SetPoint("LEFT", c.title, "RIGHT", 8, 0)
     c.close = button(c, 14, 14, "x", function() c:Hide() end)
     c.close:SetPoint("TOPRIGHT", c, "TOPRIGHT", -4, -4)
-    c.orderHead = text(c, 9, { 1, 0.7, 0.28 })
+    c.orderHead = text(c, 9, GOLD)
     c.orderHead:SetPoint("TOPLEFT", c, "TOPLEFT", 10, -28)
     c.orderHead:SetText("THE CUES, IN ROW ORDER")
     buildOrder(c)
@@ -1001,7 +1019,7 @@ function CU.Card()
     c.def = button(c, 90, 18, "BACK TO DEFAULT", function() CU.Default(CU.sel) end)
     c.def:SetPoint("TOPLEFT", c, "TOPLEFT", 326, -64)
     -- the voice: its own pick, over the two lists
-    c.voiceHead = text(c, 10, CYAN)
+    c.voiceHead = text(c, 10, ACC)
     c.voiceHead:SetPoint("TOPLEFT", c, "TOPLEFT", 168, -95)
     c.voiceHead:SetText("VOICE")
     c.voices = {}
@@ -1065,8 +1083,8 @@ function CU.Paint()
     CU.PaintPicker(c.sound)
     for _, b in ipairs(c.voices) do
         local on = b.id == CU.Voice(CU.sel)
-        b.text:SetTextColor(on and CYAN[1] or DIM[1], on and CYAN[2] or DIM[2], on and CYAN[3] or DIM[3], 1)
-        for _, e in ipairs(b.edges) do e:SetColorTexture(CYAN[1] * (on and 1 or 0.3), CYAN[2] * (on and 1 or 0.3), CYAN[3] * (on and 1 or 0.3), 1) end
+        b.text:SetTextColor(on and ACC[1] or DIM[1], on and ACC[2] or DIM[2], on and ACC[3] or DIM[3], 1)
+        for _, e in ipairs(b.edges) do e:SetColorTexture(ACC[1] * (on and 1 or 0.3), ACC[2] * (on and 1 or 0.3), ACC[3] * (on and 1 or 0.3), 1) end
     end
     CU.PaintPreview()
     if c.code then c.code:SetText(CU.Code()) end
@@ -1136,9 +1154,9 @@ function CU.ShowString(mode)
         w:EnableMouse(true)
         w.bg = w:CreateTexture(nil, "BACKGROUND")
         w.bg:SetAllPoints(w)
-        w.bg:SetColorTexture(0.05, 0.04, 0.09, 0.98)
-        w.edges = edges(w, { CYAN[1] * 0.6, CYAN[2] * 0.6, CYAN[3] * 0.6, 1 })
-        w.title = text(w, 11, CYAN)
+        w.bg:SetColorTexture(BLACK[1], BLACK[2], BLACK[3], 0.98)
+        w.edges = edges(w, { ACC[1] * 0.6, ACC[2] * 0.6, ACC[3] * 0.6, 1 })
+        w.title = text(w, 11, ACC)
         w.title:SetPoint("TOPLEFT", w, "TOPLEFT", 8, -7)
         w.close = button(w, 14, 14, "x", function() w:Hide() end)
         w.close:SetPoint("TOPRIGHT", w, "TOPRIGHT", -4, -4)
@@ -1146,13 +1164,13 @@ function CU.ShowString(mode)
         e:SetMultiLine(true)
         e:SetAutoFocus(false)
         e:SetFont(FONT, 10, "")
-        e:SetTextColor(0.62, 0.90, 1, 1)
+        e:SetTextColor(INK[1], INK[2], INK[3], 1)
         e:SetPoint("TOPLEFT", w, "TOPLEFT", 8, -26)
         e:SetPoint("BOTTOMRIGHT", w, "BOTTOMRIGHT", -8, 32)
         e:SetScript("OnEscapePressed", function(self) self:ClearFocus() w:Hide() end)
         e.bg = e:CreateTexture(nil, "BACKGROUND")
         e.bg:SetAllPoints(e)
-        e.bg:SetColorTexture(0.02, 0.03, 0.05, 1)
+        e.bg:SetColorTexture(SUNK[1], SUNK[2], SUNK[3], 1)
         w.edit = e
         w.go = button(w, 80, 18, "IMPORT", function()
             local n, why = CU.Import(w.edit:GetText())
