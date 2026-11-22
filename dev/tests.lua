@@ -17192,12 +17192,52 @@ do
         btn:GetScript("OnShow")(btn)
         ok(#said == 1, "no sound picked: none")
         ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "the word look: the CRIT tag")
+        -- (a changed look = a fresh container; the client hands its new button over)
+        local function hand()
+            local b = CreateFrame("Button")
+            b.Icon = b:CreateTexture()
+            RV.container.slots.BiSHealRevelation.opts.initializeFrame(b)
+            return b
+        end
         CU.SetLook("crit", "icon")
+        btn = hand()
         ok(btn.bisFace.sq:IsShown() and btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "the icon look: the spell's icon, no tag")
         CU.SetLook("crit", "model:198692")
+        btn = hand()
         ok(btn.bisFace.model and btn.bisFace.model.__drawn == 198692 and not btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "a model look: the fireball")
+        local withModel = btn
         CU.SetLook("crit", "word")
+        btn = hand()
         ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "and back to the word")
+        -- AS THE CLIENT IS (Arn's BugGrabber, 21 Nov): once made, what stands in its button is forbidden to us
+        local c1 = RV.container
+        local function forbid(o) for _, m in ipairs({ "Show", "Hide", "SetTexture", "SetModel", "ClearModel", "SetShown" }) do
+            o[m] = function() error("Attempt to access forbidden object from code tainted by an AddOn") end end end
+        RV.buttons = { btn, withModel }
+        forbid(withModel.bisFace.model)
+        for _, b in ipairs(RV.buttons) do
+            forbid(b.bisFace.sq) forbid(b.bisFace.icon)
+            for _, part in ipairs(b.bisTag) do forbid(part) end
+        end
+        local okL, why = pcall(CU.SetLook, "crit", "icon")
+        ok(okL, "a forbidden button: the pick still goes through, no error", tostring(why))
+        ok(RV.container and RV.container ~= c1 and not c1:IsShown() and RV.container.enabled and RV.buttons[1] ~= btn and RV.buttons[2] == nil,
+           "and a fresh container takes the old one's place",
+           tostring(RV.container ~= c1) .. " " .. tostring(c1:IsShown()) .. " " .. tostring(RV.container and RV.container.enabled) .. " " .. #RV.buttons)
+        local btn2 = CreateFrame("Button")
+        btn2.Icon = btn2:CreateTexture()
+        okL, why = pcall(RV.container.slots.BiSHealRevelation.opts.initializeFrame, btn2)
+        ok(okL and btn2.bisFace.sq:IsShown() and not btn2.bisCrit:IsShown(), "its new button wears the pick", tostring(why))
+        local looked = 0
+        RV.container.UpdateAllAuras = function() looked = looked + 1 end
+        fire(RV.events, "PLAYER_REGEN_ENABLED")
+        ok(looked == 1, "after a fight the game's container is asked to look again (a CRIT that stayed on)")
+        STATE.inCombat = true
+        fire(RV.events, "PLAYER_ENTERING_WORLD")
+        ok(looked == 1, "never in one")
+        STATE.inCombat = false
+        CU.SetLook("crit", "word")
+        btn = btn2
         _G.C_VoiceChat, NS.DB().radar.cues, CU.spoke = keepVC, keepC, {}
     end
     ON[1248808] = 15

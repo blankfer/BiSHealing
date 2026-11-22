@@ -4300,7 +4300,9 @@ function RD.ApplyShip(ship)
     local sh = RD.shield
     if sh then
         plate(sh.plate)
-        for _, t in ipairs(sh.cover or {}) do plate(t) end
+        -- (the cover stands in the game's own aura button: forbidden to us once made - BugGrabber, 20 and 21 Nov - and the
+        -- throw stopped RD.Arm halfway; a cover made later takes the new dark from RD.PLATE)
+        for _, t in ipairs(sh.cover or {}) do pcall(plate, t) end
     end
     -- (the last-charge stencil is the buff's own icon now, never painted the plate's dark)
     -- the scope: rings, cross and ticks at the ship's line, dimmed; the brackets; you in the middle in its accent

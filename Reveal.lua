@@ -175,7 +175,8 @@ function RV.Badge(button)
     end)
     RV.badges = (RV.badges or 0) + 1
     RV.buttons[#RV.buttons + 1] = button
-    RV.Relook()
+    local faced = NS.CU and NS.CU.FaceShow(button.bisFace, true) or false     -- (this one only: the others may be forbidden)
+    if faced then for _, part in ipairs(button.bisTag or {}) do NS.CU.Touch(part, "Hide") end end
 end
 RV.FACE_PX = 20
 RV.buttons = {}
@@ -186,11 +187,23 @@ function RV.Speak()
     return CU.Say("crit", "player")
 end
 --- Dress every badge in the card's look: the CRIT tag, the spell's icon, or a turning model.
-function RV.Relook()
+--- (The game's button may refuse us by now - CU.Touch - so a changed look also makes a fresh container, out of a fight:
+--- its new button is dressed in its creation window.)
+function RV.Relook(fresh)
+    local CU = NS.CU
     for _, b in ipairs(RV.buttons) do
-        local faced = NS.CU and NS.CU.FaceShow(b.bisFace, true) or false
-        for _, part in ipairs(b.bisTag or {}) do if faced then part:Hide() else part:Show() end end
+        local faced = CU and CU.FaceShow(b.bisFace, true) or false
+        if CU then for _, part in ipairs(b.bisTag or {}) do CU.Touch(part, faced and "Hide" or "Show") end end
     end
+    local look = CU and CU.Look("crit") or nil
+    if fresh and RV.container and RV.look ~= look and not fight() then
+        local old = RV.container
+        if old.SetEnabled then pcall(old.SetEnabled, old, false) end
+        if old.Hide then pcall(old.Hide, old) end
+        RV.container, RV.buttons = nil, {}
+        RV.Icon()
+    end
+    if not fight() then RV.look = look end
 end
 function RV.Icon()
     if RV.container then return RV.container end
@@ -212,9 +225,17 @@ function RV.Icon()
     if not slot then RV.iconSeen = "no slot" return nil end
     if c.SetEnabled then c:SetEnabled(true) end
     RV.container, RV.iconSeen = c, "built"
+    RV.look = NS.CU and NS.CU.Look and NS.CU.Look("crit") or nil
+    RV.Refresh()
     return c
 end
 
+--- Ask the game's container to look again now, out of a fight (Arn, 21 Nov: "the crit words are just on the whole time"):
+--- it listens for changes and may have missed the buff going (Radar.lua's shield pip learned the same, 8 Nov).
+function RV.Refresh()
+    local c = RV.container
+    if c and c.UpdateAllAuras and not fight() then pcall(c.UpdateAllAuras, c) end
+end
 --- Paint it: shown while Revelation is on you.
 function RV.Paint()
     local on = not (NS.RD and NS.RD.Sw) or NS.RD.Sw("crit")   -- (the deck's switch, RD.SW "crit")
@@ -239,6 +260,7 @@ RV.events = CreateFrame("Frame")
 if RV.events.RegisterUnitEvent then RV.events:RegisterUnitEvent("UNIT_AURA", "player")
 else RV.events:RegisterEvent("UNIT_AURA") end
 RV.events:RegisterEvent("PLAYER_ENTERING_WORLD")
+RV.events:RegisterEvent("PLAYER_REGEN_ENABLED")
 RV.events:RegisterEvent("COMBAT_TEXT_UPDATE")
 RV.events:SetScript("OnEvent", function(_, event, unit)
     if event == "COMBAT_TEXT_UPDATE" then
@@ -247,6 +269,7 @@ RV.events:SetScript("OnEvent", function(_, event, unit)
     end
     if event == "UNIT_AURA" and unit ~= "player" then return end
     RV.Paint()
+    if event ~= "UNIT_AURA" then RV.Refresh() end
 end)
 
 --- `/bish reveal`: is it on you, which id is the buff, what the last read said.

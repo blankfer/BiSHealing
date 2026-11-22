@@ -194,17 +194,27 @@ end
 --- once per load (a load puts the camera at its own place: at 22 px, inside the fireball = nothing). Both the card's
 --- sample and the game's Hellfire badge wear their model through here.
 CU.modelLoads = 0
+--- WHAT STANDS IN THE GAME'S OWN AURA BUTTON IS FORBIDDEN TO US LATER (Arn's BugGrabber, 21 Nov 21:31: "Cues.lua:201: calling
+--- 'Hide' on bad self (Attempt to access forbidden object ...)", a model of ours in the Hellfire button; the button may only
+--- be touched inside initializeFrame). Every touch that may be late goes through here: a refusal is an answer (false),
+--- never a throw - the lookup is inside too, on such an object even reading a method may refuse.
+function CU.Touch(obj, method, ...)
+    return (pcall(function(...)
+        local fn = obj[method]
+        if fn then fn(obj, ...) end
+    end, ...))
+end
 local function modelCam(m)
-    if m.bisCamSet or not m.SetCamDistanceScale then return end
+    if m.bisCamSet then return end
     m.bisCamSet = true
-    pcall(m.SetCamDistanceScale, m, CU.MODEL_CAM)
+    CU.Touch(m, "SetCamDistanceScale", CU.MODEL_CAM)
 end
 local function modelLoad(m)
     if not m.bisWant or m.bisUp == m.bisWant then return end
     m.bisUp, m.bisCamSet = m.bisWant, nil
     CU.modelLoads = CU.modelLoads + 1
-    if m.ClearModel then pcall(m.ClearModel, m) end
-    pcall(m.SetModel, m, m.bisWant)
+    CU.Touch(m, "ClearModel")
+    CU.Touch(m, "SetModel", m.bisWant)
     modelCam(m)
 end
 --- Set a model frame up once (its own scripts only: no script of it is anyone else's).
@@ -223,7 +233,7 @@ function CU.Wear(m, file)
     if not m then return end
     CU.ModelReady(m)
     m.bisWant = file
-    if file then m:Show() modelLoad(m) else m:Hide() m.bisUp = nil end
+    if file then CU.Touch(m, "Show") modelLoad(m) else CU.Touch(m, "Hide") m.bisUp = nil end
 end
 
 --- A CUE'S FACE: the picked icon or turning model on a dark square, for any cue that has a word of its own (Arn, 21 Nov:
@@ -261,10 +271,10 @@ function CU.FaceShow(f, on)
         local get = C_Spell and C_Spell.GetSpellTexture
         local ok, tex = false, nil
         if get and q then ok, tex = pcall(get, q.spell) end
-        if ok and plain(tex) then pcall(f.icon.SetTexture, f.icon, tex) end
-        f.icon:Show()
-    else f.icon:Hide() end
-    if f.faced then f.sq:Show() else f.sq:Hide() end
+        if ok and plain(tex) then CU.Touch(f.icon, "SetTexture", tex) end
+        CU.Touch(f.icon, "Show")
+    else CU.Touch(f.icon, "Hide") end
+    CU.Touch(f.sq, f.faced and "Show" or "Hide")
     if model and not f.model then
         local okM, m = pcall(CreateFrame, "PlayerModel", nil, f.sq)
         if okM and m then
@@ -353,7 +363,7 @@ function CU.Apply()
     if fight() then CU.pending = true return "after" end
     CU.pending = nil
     if BN and BN.Relayout then BN.Relayout() end
-    if NS.RV and NS.RV.Relook then NS.RV.Relook() end
+    if NS.RV and NS.RV.Relook then NS.RV.Relook(true) end
     if RD and RD.RipMarks and RD.spokes then pcall(RD.RipMarks) end
     if RD and RD.SwApply then RD.SwApply() end
     return "now"

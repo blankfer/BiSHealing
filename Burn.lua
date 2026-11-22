@@ -420,14 +420,15 @@ function BN.Relook(button)
         local btn = b.button
         if btn.bisModel then
             if CU then CU.Wear(btn.bisModel, model)
-            elseif model then pcall(btn.bisModel.SetModel, btn.bisModel, model) btn.bisModel:Show()
-            else btn.bisModel:Hide() end
+            elseif model then pcall(btn.bisModel.SetModel, btn.bisModel, model) end
         end
+        -- (the game's button may be forbidden to us by now: CU.Touch takes the refusal)
+        local function set(part, on) if part and CU then CU.Touch(part, on and "Show" or "Hide") end end
         -- the spell's icon only for the "icon" look (Arn, 21 Nov: "the hellfire spell icon comes out when i choose fireball
         -- too" - it sat under the fireball as a fallback); a model stands on its own dark square
-        if btn.bisIcon then if look == "icon" then btn.bisIcon:Show() else btn.bisIcon:Hide() end end
-        if btn.bisDark then if model and look ~= "icon" then btn.bisDark:Show() else btn.bisDark:Hide() end end
-        if btn.bisWord then if look == "word" then btn.bisWord:Show() else btn.bisWord:Hide() end end
+        set(btn.bisIcon, look == "icon")
+        set(btn.bisDark, model and look ~= "icon")
+        set(btn.bisWord, look == "word")
     end
     return #list
 end
@@ -442,6 +443,10 @@ function BN.Relayout()
         if pcall(function() b.button:ClearAllPoints() b.button:SetPoint("TOPLEFT", b.box, "TOPLEFT", x, y) end) then n = n + 1 end
     end
     BN.Relook()
+    -- a new look or place: fresh containers, dressed in their own creation window (the old buttons may refuse both)
+    local sig = (NS.CU and NS.CU.Look("hell") or "") .. ":" .. x .. ":" .. y
+    if BN.sig and BN.sig ~= sig then BN.Rebuild() end
+    BN.sig = sig
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
         local B = sp.en and sp.en.burn
         if B and B.tag then
@@ -449,6 +454,24 @@ function BN.Relayout()
             if B.tapFace then BN.PlaceFace(B.tapFace, sp.en.box) end
         end
     end
+    return n
+end
+--- Every game-drawn Hellfire made again, out of a fight.
+function BN.Rebuild()
+    if fightNow() then return 0 end
+    local n = 0
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        local c = sp.burnC
+        if c then
+            if c.SetEnabled then pcall(c.SetEnabled, c, false) end
+            if c.Hide then pcall(c.Hide, c) end
+            sp.burnC, sp.burnUnit = nil, nil
+            n = n + 1
+        end
+    end
+    if n == 0 then return 0 end
+    BN.badges = {}
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do if sp.unit and sp.en then BN.Container(sp) end end
     return n
 end
 function BN.PlaceFace(face, box)
