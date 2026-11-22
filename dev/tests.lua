@@ -17273,6 +17273,26 @@ do
     c.look.q:GetScript("OnTextChanged")(c.look.q)
     c.sound.chips[3]:GetScript("OnClick")(c.sound.chips[3])
     ok(c.sound.rows[1].id and c.sound.rows[1].id:match("^kit:") and c.sound.cat == "Bells", "a chip: only that category", c.sound.cat)
+    -- TRY only plays (Arn, 21 Nov: trying Lightning crack picked it, and Hellfire stopped saying the name)
+    do
+        local keepPS, keepVC, kits, said = _G.PlaySound, _G.C_VoiceChat, {}, {}
+        _G.PlaySound = function(id) kits[#kits + 1] = id end
+        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+        local was = CU.Sound("hell")
+        local row1 = c.sound.rows[1]
+        row1.try:GetScript("OnClick")(row1.try)
+        ok(#kits == 1 and "kit:" .. kits[1] == row1.id and CU.Sound("hell") == was and CU.DB().sound.hell ~= row1.id,
+            "TRY plays the sound and picks nothing", CU.Sound("hell"))
+        c.sound.chips[1]:GetScript("OnClick")(c.sound.chips[1])
+        local v = c.sound.rows[1]
+        ok(v.id == "voicename", "the voice heads the list", v.id)
+        v.try:GetScript("OnClick")(v.try)
+        ok(said[1] == "Hellfire, Tin", "TRY on the voice says the spell and a name", said[1])
+        v:GetScript("OnClick")(v)
+        ok(CU.Sound("hell") == "voicename", "the row itself picks")
+        _G.PlaySound, _G.C_VoiceChat = keepPS, keepVC
+        c.sound.chips[3]:GetScript("OnClick")(c.sound.chips[3])
+    end
     c.look.rows[2]:GetScript("OnClick")(c.look.rows[2])
     ok(CU.Look("hell") == c.look.rows[2].id, "a click on a look picks it")
     c.def:GetScript("OnClick")(c.def)

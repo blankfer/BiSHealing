@@ -285,6 +285,11 @@ function CU.Say(key, unit, force)
     local k = key .. ":" .. tostring(unit or "")
     if not force and CU.spoke[k] and t - CU.spoke[k] < CU.EVERY then return false end
     CU.spoke[k] = t
+    return CU.Play(q, s, unit)
+end
+--- One sound of the list, played for this cue (nothing is picked): a game sound, or the voice.
+function CU.Play(q, s, unit)
+    if s == "off" then return false end
     local kit = s:match("^kit:(%d+)$")
     if kit then
         if not PlaySound then return false end
@@ -681,9 +686,13 @@ local function picker(card, kind, x, y, w)
         hoverRow(row)
         row.text = text(row, 10, INK)
         row.text:SetPoint("LEFT", row, "LEFT", 6, 0)
-        row.try = text(row, 9, CYAN)
-        row.try:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        row.try:SetText("TRY")
+        -- TRY ONLY PLAYS (Arn, 21 Nov: "it no say name and spell for hellfire" - TRY was a word on the row, so hearing
+        -- Lightning crack picked it, and it took the voice's place): its own button; the rest of the row picks
+        row.try = button(row, 26, 13, "TRY", function()
+            local q = CU.BY[CU.sel]
+            if row.id and q then CU.Play(q, row.id, "Tin") end
+        end)
+        row.try:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         row:SetScript("OnClick", function(self)
             if not self.id then return end
             if kind == "look" then CU.SetLook(CU.sel, self.id) else CU.SetSound(CU.sel, self.id) CU.Try() end
