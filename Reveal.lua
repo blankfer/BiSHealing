@@ -272,15 +272,42 @@ RV.events:SetScript("OnEvent", function(_, event, unit)
     if event ~= "UNIT_AURA" then RV.Refresh() end
 end)
 
+--- WHAT THE GAME'S BUTTON HOLDS (22 Nov 2026, Arn: "crit is still there and i dont have relevation buff"): for each button the
+--- client handed us, is it shown, and which aura is in it (its id and length, read by the aura's instance id when plain).
+function RV.ButtonSays()
+    if #RV.buttons == 0 then return "none handed over" end
+    local out = {}
+    for i, b in ipairs(RV.buttons) do
+        local ok, words = pcall(function()
+            local shown = b.IsShown and b:IsShown()
+            local inst = plain(b.auraInstanceID) or (type(b.aura) == "table" and plain(b.aura.auraInstanceID)) or (type(b.auraData) == "table" and plain(b.auraData.auraInstanceID))
+            local what = "aura ?"
+            local get = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
+            if inst and get then
+                local a = get("player", inst)
+                if type(a) == "table" then what = "aura " .. tostring(plain(a.spellId)) .. " " .. tostring(plain(a.name)) .. " for " .. tostring(plain(a.duration)) .. "s" end
+            end
+            local keys = {}
+            for k, v in pairs(b) do
+                local tv = type(v)
+                if type(k) == "string" and (tv == "number" or tv == "string" or tv == "boolean") and plain(v) ~= nil and not k:find("^bis") then keys[#keys + 1] = k .. "=" .. tostring(v) end
+            end
+            table.sort(keys)
+            return (shown and "SHOWN " or "hidden ") .. what .. (#keys > 0 and (" [" .. table.concat(keys, " ", 1, math.min(#keys, 8)) .. "]") or "")
+        end)
+        out[#out + 1] = i .. ": " .. (ok and words or "refused")
+    end
+    return table.concat(out, " / ")
+end
 --- `/bish reveal`: is it on you, which id is the buff, what the last read said.
 function RV.Status()
     local d = db()
     local pas = {}
     for id in pairs(d.passive) do pas[#pas + 1] = tostring(id) end
-    local line = string.format("reveal: up %s | icon %s | the buff's id %s | passive %s | last read: %s | combat text: %s", tostring(RV.Up()),
+    local line = string.format("reveal: up %s | icon %s | the buff's id %s | passive %s | last read: %s | combat text: %s | game's button: %s", tostring(RV.Up()),
         tostring(RV.iconSeen or "not built"),
         tostring(d.buff or "not seen yet"), #pas > 0 and table.concat(pas, ", ") or "none", RV.seen or "nothing yet",
-        RV.seenText or "nothing heard")
+        RV.seenText or "nothing heard", RV.ButtonSays())
     if NS.Print then NS.Print(line) end
     return line
 end
