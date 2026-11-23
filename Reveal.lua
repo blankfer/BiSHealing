@@ -171,7 +171,9 @@ function RV.Badge(button)
             button.bisFace = NS.CU.Face(button, "crit", RV.FACE_PX)
             button.bisFace.sq:SetPoint("CENTER", button, "CENTER", 0, 0)
         end
-        if button.HookScript then pcall(button.HookScript, button, "OnShow", RV.Speak) end
+        -- NO SCRIPT ON THE GAME'S BUTTON (22 Nov 2026, Arn's /bish reveal, out of a fight too: "Button:SetShown(): Cannot be called with
+        -- secrets due to existing script handlers"): a hook of ours on its OnShow left the client unable to show it at all
+        -- (the voice comes from RV.Paint when the buff is read, or answered hidden for the known id)
     end)
     RV.badges = (RV.badges or 0) + 1
     RV.buttons[#RV.buttons + 1] = button

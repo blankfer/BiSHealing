@@ -17056,7 +17056,8 @@ do
     local pt, rel, _, px, py = hb:GetPoint(1)
     ok(pt == "TOPLEFT" and rel == sp.en.box and py == BN.FLAME.y, "under his callsign", tostring(pt) .. " " .. tostring(py))
     ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
-    hb:GetScript("OnShow")(hb)
+    ok(hb:GetScript("OnShow") == nil, "no script of ours on the game's button (Arn's /bish reveal: Cannot be called with secrets due to existing script handlers)")
+    BN.Speak("party1", "party1")
     ok(#heardV == 1 and heardV[1][2]:find("^Hellfire") and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", heardV[1] and heardV[1][2])
     local keepGUN = _G.GetUnitName
     _G.GetUnitName = function(u) if u == "party1" then return "TIN Manicore" end return keepGUN and keepGUN(u) end
@@ -17069,15 +17070,15 @@ do
     local fb = CreateFrame("Button")
     fs2.opts.initializeFrame(fb)
     ok(fb.bisFlash and fb.__w == sp.heal:GetWidth() - 2, "the flash: over his whole box, fading out", fb.__w)
-    hb:GetScript("OnShow")(hb)
+    BN.Speak("party1", "party1")
     ok(#heardV == 1, "shown again within " .. BN.VOICE.every .. " s: no second Hellfire")
     TICK(BN.VOICE.every + 1)
     BN.quietUntil = GetTime() + 5
-    hb:GetScript("OnShow")(hb)
+    BN.Speak("party1", "party1")
     ok(#heardV == 1, "just after a /reload: quiet")
     BN.quietUntil = 0
     NS.RD.SetSw("hellvoice", false)
-    hb:GetScript("OnShow")(hb)
+    BN.Speak("party1", "party1")
     ok(#heardV == 1 and not NS.RD.Sw("hellvoice"), "the Hellfire voice switch off: quiet")
     NS.RD.SetSw("hellvoice", true)
     -- the Hellfire box switch: his container off (out of a fight)
@@ -17173,6 +17174,7 @@ do
     rs.opts.initializeFrame(btn)                         -- (the client hands its button over while the buff is up)
     ok(btn.bisCrit and btn.bisCrit:GetText() == "CRIT" and not btn.Icon:IsShown() and btn.__w == RV.BADGE.w,
        "the game's button wears OUR badge: CRIT in the deck's tag look, Blizzard's icon hidden", btn.bisCrit and btn.bisCrit:GetText())
+    ok(btn:GetScript("OnShow") == nil, "and no script of ours on it: the client could not show it with one")
     -- the cue card's sound and look (Arn, 21 Nov: "no talking on revelation crit")
     do
         local CU, keepVC, said = NS.CU, _G.C_VoiceChat, {}
@@ -17180,16 +17182,16 @@ do
         _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
         NS.DB().radar.cues = { v = 1, stamp = 1, on = { crit = true }, sound = { crit = "voice" }, look = {} }
         CU.spoke, NS.BN.quietUntil = {}, 0
-        btn:GetScript("OnShow")(btn)
+        RV.Speak()
         ok(#said == 1 and said[1] == "Crit", "the game shows its Revelation button: the voice says Crit", said[1])
-        btn:GetScript("OnShow")(btn)
+        RV.Speak()
         ok(#said == 1, "shown again at once (the bar came and went): not said twice")
         CU.spoke, NS.BN.quietUntil = {}, GetTime() + 5
-        btn:GetScript("OnShow")(btn)
+        RV.Speak()
         ok(#said == 1, "just after a loading screen: quiet")
         NS.BN.quietUntil = 0
         NS.DB().radar.cues.sound.crit, NS.DB().radar.cues.voice.crit = nil, nil
-        btn:GetScript("OnShow")(btn)
+        RV.Speak()
         ok(#said == 1, "no sound picked: none")
         ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "the word look: the CRIT tag")
         -- (a changed look = a fresh container; the client hands its new button over)

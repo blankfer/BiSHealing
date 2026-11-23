@@ -402,7 +402,8 @@ function BN.BadgeOn(button, box, pip, sp)
         button.bisWord = w
         -- the voice when the game SHOWS the button (Arn: "everytime i reload it says hellfire" - the client makes the
         -- button ahead of time, at the reload; made is not shown)
-        if button.HookScript then pcall(button.HookScript, button, "OnShow", function() BN.Speak(box, sp and sp.unit) end) end
+        -- NO SCRIPT ON THE GAME'S BUTTON (22 Nov 2026, Arn's /bish reveal, out of a fight too: "Button:SetShown(): Cannot be called with
+        -- secrets due to existing script handlers"): a hook of ours on its OnShow left the client unable to show it at all
     end)
     BN.Relook(button)
     BN.drawn = (BN.drawn or 0) + 1
@@ -526,7 +527,6 @@ function BN.FlashOn(button, box, pip)
             a:SetFromAlpha(1) a:SetToAlpha(0) a:SetDuration(Fl.flashT)
             if ag.SetToFinalAlpha then ag:SetToFinalAlpha(true) end
             button.bisFlash = ag
-            if button.HookScript then pcall(button.HookScript, button, "OnShow", function() ag:Stop() ag:Play() end) end
             ag:Play()
         end
     end)
