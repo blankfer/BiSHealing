@@ -59,6 +59,7 @@ BlackBox.lua
 PadHeal.lua
 # Shift over the deck's CALL: every Call and its totems
 CallPeek.lua
+Mvp.lua
 # last before the UI-only files: BiSHealingAPI, for other addons (playbook 5a)
 API.lua
 
