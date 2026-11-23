@@ -1255,7 +1255,7 @@ end
 -- ready" - and nothing throws, and nothing is created by being asked.
 do
     local A = _G.BiSHealingAPI
-    ok(type(A) == "table" and A.major == 1 and A.version == 3, "BiSHealingAPI is there, major 1 version 3")
+    ok(type(A) == "table" and A.major == 1 and A.version == 4, "BiSHealingAPI is there, major 1 version 4")
     ok(A.Look() == nil and A.RadarEdge() == nil, "version 2's Look and RadarEdge: nil before login too")
     ok(NS.FG and NS.FG.anchor == nil, "(the grid is not started yet, as before PLAYER_LOGIN)")
     local hadDB = _G.BiSHealingDB
@@ -14405,19 +14405,31 @@ do
                 local f2 = CP.frame
                 ok(f2 and f2:IsShown() and f2.rows[1].name:GetText() == "Elements" and f2.rows[3].name:GetText() == "Spirits", "Shift over CALL: the panel", f2 and f2.rows[1].name:GetText())
                 f2.IsVisible = function(self) return self:IsShown() end
-                f2.GetLeft = function() return 250 end
-                f2.GetTop = function() return 199 end
-                CP.Show()
-                ok(CP.btn and CP.btn[3]:IsShown() and CP.btn[3]:GetAttribute("*macrotext1") == "/cast Call of the Spirits" and CP.btn[3].tip[2]:find("Fire: Magma", 1, true)
-                   and CP.btn[1].points[1][2] == UIParent, "each row a button that drops it; by numbers, hung on nothing of ours", CP.btn and CP.btn[3].tip and CP.btn[3].tip[2])
-                ok(not RD.frame.__secureKids or CP.btn[1]:GetParent() == CP.root, "(they stand on a root of their own)")
+                local b3 = f2.rows[3].btn
+                ok(b3:IsShown() and b3.call == "Call of the Spirits" and b3.tip[2]:find("Fire: Magma", 1, true) and not b3:IsProtected() and not f2:IsProtected(), "each row a plain button: nothing secure in it", b3.tip[2])
+                -- a press chooses: CALL drops it from now on, its icon on it
+                b3:GetScript("OnClick")(b3)
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Spirits" and RD.call:GetAttribute("*macrotext2") == "/cast Call of the Elements" and RD.call.spell == "Call of the Spirits"
+                   and RD.call.tip[2]:find("Call of the Spirits", 1, true) and f2:IsShown(), "chosen: CALL drops it, the right-click the one before", RD.call:GetAttribute("*macrotext1"))
+                RD.Arm()
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Spirits", "and it stays so")
+                ok(_G.BiSHealingAPI.Call() == "Call of the Spirits" and _G.BiSHealingAPI.SetCall("Call of the Ancestors") == true and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors"
+                   and select(2, _G.BiSHealingAPI.SetCall("Fireball")) == "not known", "BiS Tools can choose it")
+                STATE.inCombat = true
+                ok(select(2, _G.BiSHealingAPI.SetCall("Call of the Spirits")) == "in a fight" and pcall(b3:GetScript("OnClick"), b3) and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors", "never in a fight")
+                STATE.inCombat = false
+                RD.totemsUntil = 0
+                ok(RD.TotemCast("Call of the Spirits", 5) == "call", "the third Call counts for the totem clock")
+                RD.totemsUntil = 0
+                _G.BiSHealingAPI.SetCall(nil)
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Elements" and RD.call:GetAttribute("*macrotext2") == "/cast Call of the Ancestors", "and the old way back")
                 local tick = f2:GetScript("OnUpdate")
                 RD.call.__mouseOver, f2.__mouseOver, STATE.shift = false, true, false
                 tick(f2, 1)
                 ok(f2:IsShown(), "the mouse on the panel, Shift let go: it stays")
                 f2.__mouseOver = false
                 tick(f2, 1)
-                ok(not f2:IsShown() and not CP.btn[1]:IsShown(), "the mouse away: gone, the clicks with it")
+                ok(not f2:IsShown(), "the mouse away: gone")
                 -- Shift pressed while already there; let go again
                 RD.call.__mouseOver, STATE.shift = true, true
                 fire(CP.events, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
@@ -14432,13 +14444,11 @@ do
                 ok(pcall(fire, CP.events, "PLAYER_REGEN_DISABLED") and not f2:IsShown(), "a pull while it is up: gone, no protected call")
                 _G.GetActionInfo = function() return nil end
                 ok(pcall(enter, RD.call) and f2:IsShown() and CP.Sets()[1].totems[1].name == "Flametongue", "in a fight: it shows, from what was read before it")
-                ok(f2:IsMouseEnabled() == false and CP.late == true, "and takes no click")
+                ok(f2:IsMouseEnabled() == false and f2.rows[1].btn:IsMouseEnabled() == false, "and takes no click")
                 RD.call.__mouseOver = false
                 tick(f2, 1)
                 ok(not f2:IsShown(), "gone with the mouse")
                 STATE.inCombat = false
-                fire(CP.events, "PLAYER_REGEN_ENABLED")
-                ok(not CP.late and not CP.btn[1]:IsShown(), "after it the clicks are put away")
                 -- the switch
                 RD.call.__mouseOver = true
                 RD.SetSw("callpeek", false)

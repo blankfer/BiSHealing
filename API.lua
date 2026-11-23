@@ -89,6 +89,11 @@
 --   BiSHealingAPI.Totems()
 --       -> { fire = name, earth = name, water = name, air = name } - what each box drops now (nil where none).
 --
+-- SINCE VERSION 4 (22 Nov 2026 - BiS Tools' BiS>totems):
+--   BiSHealingAPI.SetCall(name)   which Call the deck's CALL button drops; nil = the old way. Out of a fight only.
+--                                 -> true; or nil, "not ready" / "in a fight" / "not known".
+--   BiSHealingAPI.Call()          -> the name of the one it drops now, or nil.
+--
 -- EVENTS (since version 1). Each callback is pcalled: a listener's error stays its own.
 --   "BiSHealing_BindsChanged"  fn(event) - the player changed a bind (dropped, cleared, stepped a
 --                              rank, ticked a trinket tab). Ask Binds() for the new ones.
@@ -98,7 +103,7 @@
 local _, NS = ...
 NS = NS or {}
 
-local API = { major = 1, version = 3 }
+local API = { major = 1, version = 4 }
 BiSHealingAPI = API
 
 local EVENTS = { BiSHealing_BindsChanged = true, BiSHealing_TankChanged = true, BiSHealing_Shown = true }
@@ -267,6 +272,22 @@ function API.SetTotems(set)
     local ok, a, b = pcall(RD.SetTotems, set)
     if not ok then return nil, "failed" end
     return a, b
+end
+
+--- (v4) which Call the deck's CALL button drops: "Call of the Elements" / "... Ancestors" / "... Spirits". Out of a fight only.
+function API.SetCall(name)
+    local d, why = ready()
+    if not d then return nil, why end
+    if not (NS.CP and NS.CP.Choose) then return nil, "not ready" end
+    local ok, a, b = pcall(NS.CP.Choose, name)
+    if not ok then return nil, "failed" end
+    return a, b
+end
+function API.Call()
+    local d, why = ready()
+    if not d then return nil, why end
+    local c = NS.CP and NS.CP.Chosen and NS.CP.Chosen()
+    return c or (NS.RD and NS.RD.call and NS.RD.call.spell) or nil
 end
 
 function API.Totems()

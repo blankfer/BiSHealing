@@ -4,12 +4,13 @@
   totems it has set up?"
 
   Shift held over CALL: a small panel under it, one row a Call you know - its icon, its name, the four totems standing in its places
-  (fire, earth, water, air). Out of a fight a row is a button: a click drops that Call. It goes when the mouse leaves both, and when
-  Shift goes up over CALL itself.
+  (fire, earth, water, air), read each time it opens. Out of a fight a press on a row CHOOSES it: CALL drops that one from then on
+  (left-click; right-click = the one it took the place of), its own icon on the button, kept. It goes when the mouse leaves both, and
+  when Shift goes up over CALL itself. BiS Tools' BiS>totems can choose it too (BiSHealingAPI.SetCall, version 4).
 
-  IT NEVER TOUCHES THE HEALING: the panel is a plain frame on UIParent, placed by numbers; what can be clicked are secure buttons on a
-  root of their own (also by numbers - a secure button hung on our frames would protect them), which the client itself hides in a
-  fight. In a fight the panel only shows, and takes no mouse.
+  IT NEVER TOUCHES THE HEALING: the panel and its rows are plain frames on UIParent, placed by numbers; nothing in it is secure. The
+  only secure button is CALL itself, whose click is written where it always was (RD.ArmTotems), out of a fight. In a fight the panel
+  only shows, and takes no mouse.
   WHAT STANDS IN A CALL is the game's totem bar: GetActionInfo on (GetMultiCastBarIndex() - 1) * 12 + (Call - 1) * 4 + place (read
   right on Arn's client, 22 Nov, by BiS Tools' Totems app). Read out of a fight and kept; in one an answer may be hidden. ]]
 local _, NS = ...
@@ -27,7 +28,7 @@ CP.LOOK = 0.1                                              -- seconds between tw
 for i, s in ipairs(RD.SW) do
     if s.key == "timers" then
         table.insert(RD.SW, i + 1, { key = "callpeek", group = "SHAMAN", name = "Calls on Shift",
-            tip = "Hold Shift over CALL: every Call you know and the four totems set in it. Out of a fight a click drops one." })
+            tip = "Hold Shift over CALL: every Call you know and the four totems set in it. Out of a fight a click chooses the one CALL drops." })
         break
     end
 end
@@ -129,69 +130,78 @@ function CP.Build()
     return f
 end
 
--- THE BUTTONS (secure, on a root of their own) ------------------------------------------------------------------------------
+-- THE ROWS AS BUTTONS (plain: a press chooses, CALL itself casts) -----------------------------------------------------------
 
-function CP.Root()
-    if CP.root then return CP.root end
-    if combat() or CP.noRoot or type(RegisterStateDriver) ~= "function" then return nil end
-    local ok, r = pcall(CreateFrame, "Frame", "BiSHealingCallPeekRoot", UIParent, "SecureHandlerStateTemplate")
-    if not (ok and r) then CP.noRoot = true return nil end
-    r:SetSize(1, 1)
-    r:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
-    r:SetFrameStrata("DIALOG")
-    RegisterStateDriver(r, "visibility", "[combat] hide; show")
-    CP.root, CP.btn = r, {}
-    for i = 1, #CP.CALLS do
-        local b = CreateFrame("Button", "BiSHealingCallPeek" .. i, r, "SecureActionButtonTemplate")
-        b:RegisterForClicks("AnyUp", "AnyDown")
-        b:SetFrameLevel(20)
-        b.wash = b:CreateTexture(nil, "HIGHLIGHT")
-        b.wash:SetAllPoints(b)
-        local cr, cg, cb = colour("accent")
-        b.wash:SetColorTexture(cr, cg, cb, 0.22)
-        b.bar = b:CreateTexture(nil, "HIGHLIGHT")
-        b.bar:SetPoint("TOPLEFT") b.bar:SetPoint("BOTTOMLEFT") b.bar:SetWidth(2)
-        b.bar:SetColorTexture(cr, cg, cb, 1)
-        b:SetScript("OnEnter", function(self)
-            if not (GameTooltip and self.tip) then return end
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(self.tip[1])
-            GameTooltip:AddLine(self.tip[2], 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-        b:Hide()
-        CP.btn[i] = b
-    end
-    return r
-end
---- The clicks, put over the rows (out of a fight only; n = how many rows are shown, 0 = all away).
-function CP.Arm(sets)
-    if combat() then CP.late = true return false end
-    CP.late = nil
-    if not (#sets > 0 and CP.Root()) then
-        for _, b in ipairs(CP.btn or {}) do b:Hide() end
-        return false
-    end
+function CP.Button(i)
     local f = CP.frame
-    local k = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local left, top = f:GetLeft(), f:GetTop()
-    for i, b in ipairs(CP.btn) do
-        local s = sets[i]
-        if s and type(left) == "number" and type(top) == "number" then
-            b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", (left + 2) * k, (top - CP.PAD - (i - 1) * (CP.ROW + 2)) * k)
-            b:SetSize((CP.W - 4) * k, CP.ROW * k)
-            b:SetAttribute("*type1", "macro")
-            b:SetAttribute("*macrotext1", "/cast " .. s.name)
-            local words = {}
-            for place = 1, 4 do words[place] = CP.PLACES[place] .. ": " .. (s.totems[place] and s.totems[place].name or "nothing") end
-            b.tip = { s.name, table.concat(words, "\n") .. "\nClick: drops them" }
-            b:Show()
-        else
-            b:Hide()
-        end
-    end
+    local b = f.rows[i].btn
+    if b then return b end
+    b = CreateFrame("Button", nil, f)
+    f.rows[i].btn = b
+    b:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -CP.PAD - (i - 1) * (CP.ROW + 2))
+    b:SetSize(CP.W - 4, CP.ROW)
+    b:RegisterForClicks("LeftButtonUp")
+    local r, g, bl = colour("accent")
+    b.wash = b:CreateTexture(nil, "HIGHLIGHT")
+    b.wash:SetAllPoints(b)
+    b.wash:SetColorTexture(r, g, bl, 0.22)
+    b.bar = b:CreateTexture(nil, "OVERLAY")
+    b.bar:SetPoint("TOPLEFT") b.bar:SetPoint("BOTTOMLEFT") b.bar:SetWidth(2)
+    b:SetScript("OnEnter", function(self)
+        if not (GameTooltip and self.tip) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(self.tip[1])
+        GameTooltip:AddLine(self.tip[2], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    b:SetScript("OnClick", function(self)
+        if combat() or not self.call then return end
+        CP.Choose(self.call)
+        CP.Show(true)
+    end)
+    return b
+end
+
+-- WHICH CALL THE BUTTON DROPS (Arn, 22 Nov: "when i select one that call button now uses that one not elements as default") ----
+
+local function saved()
+    local d = NS.DB and NS.DB()
+    if type(d) ~= "table" then return nil end
+    d.radar = type(d.radar) == "table" and d.radar or {}
+    return d.radar
+end
+--- The chosen Call's name, if you (still) know it.
+function CP.Chosen()
+    local r = saved()
+    local c = r and r.callNow
+    for _, name in ipairs(CP.CALLS) do if name == c and knows(name) then return name end end
+    return nil
+end
+--- Choose one (nil = the old way: Elements, right-click Ancestors). Out of a fight only: a click's spell cannot change in one.
+function CP.Choose(name)
+    local r = saved()
+    if not r or combat() then return nil, "in a fight" end
+    local known = name == nil
+    for _, n in ipairs(CP.CALLS) do known = known or (n == name and knows(n)) end
+    if not known then return nil, "not known" end
+    r.callNow = name
+    RD.ArmTotems()
+    if RD.PaintTotems then RD.PaintTotems() end
+    return true
+end
+--- CALL with the chosen one: left = it, right = the one it took the place of. (After RD.ArmTotems; out of a fight.)
+function CP.Dress()
+    local b, c = RD.call, CP.Chosen()
+    if combat() or not (b and c and b.macro) then return false end
+    local first = knows(RD.CALLS[1]) and RD.CALLS[1] or nil
+    local second = knows(RD.CALLS[2]) and RD.CALLS[2] or nil
+    local other = c ~= first and first or second or c
+    b:SetAttribute("*macrotext1", "/cast " .. c)
+    b:SetAttribute("*macrotext2", "/cast " .. other)
+    b.macro, b.spell = "/cast " .. c, c
+    RD.SpellIcon(b, c)
+    b.tip = { "CALL", c .. (other ~= c and ("  -  right-click: " .. other) or "") .. ".  Lights before the pull while none of your totems are down." }
     return true
 end
 
@@ -206,8 +216,9 @@ function CP.Over()
     if over(RD.call) and ask(IsShiftKeyDown) then return true end
     return not combat() and over(CP.frame)
 end
-function CP.Show()
-    if not (CP.On() and RD.call and RD.call:IsVisible() and over(RD.call) and ask(IsShiftKeyDown)) then return false end
+function CP.Show(stay)
+    if not (CP.On() and RD.call and RD.call:IsVisible()) then return false end
+    if not stay and not (over(RD.call) and ask(IsShiftKeyDown)) then return false end
     local sets = CP.Sets()
     if #sets == 0 then return false end
     local f = CP.Build()
@@ -239,13 +250,26 @@ function CP.Show()
     f.t = 0
     f:Show()
     if GameTooltip then GameTooltip:Hide() end
-    CP.Arm(sets)
+    local now = CP.Chosen() or (RD.call.spell)
+    for i = 1, #f.rows do
+        local set = sets[i]
+        local b = CP.Button(i)
+        b.call = set and set.name or nil
+        if set then
+            local is = set.name == now
+            local words = {}
+            for place = 1, 4 do words[place] = CP.PLACES[place] .. ": " .. (set.totems[place] and set.totems[place].name or "nothing") end
+            b.tip = { set.name, table.concat(words, "\n") .. (is and "\nCALL drops this one" or "\nClick: CALL drops this one from now on") }
+            local r, g, bl = colour("gold")
+            b.bar:SetColorTexture(r, g, bl, is and 1 or 0)
+            f.rows[i].name:SetTextColor(colour(is and "gold" or "ink"))
+        end
+        b:SetShown(set ~= nil)
+        b:EnableMouse(set ~= nil and not combat())
+    end
     return true
 end
-function CP.Hide()
-    if CP.frame then CP.frame:Hide() end
-    CP.Arm({})
-end
+function CP.Hide() if CP.frame then CP.frame:Hide() end end
 
 --- CALL's own words, and the mouse on it: once, when there is a CALL.
 function CP.Attach()
@@ -260,22 +284,23 @@ end
 local arm = RD.ArmTotems
 function RD.ArmTotems(...)
     local a = arm(...)
+    pcall(CP.Dress)
     pcall(CP.Attach)
     return a
 end
+-- (a third Call counts as a Call for the totem clock too)
+if not RD.CALLS[3] then RD.CALLS[3] = CP.CALLS[3] end
 
 local ev = CreateFrame("Frame")
 CP.events = ev
-for _, e in ipairs({ "MODIFIER_STATE_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do pcall(ev.RegisterEvent, ev, e) end
+for _, e in ipairs({ "MODIFIER_STATE_CHANGED", "PLAYER_REGEN_DISABLED" }) do pcall(ev.RegisterEvent, ev, e) end
 ev:SetScript("OnEvent", function(_, e, key, down)
     if e == "MODIFIER_STATE_CHANGED" then
         if key ~= "LSHIFT" and key ~= "RSHIFT" then return end
         local shown = CP.frame and CP.frame:IsShown()
         if down == 1 and not shown then pcall(CP.Show)
         elseif down == 0 and shown and not CP.Over() then pcall(CP.Hide) end
-    elseif e == "PLAYER_REGEN_DISABLED" then
-        if CP.frame and CP.frame:IsShown() then CP.Hide() end
-    elseif CP.late then
-        CP.Arm({})
+    elseif CP.frame and CP.frame:IsShown() then
+        CP.Hide()
     end
 end)
