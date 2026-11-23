@@ -1280,7 +1280,7 @@ end
 -- ready" - and nothing throws, and nothing is created by being asked.
 do
     local A = _G.BiSHealingAPI
-    ok(type(A) == "table" and A.major == 1 and A.version == 3, "BiSHealingAPI is there, major 1 version 3")
+    ok(type(A) == "table" and A.major == 1 and A.version == 4, "BiSHealingAPI is there, major 1 version 4")
     ok(A.Look() == nil and A.RadarEdge() == nil, "version 2's Look and RadarEdge: nil before login too")
     ok(NS.FG and NS.FG.anchor == nil, "(the grid is not started yet, as before PLAYER_LOGIN)")
     local hadDB = _G.BiSHealingDB
@@ -14401,6 +14401,91 @@ do
             ok(RD.OnCast("player", 36936) == "recall" and not RD.TotemsUp() and RD.slotUp[2] == false, "recalled mid-fight: every slot empty")
             STATE.inCombat, RD.inFight = false, false
             RD.slotUp, RD.slotSeen, RD.lifeSlot = {}, {}, nil
+            -- EVERY CALL AND ITS TOTEMS, with Shift over CALL (Arn, 22 Nov: "if i hold shift while hovering over the call icon can you
+            -- show me the 3 call buttons with what totems it has set up")
+            do
+                local CP = NS.CP
+                local kb, kg, kn, ke, kl, kbt = rawget(_G, "GetMultiCastBarIndex"), rawget(_G, "GetActionInfo"), C_Spell.GetSpellName, RD.call.IsVisible, RD.call.GetLeft, RD.call.GetBottom
+                BOOK[52] = { name = "Call of the Spirits", rank = "" }
+                NS.FM.BookChanged()
+                RD.Arm()
+                local AT = { [133] = 1, [134] = 2, [135] = 3, [136] = 4, [141] = 5 }
+                local TN = { "Flametongue Totem II", "Strength of Earth Totem III", "Mana Spring Totem", "Windfury Totem", "Magma Totem" }
+                _G.GetMultiCastBarIndex = function() return 12 end
+                _G.GetActionInfo = function(x) if AT[x] then return "spell", AT[x], "spell" end end
+                C_Spell.GetSpellName = function(id) return TN[id] end
+                ok(RD.call.tip[2]:find("Hold Shift", 1, true), "CALL's words say it")
+                local sets = CP.Sets()
+                ok(#sets == 3 and sets[1].totems[1].name == "Flametongue" and sets[1].totems[2].name == "Strength of Earth" and sets[1].totems[3].name == "Mana Spring" and next(sets[2].totems) == nil
+                   and sets[3].totems[1].name == "Magma", "the three Calls, what stands in each", #sets)
+                RD.call.IsVisible = function() return true end
+                RD.call.GetLeft = function() return 300 end
+                RD.call.GetBottom = function() return 200 end
+                local enter = RD.call:GetScript("OnEnter")
+                RD.call.__mouseOver, STATE.shift = true, false
+                enter(RD.call)
+                ok(not CP.frame or not CP.frame:IsShown(), "no Shift: nothing")
+                STATE.shift = true
+                enter(RD.call)
+                local f2 = CP.frame
+                ok(f2 and f2:IsShown() and f2.rows[1].name:GetText() == "Elements" and f2.rows[3].name:GetText() == "Spirits", "Shift over CALL: the panel", f2 and f2.rows[1].name:GetText())
+                f2.IsVisible = function(self) return self:IsShown() end
+                local b3 = f2.rows[3].btn
+                ok(b3:IsShown() and b3.call == "Call of the Spirits" and b3.tip[2]:find("Fire: Magma", 1, true) and not b3:IsProtected() and not f2:IsProtected(), "each row a plain button: nothing secure in it", b3.tip[2])
+                -- a press chooses: CALL drops it from now on, its icon on it
+                b3:GetScript("OnClick")(b3)
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Spirits" and RD.call:GetAttribute("*macrotext2") == "/cast Call of the Elements" and RD.call.spell == "Call of the Spirits"
+                   and RD.call.tip[2]:find("Call of the Spirits", 1, true) and f2:IsShown(), "chosen: CALL drops it, the right-click the one before", RD.call:GetAttribute("*macrotext1"))
+                RD.Arm()
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Spirits", "and it stays so")
+                ok(_G.BiSHealingAPI.Call() == "Call of the Spirits" and _G.BiSHealingAPI.SetCall("Call of the Ancestors") == true and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors"
+                   and select(2, _G.BiSHealingAPI.SetCall("Fireball")) == "not known", "BiS Tools can choose it")
+                STATE.inCombat = true
+                ok(select(2, _G.BiSHealingAPI.SetCall("Call of the Spirits")) == "in a fight" and pcall(b3:GetScript("OnClick"), b3) and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors", "never in a fight")
+                STATE.inCombat = false
+                RD.totemsUntil = 0
+                ok(RD.TotemCast("Call of the Spirits", 5) == "call", "the third Call counts for the totem clock")
+                RD.totemsUntil = 0
+                _G.BiSHealingAPI.SetCall(nil)
+                ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Elements" and RD.call:GetAttribute("*macrotext2") == "/cast Call of the Ancestors", "and the old way back")
+                local tick = f2:GetScript("OnUpdate")
+                RD.call.__mouseOver, f2.__mouseOver, STATE.shift = false, true, false
+                tick(f2, 1)
+                ok(f2:IsShown(), "the mouse on the panel, Shift let go: it stays")
+                f2.__mouseOver = false
+                tick(f2, 1)
+                ok(not f2:IsShown(), "the mouse away: gone")
+                -- Shift pressed while already there; let go again
+                RD.call.__mouseOver, STATE.shift = true, true
+                fire(CP.events, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+                ok(f2:IsShown(), "already over CALL: Shift brings it")
+                STATE.shift = false
+                fire(CP.events, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+                ok(not f2:IsShown(), "and takes it away")
+                -- a fight: nothing secure is touched, it only shows; a hidden bar shows what was read before
+                STATE.shift = true
+                enter(RD.call)
+                STATE.inCombat = true
+                ok(pcall(fire, CP.events, "PLAYER_REGEN_DISABLED") and not f2:IsShown(), "a pull while it is up: gone, no protected call")
+                _G.GetActionInfo = function() return nil end
+                ok(pcall(enter, RD.call) and f2:IsShown() and CP.Sets()[1].totems[1].name == "Flametongue", "in a fight: it shows, from what was read before it")
+                ok(f2:IsMouseEnabled() == false and f2.rows[1].btn:IsMouseEnabled() == false, "and takes no click")
+                RD.call.__mouseOver = false
+                tick(f2, 1)
+                ok(not f2:IsShown(), "gone with the mouse")
+                STATE.inCombat = false
+                -- the switch
+                RD.call.__mouseOver = true
+                RD.SetSw("callpeek", false)
+                enter(RD.call)
+                ok(not f2:IsShown(), "switched off: nothing")
+                RD.SetSw("callpeek", true)
+                RD.call.__mouseOver, STATE.shift = false, false
+                _G.GetMultiCastBarIndex, _G.GetActionInfo, C_Spell.GetSpellName, RD.call.IsVisible, RD.call.GetLeft, RD.call.GetBottom = kb, kg, kn, ke, kl, kbt
+                BOOK[52] = nil
+                NS.FM.BookChanged()
+                RD.Arm()
+            end
             -- the engineer's view: their own line under the tools, the console a line taller
             local f = RD.frame
             ok(RD.ToggleView() == "console", "the engineer's view")
