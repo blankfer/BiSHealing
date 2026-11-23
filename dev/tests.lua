@@ -208,10 +208,17 @@ local function newFrame(kind, name, parent)
     function f:UnregisterEvent(e) if self.__events then self.__events[e] = nil end end
     function f:SetAttribute(k, v) self.__attrs[k] = v end
     function f:GetAttribute(k) return self.__attrs[k] end
-    function f:Show() self.__shown = true end
+    -- (23 Nov 2026: OnShow / OnHide run, as the client's do - a tag hidden by its own timer put the cue back only in the client)
+    function f:Show()
+        local was = self.__shown
+        self.__shown = true
+        if not was and self.__scripts and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+    end
     function f:Hide()
         if self.__shown and self.__moving then STATE.strandedDrag = (STATE.strandedDrag or 0) + 1 end
+        local was = self.__shown
         self.__shown = false
+        if was and self.__scripts and self.__scripts.OnHide then self.__scripts.OnHide(self) end
     end
     function f:IsShown() return self.__shown end
     function f:SetShown(v) self.__shown = v and true or false end
@@ -15859,6 +15866,25 @@ do
                 ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
                    mine and mine.tideTag and tostring(mine.tideTag.text.__text))
                 ok(RD.TideHeard("Nobody-Here", 12) == nil, "a name not in the group: nothing")
+                -- THE CUE MAKES ROOM (Arn's shot, 23 Nov: "MANA TIDE" ran into "Chain Heal" - "1")
+                do
+                    local q = RD.CueMark(mine)
+                    mine.tideTag:Hide()
+                    RD.CueSpot(mine)
+                    ok(q.spot == "middle", "no tag: the cue in the middle of the bar")
+                    RD.TideTag(mine, 12)
+                    ok(q.spot == "under" or q.spot == "right", "a tag on the line under the name: the cue moves off that line", tostring(q.spot))
+                    local bar = mine.heal
+                    local hKeep = bar.GetHeight
+                    bar.GetHeight = function() return 60 end RD.CueSpot(mine)
+                    ok(q.spot == "under", "a tall bar: under the tag's line")
+                    bar.GetHeight = function() return 24 end RD.CueSpot(mine)
+                    ok(q.spot == "right", "a short bar: at its right end")
+                    bar.GetHeight = hKeep
+                    mine.tideTag:Hide()
+                    ok(q.spot == "middle", "the tag gone: the middle again", tostring(q.spot))
+                    RD.TideTag(mine, 12)
+                end
                 -- the party's chat (Arn: "i want the cool down to put it in the chat when i click it")
                 local keepSCM, keepIG, keepIR = _G.SendChatMessage, _G.IsInGroup, _G.IsInRaid
                 local said = {}
