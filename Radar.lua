@@ -1417,7 +1417,7 @@ function RD.BuildGrip(f)
     g:SetSize(RD.GRIP_PX, RD.GRIP_PX)
     g:SetPoint("TOPLEFT", RD.hull or f, "BOTTOMRIGHT", -RD.GRIP_PX + 4, RD.GRIP_PX - 4)   -- on the corner, over the soft edge
     g:SetFrameLevel((f:GetFrameLevel() or 0) + 30)
-    if g.RegisterForClicks then g:RegisterForClicks("RightButtonUp") end
+    if g.RegisterForClicks then g:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     -- three short strokes across the corner, the classic sizing mark, in the scope's green (brighter under the mouse)
     local P = RD.PHOS
     g.lines = {}
@@ -1432,7 +1432,7 @@ function RD.BuildGrip(f)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("RESIZE  " .. math.floor(f:GetScale() * 100 + 0.5) .. "%")
-        GameTooltip:AddLine("Drag to make it bigger or smaller.  Right-click: back to 100%.  Out of a fight.", 1, 1, 1, true)
+        GameTooltip:AddLine("Drag to make it bigger or smaller.  Double-click or right-click: back to 100%.  Out of a fight.", 1, 1, 1, true)
         if RD.Deck() then
             GameTooltip:AddLine("Shift + drag: wider or narrower - the boxes keep their size, more or fewer fit in a row.  "
                                 .. "Shift + right-click: its own width again.", 0.6, 0.9, 1, true)
@@ -1461,6 +1461,14 @@ function RD.BuildGrip(f)
     end)
     g:SetScript("OnMouseUp", function() RD.EndGrip() end)
     g:SetScript("OnHide", function() RD.EndGrip() end)
+    -- DOUBLE-CLICK = THE DEFAULT SIZE (22 Nov 2026, Arn: "we steal from bis tools for the bis healing double clicking bottom right
+    -- resize corner puts bis healing in defaut size 100%" - the phone's corner does it): 100% and the view's own width
+    g:SetScript("OnDoubleClick", function(_, button)
+        if button ~= "LeftButton" or combat() then return end
+        RD.EndGrip()
+        if RD.Deck() and RD.DeckWidth() then RD.SetDeckWidth(nil) RD.Arm() end
+        RD.ScaleHome()
+    end)
     g:SetScript("OnClick", function(_, button)
         if button ~= "RightButton" or combat() then return end
         if RD.Deck() and IsShiftKeyDown and IsShiftKeyDown() then RD.SetDeckWidth(nil) RD.Arm() return end
