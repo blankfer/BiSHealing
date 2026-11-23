@@ -14187,6 +14187,16 @@ do
             STATE.inCombat, RD.inFight = false, nil
             g.__scripts.OnClick(g, "RightButton")
             ok(f:GetScale() == 1 and d.scale == 1, "right-click: back to 100%")
+            -- (Arn, 22 Nov: "double clicking bottom right resize corner puts bis healing in defaut size 100%" - as the phone's corner)
+            RD.SetScale(1.5) f:SetScale(1.5)
+            g.__scripts.OnDoubleClick(g, "LeftButton")
+            ok(f:GetScale() == 1 and d.scale == 1, "a double-click on the corner: back to 100%")
+            STATE.inCombat = true
+            RD.SetScale(1.5) f:SetScale(1.5)
+            g.__scripts.OnDoubleClick(g, "LeftButton")
+            ok(f:GetScale() == 1.5, "never in a fight")
+            STATE.inCombat = false
+            g.__scripts.OnDoubleClick(g, "LeftButton")
             f.GetLeft, f.GetTop, _G.GetCursorPosition, STATE.inCombat = nil, nil, keep.cursor, keep.combat
             d.scale, d.pos = keep.scale, keep.pos
             f:SetScale(keep.fscale)
