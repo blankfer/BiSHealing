@@ -504,6 +504,8 @@ local function newFrame(kind, name, parent)
             Show     = function(self2) self2.__shown = true end,
             Hide     = function(self2) self2.__shown = false end,
             IsShown  = function(self2) return self2.__shown end,
+            -- the client's label has SetShown too (21 Nov 2026: an auto no-op here left a hidden group tag "shown")
+            SetShown = function(self2, v) self2.__shown = v and true or false end,
             __parent = self,
             GetParent = function(self2) return self2.__parent end,
             __size   = FONT_SIZE[template or ""] or 12,
@@ -797,8 +799,31 @@ _G.SecureHandlerSetFrameRef = function(f, label, ref)
     f.__refs = f.__refs or {}
     f.__refs[label] = ref
 end
+-- A 3D MODEL, DIRTY (21 Nov 2026, Arn: the cue card's fireball "appeared for a second but disappeared after i switched"):
+-- hiding it drops what it drew, a load puts the camera back at its own place, and showing runs OnShow. The old mock had no
+-- model at all - any call answered, so "is the fireball there" was the flag our own code had set.
+function MOCK_MODEL(m)
+    function m:SetModel(file) self.__drawn, self.__cam, self.__loads = file, nil, (self.__loads or 0) + 1 end
+    function m:ClearModel() self.__drawn, self.__cam = nil, nil end
+    function m:SetCamDistanceScale(v) if self.__drawn then self.__cam = v end end
+    function m:Show()
+        local was = self.__shown
+        self.__shown = true
+        if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+    end
+    function m:Hide()
+        local was = self.__shown
+        self.__shown, self.__drawn, self.__cam = false, nil, nil
+        if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+    end
+    -- the window it sits in closes and opens: the client runs the model's own OnHide / OnShow too
+    function m:__ParentHide() self.__drawn, self.__cam = nil, nil if self.__scripts.OnHide then self.__scripts.OnHide(self) end end
+    function m:__ParentShow() if self.__scripts.OnShow then self.__scripts.OnShow(self) end end
+    return m
+end
 _G.CreateFrame = function(kind, name, parent, template)
     local f = _G.CreateFrameUnguarded(kind, name, parent, template)
+    if kind == "PlayerModel" and type(f) == "table" then MOCK_MODEL(f) end
     if type(f) == "table" and type(template) == "string" and template:find("Secure", 1, true) then lockdownGuard(f) end
     return f
 end
@@ -15659,14 +15684,24 @@ do
             local keepShown = RD.shownFor
             RD.shownFor = true                         -- the window standing in for the grid, as in the game
             d.radar.view, d.radar.sw = nil, nil
-            for _, s in ipairs(RD.SW) do ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            -- (BiS Cues, 21 Nov: the cue switches live in d.radar.cues; someone who had the deck keeps them on - CU.Stamp)
+            d.radar.cues, d.radar.swStamp = nil, d.radar.swStamp or 1
+            NS.CU.Stamp()
+            for _, s in ipairs(RD.SW) do
+                -- (the raid layout's two start OFF: a new part of the layout nobody asked for yet - sheet 6)
+                if s.off then ok(not RD.Sw(s.key), "nothing switched yet: " .. s.key .. " OFF (nobody's deck changes)")
+                else ok(RD.Sw(s.key), "nothing switched yet: " .. s.key .. " on (nobody's deck changes)") end
+            end
             ok(RD.SwPresetNow() == "full", "and that is FULL")
             ok(RD.SetSw("names", false) == "now" and d.radar.sw.names == false and not RD.Sw("names"), "a switch off, saved, laid out now")
             local sp1 = RD.spokes[RD.conOrder[1]]
             ok(sp1.deckTag and not sp1.deckTag:IsShown(), "names off: no name on the boxes")
             ok(RD.SetSw("nonsense", false) == nil, "an unknown switch: nothing")
             ok(RD.SwPreset("bare") == "now" and RD.SwPresetNow() == "bare", "BARE: everything off")
-            for _, s in ipairs(RD.SW) do ok(d.radar.sw[s.key] == false, "bare: " .. s.key .. " off") end
+            for _, s in ipairs(RD.SW) do
+                if s.layout then ok(d.radar.sw[s.key] == nil, "bare: the layout switch " .. s.key .. " left as it was (presets are the look)")
+                else ok(d.radar.sw[s.key] == false, "bare: " .. s.key .. " off") end
+            end
             ok(RD.slots[1].rb == nil, "kicks off: no kick button armed anywhere")
             ok(not RD.tide or not RD.tide:IsShown(), "tools off: the tools out of sight")
             ok(not (EN.rail and EN.rail:IsShown()), "fuel off: no fuel strip")
@@ -15710,7 +15745,7 @@ do
             RD.frame:SetScript("OnDragStart", keepDS)
             ok(started == 1, "a drag on the band moves the window (the window's own drag)")
             -- the panel
-            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == #RD.SW, "the switches button opens the list, a row each")
+            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class)")
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
             ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
             ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
@@ -15873,9 +15908,28 @@ do
                 for _, sp in ipairs(RD.spokes) do if sp.unit and sp.unit ~= "player" and sp.unit:find("^party") and sp.deckPlate:IsShown() then tsp = sp break end end
                 RD.lastClick, RD.lastClickAt = tsp, GetTime()
                 ok(RD.RipCast(GetTime()) == tsp.unit and tsp.ripMark and tsp.ripMark:IsShown(), "Riptide on a clicked box: the mark on that box")
+                ok(tsp.ripMark:GetText() == "Chain Heal" and tsp.cue.back:IsShown(), "the mark is the spell to cast - Chain Heal in white on a dark box (Arn: people would think a click there casts Riptide)", tsp.ripMark:GetText())
+                do   -- THE MARK GOES WHEN A CHAIN HEAL COULD NOT LAND IN TIME (Arn: "if my spell takes two seconds, we remove it at" 2 s + lag)
+                    local keepCT, keepNS = NS.FM.SeqCastTime, _G.GetNetStats
+                    NS.FM.SeqCastTime = function(sp) if sp == "Chain Heal" then return 2.0 end return keepCT(sp) end
+                    _G.GetNetStats = function() return 0, 0, 90, 90 end
+                    local lead = RD.CueLead("Chain Heal")
+                    local rk = RD.RipKey(tsp.unit)
+                    local keepEnd = RD.rips[rk]
+                    ok(math.abs(lead - (2.0 / (1 + ((NS.FM.Haste and NS.FM.Haste()) or 0) / 100) + 0.09)) < 1e-9, "the lead: your Chain Heal's cast time over your haste + 90 ms lag", lead)
+                    RD.rips[rk] = GetTime() + lead + 0.1
+                    RD.RipMarks()
+                    ok(tsp.ripMark:IsShown(), "a Chain Heal started now still lands inside the Riptide: the mark shows")
+                    TICK(0.2)
+                    RD.RipMarks()
+                    ok(not tsp.ripMark:IsShown() and RD.rips[rk], "0.1 s short of the cast + lag: the mark goes (the Riptide itself still counts on the bar)")
+                    RD.rips[rk] = keepEnd
+                    NS.FM.SeqCastTime, _G.GetNetStats = keepCT, keepNS
+                    RD.RipMarks()
+                end
                 local q = tsp.cue
-                ok(q and q.icon:IsShown() and q.edge:IsShown() and q.edge.__w > q.icon.__w and q.edge.__color and q.edge.__color[1] == 1,
-                   "the mark edged white, bigger than before (Arn: in the middle so it does not get lost)")
+                ok(q and q.word:IsShown() and not q.icon:IsShown() and q.word.__color and q.word.__color[1] == 1 and q.word.__color[3] == 1,
+                   "white letters (every class colour under them), the icon gone - no Riptide to click")
                 -- EVERY BOX OF THAT PERSON (Arn: "rip tide is not propagating to the other frames"): the same GUID elsewhere
                 local twin
                 for _, sp in ipairs(RD.spokes) do
@@ -15886,6 +15940,21 @@ do
                     STATE.guids[twin.unit] = UnitGUID(tsp.unit)
                     RD.RipMarks()
                     ok(twin.ripMark and twin.ripMark:IsShown(), "the same person in another box (the TARGET pair): marked there too")
+                    do   -- the cue card's sound for a middle cue: once when the mark comes on, one person = one sound
+                        local CU, keepS, keepVC, said = NS.CU, NS.CU.DB().voice.rip, _G.C_VoiceChat, {}
+                        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+                        CU.DB().voice.rip, CU.spoke, RD.cueTold, NS.BN.quietUntil = "spell", {}, {}, 0
+                        RD.RipMarks()
+                        ok(#said == 1 and said[1] == "Chain Heal", "Riptide's sound: once, though two boxes wear the mark", #said)
+                        RD.RipMarks()
+                        CU.spoke = {}
+                        RD.RipMarks()
+                        ok(#said == 1, "repainted while it stands: not said again", #said)
+                        CU.DB().voice.rip, RD.cueTold = nil, {}
+                        RD.RipMarks()
+                        ok(#said == 1, "no sound picked (the default): none")
+                        CU.DB().voice.rip, _G.C_VoiceChat, CU.spoke = keepS, keepVC, {}
+                    end
                     STATE.guids[twin.unit] = keepG
                     RD.RipMarks()
                     ok(not (twin.ripMark and twin.ripMark:IsShown()), "someone else in that box: no mark")
@@ -15948,18 +16017,18 @@ do
                     RD.cueTex = {}
                     RD.rips, RD.ripLast = {}, nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
-                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Holy Light",
+                    ok(RD.CueCast("Oath of Light", GetTime()) and tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Holy Light",
                        "Oath of Light on a box: Holy Light in its middle (heal them there)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Light's Vigil", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "Light's Vigil on the same person: Holy Shock wins the middle (it runs out first)")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
+                    ok(tsp.cue.word:GetText() == "Holy Light", "the Holy Shock went out: the Vigil spent, back to Holy Light")
                     if other then
                         RD.lastClick, RD.lastClickAt = other, GetTime()
                         RD.CueCast("Oath of Light", GetTime())
-                        ok(other.cue and other.cue.icon:IsShown() and not tsp.cue.icon:IsShown(), "one Oath at a time: the new one moves the cue")
+                        ok(other.cue and other.cue.word:IsShown() and not tsp.cue.word:IsShown(), "one Oath at a time: the new one moves the cue")
                     end
                     -- HOLY SHOCK ON AN ENEMY never spends the Vigil (Arn: "think of all the possible scenarios")
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
@@ -15967,15 +16036,15 @@ do
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.sentTarget, RD.sentAt = "Hogger", GetTime()
                     RD.CueCast("Holy Shock", GetTime())
-                    ok(tsp.cue.icon.__texture == "tex:Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
+                    ok(tsp.cue.word:GetText() == "Holy Shock", "a Holy Shock the game says went to someone else (an enemy): the Vigil stays")
                     RD.sentTarget, RD.sentAt = nil, nil
                     -- DEAD: no cue on their box, the clock waits
                     STATE.dead[tsp.unit] = true
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "they died: no cue on a dead box")
+                    ok(not tsp.cue.word:IsShown(), "they died: no cue on a dead box")
                     STATE.dead[tsp.unit] = nil
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "back up (a quick rez): the cue back")
+                    ok(tsp.cue.word:IsShown(), "back up (a quick rez): the cue back")
                     -- OUT OF A FIGHT, THE TRUTH (dispelled, a /reload): RD.CueSeed reads your own auras off the boxes
                     do
                         local keepUA = _G.C_UnitAuras
@@ -15987,7 +16056,7 @@ do
                             return nil
                         end
                         RD.CueSeed()
-                        ok(not tsp.cue.icon:IsShown() and other.cue and other.cue.icon:IsShown() and other.cue.icon.__texture == "tex:Holy Light",
+                        ok(not tsp.cue.word:IsShown() and other.cue and other.cue.word:IsShown() and other.cue.word:GetText() == "Holy Light",
                            "out of a fight: the Vigil nobody wears any more is gone, an Oath found on someone (after a /reload) comes up")
                         NS.FM.Ranks = keepR3
                         _G.C_UnitAuras = keepUA
@@ -15999,19 +16068,19 @@ do
                     RD.swiftAt = nil
                     RD.lastClick, RD.lastClickAt = tsp, GetTime()
                     RD.CueCast("Rejuvenation", GetTime())
-                    ok(tsp.cue.icon:IsShown() and tsp.cue.icon.__texture == "tex:Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
+                    ok(tsp.cue.word:IsShown() and tsp.cue.word:GetText() == "Swiftmend", "your Rejuvenation on them, Swiftmend ready: Swiftmend in the middle")
                     RD.CueCast("Swiftmend", GetTime())
-                    ok(not tsp.cue.icon:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
+                    ok(not tsp.cue.word:IsShown(), "Swiftmend cast: the cue off while it cools (the HoT stays on Forever)")
                     RD.swiftAt = GetTime() - 1
                     RD.RipMarks()
-                    ok(tsp.cue.icon:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
+                    ok(tsp.cue.word:IsShown(), "cooled again, the Rejuvenation still on: the cue back")
                     RD.SetSw("swift", false)
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "the Swiftmend switch off: no cue")
+                    ok(not tsp.cue.word:IsShown(), "the Swiftmend switch off: no cue")
                     RD.SetSw("swift", true)
                     NS.FM.Ranks = function(n) return keepRanks2(n) end
                     RD.RipMarks()
-                    ok(not tsp.cue.icon:IsShown(), "no Swiftmend learned: no cue")
+                    ok(not tsp.cue.word:IsShown(), "no Swiftmend learned: no cue")
                     -- a druid's synergy bar: the newest HoT's time left, the Swiftmend icon
                     do
                         local keepR = NS.FM.Ranks
@@ -16453,6 +16522,380 @@ do
     if RD.On() then RD.Arm() end
 end
 
+-- RAID GROUPS AND THE SIZE TIERS (21 Nov 2026, BiS Cues sheets 6 and 7; Arn: "which box is group 2?" and "dragging the
+-- window narrower never piles icons"; then: "the bar cant have clickable things on frame or people will miss click and the
+-- bar must always go to the end of the box no empty space")
+do
+    local RD, d = NS.RD, NS.DB()
+    local keep = { units = STATE.units, classes = STATE.classes, roles = STATE.roles, look = d.look, alpha = d.alpha,
+                   raid = _G.IsInRaid, num = _G.GetNumGroupMembers, info = _G.GetRaidRosterInfo, isu = _G.UnitIsUnit,
+                   umax = _G.UnitHealthMax, shown = RD.shownFor, gun = _G.GetUnitName }
+    STATE.units = { player = true, party1 = true, party2 = true, party3 = true, party4 = true }
+    STATE.classes = { party1 = "WARRIOR", party2 = "MAGE", party3 = "PRIEST", party4 = "HUNTER" }
+    STATE.roles = nil
+    d.look, d.alpha = "radar", true
+    d.radar = d.radar or {}
+    d.radar.view, d.radar.sw, d.radar.deckW, d.radar.boxH, d.radar.deckSort, RD.FORCE_DISC = nil, nil, nil, nil, nil, false
+    RD.shownFor = true                                   -- the window standing in for the grid, as in the game
+
+    -- the boxes as one line each, in the same words as the dump taken from the deck BEFORE this change (21 Nov)
+    local function r(fr) if not fr then return "-" end local q = fr.points and fr.points[1]
+        return q and string.format("%s:%.1f,%.1f,%sx%s,%s", tostring(q[1]), q[4] or 0, q[5] or 0, tostring(fr.__w), tostring(fr.__h),
+                                   fr:IsShown() and "s" or "h") or "nopt" end
+    local function dump()
+        local out = {}
+        for i, sp in ipairs(RD.spokes) do
+            if sp.deckPlate and sp.deckPlate:IsShown() then
+                local cs = {}
+                for _, c in ipairs(sp.cures or {}) do cs[#cs + 1] = r(c.box) end
+                out[#out + 1] = string.format("%d %s P%s H%s K%s C[%s] T%s", i, tostring(sp.unit), r(sp.deckPlate), r(sp.heal),
+                    r(sp.bogey), table.concat(cs, ";"), tostring(sp.deckTag and sp.deckTag.text.__w))
+            end
+        end
+        out[#out + 1] = "frame " .. tostring(RD.frame.__w) .. "x" .. tostring(RD.frame.__h)
+        return table.concat(out, "|")
+    end
+    local TODAY = table.concat({
+        "1 player PCENTER:54.5,-136.0,93x58,s HCENTER:54.5,-124.5,91x33,s KCENTER:21.0,-153.0,22x22,s C[CENTER:88.0,-153.0,22x22,s;CENTER:64.0,-153.0,22x22,s] T87",
+        "2 party1 PCENTER:70.5,-69.0,125x70,s HCENTER:70.5,-57.5,123x45,s KCENTER:21.0,-92.0,22x22,s C[CENTER:120.0,-92.0,22x22,s;CENTER:96.0,-92.0,22x22,s] T119",
+        "3 party2 PCENTER:150.5,-136.0,93x58,s HCENTER:150.5,-124.5,91x33,s KCENTER:117.0,-153.0,22x22,s C[CENTER:184.0,-153.0,22x22,s;CENTER:160.0,-153.0,22x22,s] T87",
+        "4 party3 PCENTER:246.5,-136.0,93x58,s HCENTER:246.5,-124.5,91x33,s KCENTER:213.0,-153.0,22x22,s C[CENTER:280.0,-153.0,22x22,s;CENTER:256.0,-153.0,22x22,s] T87",
+        "5 party4 PCENTER:343.0,-136.0,94x58,s HCENTER:343.0,-124.5,92x33,s KCENTER:309.0,-153.0,22x22,s C[CENTER:377.0,-153.0,22x22,s;CENTER:353.0,-153.0,22x22,s] T88",
+        "6 target PCENTER:198.5,-69.0,125x70,s HCENTER:198.5,-57.5,123x45,s KCENTER:21.0,-214.0,22x22,h C[CENTER:248.0,-92.0,22x22,s;CENTER:224.0,-92.0,22x22,s] T119",
+        "7 targettarget PCENTER:327.0,-69.0,126x70,s HCENTER:327.0,-57.5,124x45,s KCENTER:98.0,-214.0,22x22,h C[CENTER:377.0,-92.0,22x22,s;CENTER:353.0,-92.0,22x22,s] T120",
+        "frame 398x201" }, "|")
+
+    -- THE COLD START: a login with nothing clicked is today's party deck, to the pixel
+    fire(RD.events, "PLAYER_ENTERING_WORLD")
+    ok(RD.Deck() and dump() == TODAY, "a fake login with nothing clicked: the party deck exactly as before the raid-group work", dump())
+    ok(RD.Sw("gtag") == false and RD.Sw("cols") == false and RD.DeckSort() == "tanks" and d.radar.sw == nil and d.radar.deckSort == nil,
+       "and nothing new is on: no group tags, groups as rows, tanks then groups - none of it written")
+    local anyG = false
+    for _, sp in ipairs(RD.spokes) do if sp.deckTag and sp.deckTag.group and sp.deckTag.group:IsShown() then anyG = true end end
+    ok(not anyG, "no G tag on any box")
+    -- from here on everybody has a long two-part name (Forever's), so the name's room is really tested
+    _G.GetUnitName = function(u) return "Quandaledingle" .. tostring(u):gsub("%A", "") .. " Surname" end
+
+    -- THE SETTINGS
+    ok(RD.SetDeckSort("group") == "now" and d.radar.deckSort == "group" and RD.DeckSort() == "group", "the sort saved per character")
+    ok(RD.Deck() and RD.deckTanks == 0, "by group: nobody lifted into a tank row")
+    local seq = {}
+    for k = 1, 4 do local _, nx = RD.NextSort() seq[k] = nx end
+    ok(table.concat(seq, ",") == "class,maxhp,tanks,group", "a click moves to the next sort, round and round", table.concat(seq, ","))
+    ok(RD.SetDeckSort("tanks") and d.radar.deckSort == nil, "tanks, then groups is the default: nothing kept for it")
+    ok(RD.SetDeckSort("nonsense") == nil and RD.DeckSort() == "tanks", "an unknown sort: nothing")
+    RD.SetRaidSettings({ gtag = true, cols = true, sort = "class", junk = 1 })
+    local rs = RD.RaidSettings()
+    ok(rs.gtag == true and rs.cols == true and rs.sort == "class", "the BiS Cues string's raid part: written and read back")
+    RD.SwPreset("bare")
+    ok(RD.Sw("gtag") and RD.Sw("cols"), "a preset is the look: it leaves the raid layout alone")
+    RD.SwPreset("full")
+    ok(RD.SwPresetNow() == "full", "and FULL still reads as FULL with the layout switches on")
+    RD.SwReset()
+    ok(not RD.Sw("gtag") and not RD.Sw("cols") and RD.DeckSort() == "tanks", "RESET: the raid layout back to its own")
+    -- the panel: a row each for the two switches, and the sort row that cycles
+    RD.ToggleSwitches()
+    local p = RD.swPanel
+    ok(p.sortRow and p.sortRow.text.__text == "Sort: Tanks, then groups", "the panel's sort row says the sort now",
+       p.sortRow and p.sortRow.text.__text)
+    p.sortRow:GetScript("OnClick")(p.sortRow)
+    ok(RD.DeckSort() == "group" and p.sortRow.text.__text == "Sort: By group", "a click: the next sort, and the row says so")
+    local gRow
+    for _, row in ipairs(p.rows) do if row.key == "gtag" then gRow = row end end
+    ok(gRow and not gRow.box.fill:IsShown(), "the group tag row, unticked")
+    gRow:GetScript("OnClick")(gRow)
+    ok(RD.Sw("gtag") and gRow.box.fill:IsShown(), "clicked: group tags on")
+    RD.SwReset()
+    if p:IsShown() then RD.ToggleSwitches() end
+
+    -- THE ORDER (out of a fight, the same answer every time)
+    local units = { "player", "party1", "party2", "party3", "party4" }
+    local o = RD.DeckOrder(units, 5, "class", false)
+    local names = {}
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "party1,player,party3,party4,party2",
+       "by class: warrior, shaman (you), priest, hunter, mage", table.concat(names, ","))
+    local mx = { player = 3000, party1 = 9000, party2 = 4000, party3 = 4000, party4 = 1000 }
+    _G.UnitHealthMax = function(u) return mx[u] end
+    o = RD.DeckOrder(units, 5, "maxhp", false)
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "party1,party2,party3,player,party4", "by max health, a tie by place", table.concat(names, ","))
+    _G.UnitHealthMax = function() return secretNumber() end
+    o = RD.DeckOrder(units, 5, "maxhp", false)
+    for k = 1, 5 do names[k] = units[o[k]] end
+    ok(table.concat(names, ",") == "player,party1,party2,party3,party4", "max health unreadable (a secret): group order",
+       table.concat(names, ","))
+    _G.UnitHealthMax = keep.umax
+
+    -- A RAID: n people, group of each from `groupOf`; raid7 a named tank (group 2); raid1 is you
+    local function raid(n, groupOf, pets)
+        _G.IsInRaid = function() return true end
+        _G.GetNumGroupMembers = function() return n end
+        _G.GetRaidRosterInfo = function(i) if i <= n then return "n" .. i, 0, groupOf(i) end return nil end
+        _G.UnitIsUnit = function(a, b) return a == b or (a == "raid1" and b == "player") or (b == "raid1" and a == "player") end
+        local cls = { "WARRIOR", "PRIEST", "MAGE", "ROGUE", "HUNTER", "DRUID", "WARLOCK", "PALADIN", "SHAMAN" }
+        STATE.units, STATE.classes = { player = true }, {}
+        for i = 1, n do STATE.units["raid" .. i] = true STATE.classes["raid" .. i] = cls[(i * 7) % 9 + 1] end
+        for i = 1, pets or 0 do STATE.units["raidpet" .. i] = true end
+        STATE.roles = { raid7 = "TANK" }
+        RD.Arm()
+    end
+    local function even(i) return math.ceil(i / 5) end
+    -- 23 people, group 2 only three strong (6-8), the others five: the groups after it must not shift
+    local function holes(i) if i <= 5 then return 1 elseif i <= 8 then return 2 end return math.ceil((i - 8) / 5) + 2 end
+
+    raid(23, holes)
+    local function spOf(u) for _, sp in ipairs(RD.spokes) do if sp.unit == u and sp.deckPlate and sp.deckPlate:IsShown() then return sp end end end
+    local function rect(fr)                              -- left, top, right, bottom: px from the window's top-left, down positive
+        local q = fr and fr.points and fr.points[1]
+        if not (q and fr.__w and fr.__h) then return nil end
+        return q[4] - fr.__w / 2, -q[5] - fr.__h / 2, q[4] + fr.__w / 2, -q[5] + fr.__h / 2
+    end
+    local function lefttop(u) local l, t = rect(spOf(u).deckPlate) return l, t end
+    ok(RD.raid and RD.deckTanks == 1 and spOf("raid7") and select(2, lefttop("raid7")) < select(2, lefttop("raid6")),
+       "tanks, then groups: the named tank lifted to the top row")
+    local _, t6 = lefttop("raid6")
+    local _, t8 = lefttop("raid8")
+    local l9, t9 = lefttop("raid9")
+    local l1, t1 = lefttop("raid1")
+    ok(t6 == t8 and t9 > t6 and l9 == l1, "group 2 (three people, the tank lifted) keeps its own row; group 3 starts a new one under it")
+    local sp6 = spOf("raid6")
+    local blockW = RD.deckInnerW
+    ok(sp6 and math.abs(sp6.deckPlate.__w - spOf("raid1").deckPlate.__w) < 2,
+       "a block of five spots, two of them empty: the boxes as wide as a full group's (never stretched to fill)")
+    -- the hover: a box lights its group mates, and only them
+    local sp11 = spOf("raid11")
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local washCost = Cost.Count(function() RD.GroupWash(sp11, true) end)
+    print(("   cost: the group mates' wash, one hover = %d calls (enter / leave only, never a ticker)"):format(washCost))
+    ok(washCost <= 12, "the wash costs a handful of calls a hover", washCost)
+    RD.GroupWash(sp11, false)
+    sp11.heal:GetScript("OnEnter")(sp11.heal)
+    local lit, wrong = 0, 0
+    for _, sp in ipairs(RD.spokes) do
+        local m = sp.deckPlate and sp.deckPlate.mate
+        if m and m:IsShown() then if sp.raidGroup == 3 and sp ~= sp11 then lit = lit + 1 else wrong = wrong + 1 end end
+    end
+    ok(lit == 4 and wrong == 0, "hovering a box in group 3: its four group mates lit, nobody else", lit .. " / " .. wrong)
+    sp11.heal:GetScript("OnLeave")(sp11.heal)
+    lit = 0
+    for _, sp in ipairs(RD.spokes) do if sp.deckPlate and sp.deckPlate.mate and sp.deckPlate.mate:IsShown() then lit = lit + 1 end end
+    ok(lit == 0 and sp11.heal.__wasMouseover, "the mouse leaves: the wash goes (and the client's own mouseover still ran)")
+    -- the G tag
+    RD.SetSw("gtag", true)
+    local g11 = spOf("raid11").deckTag
+    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 8, "group tags on: G3 in the corner",
+       g11.group and g11.group.__text)
+    ok(spOf("raid7").deckTag.group.__text == "G2", "the lifted tank too says his group")
+    RD.SetSw("gtag", false)
+    ok(not spOf("raid11").deckTag.group:IsShown(), "off again: gone")
+
+    -- A FIGHT: the order is frozen; a sort picked in one waits for its end, and nothing secure is touched (the mock refuses)
+    local before = table.concat(RD.conOrder, ",")
+    STATE.inCombat = true
+    fire(RD.events, "PLAYER_REGEN_DISABLED")
+    local okC, res = pcall(RD.SetDeckSort, "class")
+    ok(okC and res == "after" and RD.pending and table.concat(RD.conOrder, ",") == before,
+       "a sort picked in a fight: nothing moves until it ends", tostring(res))
+    STATE.dead = STATE.dead or {}
+    local okD = pcall(fire, RD.events, "UNIT_HEALTH", "raid9")
+    ok(okD and table.concat(RD.conOrder, ",") == before, "a death mid-fight: no box moves")
+    STATE.inCombat = false
+    fire(RD.events, "PLAYER_REGEN_ENABLED")
+    ok(not RD.pending and RD.DeckSort() == "class" and table.concat(RD.conOrder, ",") ~= before, "the fight over: the new order")
+    RD.SetDeckSort("tanks")
+
+    --[[ THE TEST ACROSS WIDTHS (sheet 7): at every width from the floor to 1200 px, every 7 px, for a party of 5 and raids
+      of 10, 25 (group 2 short) and 40 (with pets), groups as rows and as columns, a group sort and a scattering one:
+        1 every box inside the window            2 no two boxes overlapping       3 no box under its minimum
+        4 nothing overlapping inside a box (name / group tag / paw / extra tag / kick / cures), each inside its box
+        5 each raid group on one row (or column), its tag touching nothing
+        6 the same group always gives the same order (whatever the width)
+        A the health bar is the box's whole inner width (Arn: "the bar must always go to the end of the box")
+        B no clickable button on the bar (Arn: "the bar cant have clickable things on frame"), all icons one size, 16..22 ]]
+    local function sweep(label, setup, groupSort, cols)
+        setup()
+        RD.SetSw("cols", cols)
+        RD.SetSw("gtag", true)
+        local bad = { inside = 0, overlap = 0, min = 0, inner = 0, group = 0, order = 0, bar = 0, click = 0, icon = 0 }
+        local firstOrder, seen, layouts, tiers = nil, {}, 0, {}
+        local w = RD.FloorInner()
+        while w <= 1200 do
+            RD.SetDeckWidth(w)
+            RD.ConsoleLayout()
+            layouts = layouts + 1
+            local FW, FH = RD.frame.__w, RD.frame.__h
+            local boxes, iconW = {}, nil
+            for _, sp in ipairs(RD.spokes) do
+                if sp.deckPlate and sp.deckPlate:IsShown() and sp.heal:IsShown() then
+                    if sp.unit and sp.unit:find("^raid%d") and not (sp.tideTag and sp.tideTag:IsShown()) then RD.TideTag(sp, 10) end   -- an extra tag where it fits
+                    boxes[#boxes + 1] = sp
+                end
+            end
+            for a = 1, #boxes do
+                local sp = boxes[a]
+                local L, T, R, B = rect(sp.deckPlate)
+                if sp.room then tiers[sp.room.tier] = true end
+                if L < -0.01 or T < -0.01 or R > FW + 0.01 or B > FH + 0.01 then bad.inside = bad.inside + 1 end
+                if (R - L) < NS.FG.BOX_MIN_W - 0.01 or (B - T) < 28 then bad.min = bad.min + 1 end
+                for b2 = a + 1, #boxes do
+                    local l2, t2, r2, b3 = rect(boxes[b2].deckPlate)
+                    if L < r2 - 0.01 and l2 < R - 0.01 and T < b3 - 0.01 and t2 < B - 0.01 then bad.overlap = bad.overlap + 1 end
+                end
+                -- A: the bar edge to edge
+                local hl, ht, hr, hb = rect(sp.heal)
+                if math.abs(hl - (L + 1)) > 0.01 or math.abs(hr - (R - 1)) > 0.01 then bad.bar = bad.bar + 1 end
+                -- the parts inside the box, as rectangles in the window
+                local parts = {}
+                local tag = sp.deckTag
+                if tag and tag:IsShown() then
+                    if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then
+                        if tag.text.__size < 8 then bad.inner = bad.inner + 1 end
+                        parts[#parts + 1] = { L + RD.DECK_TAG.x, T - RD.DECK_TAG.y, L + RD.DECK_TAG.x + tag.text.__w, T - RD.DECK_TAG.y + 9, "name" }
+                    end
+                    if tag.group and tag.group:IsShown() then
+                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + 8, "gtag" }
+                        seen.gtag = true
+                    end
+                    if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then seen.name = true end
+                end
+                if sp.deckPaw and sp.deckPaw:IsShown() then
+                    parts[#parts + 1] = { R - 2 - sp.deckPaw.__w, T + 1, R - 2, T + 1 + sp.deckPaw.__h, "paw" }
+                    seen.paw = true
+                end
+                if sp.tideTag and sp.tideTag:IsShown() then
+                    seen.tide = true
+                    local ty = T - (RD.DECK_TAG.y - RD.DECK_TAG.size - 3)
+                    parts[#parts + 1] = { L + RD.DECK_TAG.x, ty, L + RD.DECK_TAG.x + sp.tideTag.__w, ty + sp.tideTag.__h, "tide" }
+                    if ty + sp.tideTag.__h > hb + 0.01 then bad.inner = bad.inner + 1 end     -- on the bar, never in the icon row
+                end
+                local clicks = {}
+                if sp.bogey and sp.bogey:IsShown() then clicks[#clicks + 1] = sp.bogey end
+                for _, c in ipairs(sp.cures or {}) do if c.box:IsShown() then clicks[#clicks + 1] = c.box end end
+                for _, c in ipairs(clicks) do
+                    local cl, ct, cr, cb = rect(c)
+                    parts[#parts + 1] = { cl, ct, cr, cb, "icon" }
+                    -- B: never on the bar
+                    if cl < hr - 0.01 and hl < cr - 0.01 and ct < hb - 0.01 and ht < cb - 0.01 then bad.click = bad.click + 1 end
+                    iconW = iconW or c.__w
+                    if c.__w ~= iconW or c.__w < 16 or c.__w > 22 then bad.icon = bad.icon + 1 end   -- Arn's numbers, not ours
+                end
+                for i1 = 1, #parts do
+                    local q = parts[i1]
+                    if q[1] < L - 0.01 or q[3] > R + 0.01 or q[2] < T - 0.01 or q[4] > B + 0.01 then bad.inner = bad.inner + 1 end
+                    for i2 = i1 + 1, #parts do
+                        local s = parts[i2]
+                        if q[1] < s[3] - 0.01 and s[1] < q[3] - 0.01 and q[2] < s[4] - 0.01 and s[2] < q[4] - 0.01 then bad.inner = bad.inner + 1 end
+                    end
+                end
+            end
+            -- 5: a raid group on one line, nobody else's box inside its span
+            if RD.raid and groupSort then
+                local span = {}
+                for _, sp in ipairs(boxes) do
+                    local g = sp.raidGroup
+                    if g and not (sp.unit == "raid7") then                -- (raid7: the lifted tank, in the top row)
+                        local L, T, R, B = rect(sp.deckPlate)
+                        local s = span[g]
+                        if not s then span[g] = { L, T, R, B } else
+                            if (cols and math.abs(s[1] - L) > 0.01) or (not cols and math.abs(s[2] - T) > 0.01) then bad.group = bad.group + 1 end
+                            s[1], s[2], s[3], s[4] = math.min(s[1], L), math.min(s[2], T), math.max(s[3], R), math.max(s[4], B)
+                        end
+                    end
+                end
+                for _, sp in ipairs(boxes) do
+                    local L, T, R, B = rect(sp.deckPlate)
+                    for g, s in pairs(span) do
+                        if sp.raidGroup ~= g and sp.unit ~= "raid7" and L < s[3] - 0.01 and s[1] < R - 0.01 and T < s[4] - 0.01 and s[2] < B - 0.01 then
+                            bad.group = bad.group + 1
+                        end
+                    end
+                end
+            end
+            -- 6: the order never depends on the width
+            local ord = table.concat(RD.conOrder or {}, ",")
+            firstOrder = firstOrder or ord
+            if ord ~= firstOrder then bad.order = bad.order + 1 end
+            w = w + 7
+        end
+        local o1 = table.concat(RD.conOrder or {}, ",")
+        RD.Arm()
+        if table.concat(RD.conOrder or {}, ",") ~= o1 then bad.order = bad.order + 1 end
+        local tl = {}
+        for k in pairs(tiers) do tl[#tl + 1] = k end
+        table.sort(tl)
+        local what = label .. " (" .. layouts .. " widths, tiers " .. table.concat(tl, "/") .. ")"
+        ok(bad.inside == 0, what .. ": every box inside the window", bad.inside)
+        ok(bad.overlap == 0, what .. ": no two boxes overlap", bad.overlap)
+        ok(bad.min == 0, what .. ": no box under its minimum (22 x 28)", bad.min)
+        ok(bad.inner == 0, what .. ": nothing overlaps inside a box, everything inside it, names 8 pt or more", bad.inner)
+        ok(bad.group == 0, what .. ": each group on one " .. (cols and "column" or "row") .. ", its tag touching nothing", bad.group)
+        ok(bad.order == 0, what .. ": the same group always gives the same order", bad.order)
+        ok(bad.bar == 0, what .. ": the health bar runs the box's whole inner width", bad.bar)
+        ok(bad.click == 0, what .. ": no kick or cure on the bar", bad.click)
+        ok(bad.icon == 0, what .. ": every icon one size, 16 to 22 px", bad.icon)
+        ok(seen.name and (not RD.raid or (seen.gtag and seen.tide)), what .. ": the names, group tags and MANA TIDE were really there to test")
+        RD.SetDeckWidth(nil)
+        return tiers, seen
+    end
+    local function party()
+        _G.IsInRaid, _G.GetNumGroupMembers, _G.GetRaidRosterInfo, _G.UnitIsUnit = keep.raid, keep.num, keep.info, keep.isu
+        STATE.units = { player = true, party1 = true, party2 = true, party3 = true, party4 = true }
+        STATE.classes = { party1 = "WARRIOR", party2 = "MAGE", party3 = "PRIEST", party4 = "HUNTER" }
+        STATE.roles = nil
+        RD.Arm()
+    end
+    sweep("a party of 5", party, false, false)
+    sweep("a raid of 10", function() raid(10, even) end, true, false)
+    sweep("a raid of 10, columns", function() raid(10, even) end, true, true)
+    sweep("a raid of 23, group 2 short", function() raid(23, holes) end, true, false)
+    sweep("a raid of 23, group 2 short, columns", function() raid(23, holes) end, true, true)
+    local t40, s40 = sweep("a raid of 40 with pets", function() raid(40, even, 3) end, true, false)
+    ok(t40.full and t40.one and t40.floor, "the sweep walked through the size tiers (full, one cure, floor)")
+    ok(s40.paw, "and the pets' paws were there too")
+    sweep("a raid of 40, columns", function() raid(40, even, 3) end, true, true)
+    RD.SetDeckSort("class")
+    sweep("a raid of 40 by class (groups scatter)", function() raid(40, even) end, false, false)
+    RD.SetDeckSort("maxhp")
+    sweep("a raid of 25 by max health, columns", function() raid(25, even) end, false, true)
+    RD.SetDeckSort("tanks")
+
+    -- THE TIERS, by hand: what each keeps
+    local full, one, kick, floor = RD.BoxRoom(80, 33, 22), RD.BoxRoom(60, 33, 22), RD.BoxRoom(36, 33, 16), RD.BoxRoom(22, 33, 16)
+    ok(full.cures == 2 and full.name == "full" and full.tags and full.extras, "FULL: two cures, the whole name, the tags")
+    ok(one.cures == 1 and one.name == "cut" and not one.tags and not one.extras, "ONE CURE: the second cure gone, the name cut, no tags")
+    ok(kick.cures == 0 and kick.name == "cut", "too narrow for a cure beside the kick: the kick alone keeps its spot")
+    ok(floor.cures == 0 and floor.name == false, "the floor: the bar and the kick, no name")
+    ok(RD.IconPx(80) == 22 and RD.IconPx(22) == 16 and RD.IconPx(40) == 17, "one icon size from the smallest box, held to 16..22")
+    RD.SetSw("cols", false)
+    raid(40, even)
+    RD.SetDeckWidth(RD.FloorInner())
+    RD.ConsoleLayout()
+    local s1 = spOf("raid2")
+    ok(s1 and s1.room.tier == "floor" and s1.deckTag.text.__text == "" and RD.BoxHas(s1, "extras") == false,
+       "a 40 at the floor: the boxes at the floor, no names, no extras", s1 and s1.room.tier)
+    RD.SetDeckWidth(300)
+    RD.ConsoleLayout()
+    s1 = spOf("raid2")
+    local shownCures = 0
+    for _, c in ipairs(s1.cures or {}) do if c.box:IsShown() then shownCures = shownCures + 1 end end
+    ok(s1.room.tier == "one" and #s1.deckTag.text.__text <= RD.NAME_CUT and shownCures <= 1, "at 300: one cure, the name cut to four letters",
+       s1.deckTag.text.__text)
+    RD.SetDeckWidth(nil)
+    RD.ConsoleLayout()
+    shownCures = 0
+    s1 = spOf("raid2")
+    for _, c in ipairs(s1.cures or {}) do if c.box:IsShown() then shownCures = shownCures + 1 end end
+    ok(s1.room.tier == "full" and shownCures == #(s1.cures or {}), "its own width again: both cures back")
+
+    _G.IsInRaid, _G.GetNumGroupMembers, _G.GetRaidRosterInfo, _G.UnitIsUnit = keep.raid, keep.num, keep.info, keep.isu
+    _G.UnitHealthMax, _G.GetUnitName = keep.umax, keep.gun
+    STATE.units, STATE.classes, STATE.roles, d.look, d.alpha = keep.units, keep.classes, keep.roles, keep.look, keep.alpha
+    d.radar.sw, d.radar.deckSort, d.radar.deckW = nil, nil, nil
+    RD.shownFor, RD.FORCE_DISC = keep.shown, true
+    RD.Arm()
+end
+
 -- THE TARGET RHYTHM TEST (19 Nov 2026, Arn: "build the test tool for the target rhythm" - a mage spams one button that
 -- flips between the druid and the boss; the druid's addon hears three target changes in two seconds = an ask, mid-fight,
 -- where addon messages hold). A secret alpha feature: what the client really does is only learned in a fight.
@@ -16603,6 +17046,921 @@ do
     STATE.units.party1, STATE.units.party2 = keep.units.party1, keep.units.party2
     _G.SetOverrideBindingClick, _G.ClearOverrideBindings, _G.PlaySound = keep.osb, keep.cob, keep.ps
     d.alpha, d.alphaOff, d.rhythm = keep.alpha, keep.alphaOff, keep.rhythm
+end
+
+-- A WARLOCK HURTING HIMSELF (Burn.lua, 20 Nov 2026 - Arn: "tag for single cast, 2 for channel")
+do
+    local BN, EN = NS.BN, NS.EN
+    local keep = { classes = STATE.classes, get = _G.C_UnitAuras and _G.C_UnitAuras.GetUnitAuraBySpellID,
+                   desc = _G.C_Spell and _G.C_Spell.GetSpellDescription }
+    STATE.classes = { party1 = "WARLOCK", party2 = "SHAMAN" }
+    NS.CU.DB().on.hell, NS.CU.DB().on.tap = true, true      -- (BiS Cues: both cues on, as a player who ticked them)
+    ok(BN.Warlock("party1") and not BN.Warlock("party2") and not BN.Warlock("target"),
+       "only a warlock in your group is looked at (never your target)")
+    local WEAR = {}
+    _G.C_UnitAuras = _G.C_UnitAuras or {}
+    _G.C_UnitAuras.GetUnitAuraBySpellID = function(unit, id)
+        local w = WEAR[unit]
+        if w == "secret" then return secret() end
+        if w == id then return { spellId = id } end
+        return nil
+    end
+    _G.C_Spell.GetSpellDescription = function(id)
+        if id == 11683 then return "Ignites the area surrounding the caster, causing 139 Fire damage to himself and 139 Fire damage to all nearby enemies every 1 sec." end
+        return nil
+    end
+    BN.on, BN.tap, BN.tickCache = {}, {}, {}
+    WEAR.party1 = 11683
+    ok(BN.Look("party1") and BN.on.party1 and BN.on.party1.id == 11683, "the aura road: Hellfire rank 2 seen on him by its id")
+    ok(BN.Tick(11683) == 139 and BN.Tick(1949) == BN.TICK[1949], "a tick's burn from the spell's own words, else the table")
+    ok(BN.Left("party1") == 15 * 139, "what the rest of the channel will burn: 15 ticks of 139", BN.Left("party1"))
+    TICK(4.2)
+    ok(BN.Left("party1") == 11 * 139, "4.2 s in: 11 ticks left", BN.Left("party1"))
+    -- the box
+    local sp = { unit = "party1", heal = CreateFrame("Button") }
+    sp.heal:SetSize(74, 58)
+    local e = EN.Box(sp)
+    e.bar:SetStatusBarColor(0.53, 0.53, 0.93, 1)
+    ok(BN.Paint(sp, 4000), "a burning warlock's box paints")
+    local B = e.burn
+    local r, g = e.bar.__color[1], e.bar.__color[2]
+    local lo, hi = B.band:GetMinMaxValues()
+    ok(B.band:IsShown() and B.band:GetValue() == 11 * 139 and hi == 4000 and r == BN.FIRE[1] and g == BN.FIRE[2],
+       "the burning bar: orange, the band = what he will still lose on his max health's scale", B.band:GetValue(), hi)
+    ok(B.edges[1]:IsShown() and B.edges[4]:IsShown() and not B.tag:IsShown(), "an orange edge round the box, no TAP tag")
+    -- a hidden answer changes nothing; the aura gone ends it
+    WEAR.party1 = "secret"
+    ok(not BN.Look("party1") and BN.on.party1, "a secret answer: could not tell - the burn stays")
+    WEAR.party1 = nil
+    ok(BN.Look("party1") and not BN.on.party1, "the aura gone (a plain no): the burn ends")
+    BN.Paint(sp, 4000)
+    ok(not B.band:IsShown() and not B.edges[1]:IsShown(), "and the box is plain again")
+    -- the cast road
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949) and BN.on.party1.id == 1949, "the cast road: a plain Hellfire id starts it")
+    ok(not BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", secret()) and BN.seen.cast == "hidden id", "a secret spell id is never compared")
+    ok(BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949) and not BN.on.party1, "the channel stops: the burn ends")
+    -- Life Tap
+    ok(BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party1", 11689) and BN.tap.party1, "Life Tap (a plain id): the TAP tag")
+    BN.Paint(sp, 4000)
+    ok(B.tag:IsShown() and B.tag:GetText() == "TAP" and not B.band:IsShown(), "TAP in amber under his name, no burning bar",
+       tostring(B.tag:IsShown()) .. " " .. tostring(B.tag:GetText()) .. " " .. tostring(B.band:IsShown()))
+    do   -- the cue card's look for Life Tap (Arn's card said "icon", and the box still said TAP)
+        local CU, keepL = NS.CU, NS.CU.DB().look.tap
+        CU.DB().look.tap = "icon"
+        BN.Paint(sp, 4000)
+        ok(B.tapFace.sq:IsShown() and B.tapFace.icon:IsShown() and not B.tag:IsShown(), "Life Tap as the icon: the icon, no TAP")
+        CU.DB().look.tap = "model:198692"
+        BN.Paint(sp, 4000)
+        ok(B.tapFace.model and B.tapFace.model.__drawn == 198692 and not B.tapFace.icon:IsShown() and not B.tag:IsShown(), "as a model: the model")
+        CU.DB().look.tap = "word"
+        BN.Paint(sp, 4000)
+        ok(B.tag:IsShown() and not B.tapFace.sq:IsShown(), "as the word: TAP again")
+        CU.DB().look.tap = keepL
+        BN.Paint(sp, 4000)
+    end
+    ok(not BN.Cast("UNIT_SPELLCAST_SUCCEEDED", "party2", 11689) and not BN.tap.party2, "a shaman casting the same id: nothing")
+    TICK(BN.TAP_FOR + 0.1)
+    BN.Paint(sp, 4000)
+    ok(not B.tag:IsShown() and not BN.tap.party1, "after " .. BN.TAP_FOR .. " s the tag goes")
+    -- THE GAME DRAWS IT (Arn: "was not able to see warlock hf" - the Revelation road)
+    STATE.inCombat = false
+    local c = BN.Container(sp)
+    local hs = c and c.slots and c.slots.BiSHealHellfireBuff
+    ok(c and c.unit == "party1" and c.enabled and sp.burnC == c, "his box gets a container on him", BN.drawSeen)
+    ok(hs and hs.filter == "HELPFUL" and hs.opts.candidateFilters.includeSpellIDs[11684] and not c.slots.BiSHealHellfireAura,
+       "one HELPFUL slot (no debuff side - it lit his box with no Hellfire up), Hellfire's ids only")
+    local hb = CreateFrame("Button")
+    hb.Icon = hb:CreateTexture()
+    hb.Icon:Show()
+    local keepVC, heardV = _G.C_VoiceChat, {}
+    _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
+    BN.spoke, BN.quietUntil = {}, 0
+    hs.opts.initializeFrame(hb)
+    ok(not hb.Icon:IsShown() and hb.__w == BN.FLAME.px and hb.bisIcon and hb.bisModel,
+       "the client's button: a small square under his name - Hellfire's icon under a 3D fire, Blizzard's own art hidden", hb.__w)
+    local pt, rel, _, px, py = hb:GetPoint(1)
+    ok(pt == "TOPLEFT" and rel == sp.en.box and py == BN.FLAME.y, "under his callsign", tostring(pt) .. " " .. tostring(py))
+    ok(#heardV == 0, "made is not shown: no voice when the client makes the button (Arn: every /reload said Hellfire)", #heardV)
+    ok(hb:GetScript("OnShow") == nil, "no script of ours on the game's button (Arn's /bish reveal: Cannot be called with secrets due to existing script handlers)")
+    BN.Speak("party1", "party1")
+    ok(#heardV == 1 and heardV[1][2]:find("^Hellfire") and heardV[1][4] == 100, "shown: the voice says Hellfire (voice, text, rate, volume)", heardV[1] and heardV[1][2])
+    local keepGUN = _G.GetUnitName
+    _G.GetUnitName = function(u) if u == "party1" then return "TIN Manicore" end return keepGUN and keepGUN(u) end
+    ok(BN.Words("party1") == "Hellfire, Tin" and BN.Words(nil) == "Hellfire", "and his name, first name in normal case: \"Hellfire, Tin\" (Arn: which warlock)", BN.Words("party1"))
+    _G.GetUnitName = function() return secret() end
+    ok(BN.Words("party1") == "Hellfire", "a hidden name: just the spell")
+    _G.GetUnitName = keepGUN
+    local fs2 = c.slots.BiSHealHellfireFlash
+    ok(fs2 and fs2.filter == "HELPFUL" and fs2.opts.candidateFilters.includeSpellIDs[1949], "a second button for the same buff: the flash over his box")
+    local fb = CreateFrame("Button")
+    fs2.opts.initializeFrame(fb)
+    ok(fb.bisFlash and fb.__w == sp.heal:GetWidth() - 2, "the flash: over his whole box, fading out", fb.__w)
+    BN.Speak("party1", "party1")
+    ok(#heardV == 1, "shown again within " .. BN.VOICE.every .. " s: no second Hellfire")
+    TICK(BN.VOICE.every + 1)
+    BN.quietUntil = GetTime() + 5
+    BN.Speak("party1", "party1")
+    ok(#heardV == 1, "just after a /reload: quiet")
+    BN.quietUntil = 0
+    NS.RD.SetSw("hellvoice", false)
+    BN.Speak("party1", "party1")
+    ok(#heardV == 1 and not NS.RD.Sw("hellvoice"), "the Hellfire voice switch off: quiet")
+    NS.RD.SetSw("hellvoice", true)
+    -- the Hellfire box switch: his container off (out of a fight)
+    NS.RD.SetSw("hell", false)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == false, "the Hellfire box switch off: the game draws nothing on his box")
+    NS.RD.SetSw("hell", true)
+    BN.Container(sp)
+    ok(sp.burnC.enabled == true, "back on")
+    _G.C_VoiceChat = keepVC
+    local other = { unit = "party2", heal = CreateFrame("Button") }
+    other.heal:SetSize(74, 58)
+    EN.Box(other)
+    ok(BN.Container(other) == nil and not other.burnC, "a shaman's box: no container")
+    -- what a paint costs (lean and mean)
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 11684)
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n, by = Cost.Count(function() BN.Paint(sp, 4000) end)
+    ok(n <= 20, "one burning box's repaint: <= 20 client calls", n, Cost.Top(by, 4))
+    print(("   cost: a burning warlock's box, one repaint = %d calls (%s)"):format(n, Cost.Top(by, 3)))
+    -- nobody listens with no warlock in the group
+    BN.on, BN.tap = {}, {}
+    STATE.classes = { party1 = "SHAMAN" }
+    BN.armed = nil
+    ok(BN.Arm() == false and not (BN.events.__events and BN.events.__events.UNIT_AURA), "no warlock with you: not listening")
+    STATE.classes, BN.armed = keep.classes, nil
+    _G.C_UnitAuras.GetUnitAuraBySpellID, _G.C_Spell.GetSpellDescription = keep.get, keep.desc
+end
+
+-- REVELATION ON THE SYNERGY BAR (Reveal.lua, 20 Nov 2026 - Arn: "B, on the synergy bar")
+do
+    local RV, EN = NS.RV, NS.EN
+    NS.CU.DB().on.crit = true                           -- (BiS Cues: the Revelation cue on, as a player who ticked it)
+    local keepGet, keepHeads = _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads
+    local ON = {}                                       -- ON[id] = duration, or "secret"
+    _G.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+        local v = ON[id]
+        if v == nil then return nil end
+        if v == "secret" then return secret() end
+        return { spellId = id, duration = v }
+    end
+    local q = CreateFrame("Frame")
+    q:SetSize(150, 22)
+    EN.heads = { rip = q }
+    NS.DB().radar.reveal = nil
+    STATE.inCombat = false
+    local keepAvail = NS.FA.Available
+    NS.FA.Available = function() return false end      -- (first the word of our own: the client draws no auras)
+    RV.container = nil
+    ON[1248806] = 0                                     -- the enchant's own passive, always on you
+    ok(RV.Paint() == false and NS.DB().radar.reveal.passive[1248806], "the enchant's passive (duration 0) is never the buff - learned")
+    ON[1248808] = 15
+    ok(RV.Paint() == true and NS.DB().radar.reveal.buff == 1248808, "the proc (a real duration): up, and its id kept")
+    local fs = q.rip and q.rip.crit
+    ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
+    ON[1248808] = nil
+    ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
+    ON[1248808] = "secret"
+    ok(RV.Paint() == true and fs:IsShown(), "in a fight, a hidden answer about the known buff: up (a missing one answers nil)")
+    ON[1248808] = nil
+    RV.Paint()
+    -- the second road: the game's combat text ("<Revelation fades>" in Arn's shot)
+    local TEXT
+    local keepInfo, keepName = _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName
+    _G.GetCurrentCombatTextEventInfo = function() return TEXT end
+    _G.C_Spell.GetSpellName = function(id) return id == RV.IDS[1] and "Revelation" or nil end
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_START")
+    ok(RV.textUp and fs:IsShown(), "the game's combat text says Revelation starts: CRIT, even with the aura read silent")
+    TEXT = "Ancestral Fortitude"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown(), "another buff fading: CRIT stays")
+    TEXT = secret()
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(fs:IsShown() and RV.seenText == "SPELL_AURA_END hidden name", "a hidden name is never compared")
+    TEXT = "Revelation"
+    fire(RV.events, "COMBAT_TEXT_UPDATE", "SPELL_AURA_END")
+    ok(not RV.textUp and not fs:IsShown(), "Revelation fades: CRIT goes")
+    _G.GetCurrentCombatTextEventInfo, _G.C_Spell.GetSpellName = keepInfo, keepName
+    -- THE GAME DRAWS IT (Arn: "tell it to draw something else like [Revelation] in our theme")
+    NS.FA.Available = keepAvail
+    RV.container = nil
+    RV.Paint()
+    local c = RV.container
+    ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
+    local rs = c.slots[RV.slotKey]
+    ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418] and rs.opts.candidateFilters.includeSpellIDs[1323377]
+       and rs.opts.candidateFilters.includeSpellIDs[1323400] and rs.opts.candidateFilters.includeSpellIDs[1323419]
+       and not rs.opts.candidateFilters.includeSpellIDs[1248806], "its one slot: Revelation's buff for every class (shaman, priest, druid, paladin...), never the passive")
+    local btn = CreateFrame("Button")
+    btn.Icon = btn:CreateTexture()
+    btn.Icon:Show()
+    rs.opts.initializeFrame(btn)                         -- (the client hands its button over while the buff is up)
+    ok(btn.bisCrit and btn.bisCrit:GetText() == "CRIT" and not btn.Icon:IsShown() and btn.__w == RV.BADGE.w,
+       "the game's button wears OUR badge: CRIT in the deck's tag look, Blizzard's icon hidden", btn.bisCrit and btn.bisCrit:GetText())
+    ok(btn:GetScript("OnShow") == nil, "and no script of ours on it: the client could not show it with one")
+    -- the cue card's sound and look (Arn, 21 Nov: "no talking on revelation crit")
+    do
+        local CU, keepVC, said = NS.CU, _G.C_VoiceChat, {}
+        local keepC = NS.DB().radar.cues
+        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+        NS.DB().radar.cues = { v = 1, stamp = 1, on = { crit = true }, sound = { crit = "voice" }, look = {} }
+        CU.spoke, NS.BN.quietUntil = {}, 0
+        RV.Speak()
+        ok(#said == 1 and said[1] == "Crit", "the game shows its Revelation button: the voice says Crit", said[1])
+        RV.Speak()
+        ok(#said == 1, "shown again at once (the bar came and went): not said twice")
+        CU.spoke, NS.BN.quietUntil = {}, GetTime() + 5
+        RV.Speak()
+        ok(#said == 1, "just after a loading screen: quiet")
+        NS.BN.quietUntil = 0
+        NS.DB().radar.cues.sound.crit, NS.DB().radar.cues.voice.crit = nil, nil
+        RV.Speak()
+        ok(#said == 1, "no sound picked: none")
+        ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "the word look: the CRIT tag")
+        -- (a changed look = a fresh container; the client hands its new button over)
+        local function hand()
+            local b = CreateFrame("Button")
+            b.Icon = b:CreateTexture()
+            RV.container.slots[RV.slotKey].opts.initializeFrame(b)
+            return b
+        end
+        CU.SetLook("crit", "icon")
+        btn = hand()
+        ok(btn.bisFace.sq:IsShown() and btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "the icon look: the spell's icon, no tag")
+        CU.SetLook("crit", "model:198692")
+        btn = hand()
+        ok(btn.bisFace.model and btn.bisFace.model.__drawn == 198692 and not btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "a model look: the fireball")
+        local withModel = btn
+        CU.SetLook("crit", "word")
+        btn = hand()
+        ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "and back to the word")
+        -- AS THE CLIENT IS (Arn's BugGrabber, 21 Nov): once made, what stands in its button is forbidden to us
+        local c1 = RV.container
+        local function forbid(o) for _, m in ipairs({ "Show", "Hide", "SetTexture", "SetModel", "ClearModel", "SetShown" }) do
+            o[m] = function() error("Attempt to access forbidden object from code tainted by an AddOn") end end end
+        RV.buttons = { btn, withModel }
+        forbid(withModel.bisFace.model)
+        for _, b in ipairs(RV.buttons) do
+            forbid(b.bisFace.sq) forbid(b.bisFace.icon)
+            for _, part in ipairs(b.bisTag) do forbid(part) end
+        end
+        local okL, why = pcall(CU.SetLook, "crit", "icon")
+        ok(okL, "a forbidden button: the pick still goes through, no error", tostring(why))
+        ok(RV.container and RV.container ~= c1 and not c1:IsShown() and RV.container.enabled and RV.buttons[1] ~= btn and RV.buttons[2] == nil,
+           "and a fresh container takes the old one's place",
+           tostring(RV.container ~= c1) .. " " .. tostring(c1:IsShown()) .. " " .. tostring(RV.container and RV.container.enabled) .. " " .. #RV.buttons)
+        local btn2 = CreateFrame("Button")
+        btn2.Icon = btn2:CreateTexture()
+        okL, why = pcall(RV.container.slots[RV.slotKey].opts.initializeFrame, btn2)
+        ok(okL and btn2.bisFace.sq:IsShown() and not btn2.bisCrit:IsShown(), "its new button wears the pick", tostring(why))
+        local looked = 0
+        RV.container.UpdateAllAuras = function() looked = looked + 1 end
+        fire(RV.events, "PLAYER_REGEN_ENABLED")
+        ok(looked == 1, "after a fight the game's container is asked to look again (a CRIT that stayed on)")
+        STATE.inCombat = true
+        fire(RV.events, "PLAYER_ENTERING_WORLD")
+        ok(looked == 1, "never in one")
+        STATE.inCombat = false
+        CU.SetLook("crit", "word")
+        btn = btn2
+        _G.C_VoiceChat, NS.DB().radar.cues, CU.spoke = keepVC, keepC, {}
+    end
+    ON[1248808] = 15
+    RV.Paint()
+    ok(not fs:IsShown(), "with the game's badge built, our own word stays out (no second CRIT)")
+    ON[1248808] = nil
+    RV.Paint()
+    -- A REFUSED SLOT THAT HANDED ITS BUTTONS OVER (Arn, 22 Nov: "crit is still there and i dont have relevation buff";
+    -- /bish reveal: "icon no slot ... 1: SHOWN / 2: SHOWN")
+    do
+        local keepC, keepB, keepCF = RV.container, RV.buttons, _G.CreateFrame
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = nil, {}, 0, nil
+        local made = {}
+        _G.CreateFrame = function(kind, ...)
+            local f = keepCF(kind, ...)
+            if kind == "AuraContainer" then
+                made[#made + 1] = f
+                f.AddAuraSlot = function(self, key, filter, opts)
+                    local b = keepCF("Button") b.Icon = b:CreateTexture() b:Show()
+                    opts.initializeFrame(b)
+                    self.handed = b
+                    error("refused")
+                end
+                f.AddAuraGroup = nil
+            end
+            return f
+        end
+        RV.Paint()
+        ok(RV.container == nil and RV.iconSeen == "no slot" and RV.slotWhy and #RV.buttons == 0 and not made[1].handed:IsShown() and not made[1]:IsShown(),
+           "refused after handing a button over: that button and its container hidden, no CRIT standing for good", tostring(RV.slotWhy))
+        RV.Paint() RV.Paint() RV.Paint() RV.Paint()
+        ok(#made == RV.TRIES and RV.gaveUp and RV.Status():find("stopped asking", 1, true), "three refusals: it stops asking (no container a paint)", #made)
+        ON[1248808] = 15
+        RV.Paint()
+        ok(fs:IsShown(), "and our own CRIT word is the road: on with the buff")
+        ON[1248808] = nil
+        RV.Paint()
+        ok(not fs:IsShown(), "off without it")
+        -- a slot that answers nothing but hands its button over: made (Arn: "now revelation crit does not show up")
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = nil, {}, 0, nil
+        made = {}
+        local groups = 0
+        _G.CreateFrame = function(kind, ...)
+            local f = keepCF(kind, ...)
+            if kind == "AuraContainer" then
+                made[#made + 1] = f
+                f.AddAuraSlot = function(self, key, filter, opts)
+                    local b = keepCF("Button") b.Icon = b:CreateTexture() b:Show()
+                    opts.initializeFrame(b)
+                    self.handed = b
+                end
+                f.AddAuraGroup = function() groups = groups + 1 end
+            end
+            return f
+        end
+        RV.Paint()
+        ok(RV.container == made[1] and RV.iconSeen == "built" and made[1].handed:IsShown() and #RV.buttons == 1 and groups == 0,
+           "no answer, but its button handed over: the slot is made, kept, and no second one on top", tostring(RV.iconSeen))
+        RV.Paint()
+        ok(#made == 1, "and no new container a paint")
+        _G.CreateFrame = keepCF
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = keepC, keepB, 0, nil
+    end
+    ON[1248808] = nil
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local n = Cost.Count(function() RV.Paint() end)
+    ok(n <= 4, "one aura change: <= 4 client calls (the known id only)", n)
+    _G.C_UnitAuras.GetPlayerAuraBySpellID, EN.heads = keepGet, keepHeads
+    NS.DB().radar.reveal = nil
+end
+
+-- BiS CUES (Cues.lua, 21 Nov 2026 - Arn's picks off the mockups page: the card, previews, the string, re-order in game)
+do
+    local CU, RD, BN = NS.CU, NS.RD, NS.BN
+    local r = NS.DB().radar
+    local keepCues, keepSw, keepStamp = r.cues, r.sw, r.swStamp
+    -- a NEW player: every cue off
+    r.cues, r.sw, r.swStamp = nil, nil, nil
+    CU.Stamp()
+    local anyOn = false
+    for _, q in ipairs(CU.LIST) do if CU.On(q.key) then anyOn = true end end
+    ok(not anyOn and not RD.Sw("hell") and not RD.Sw("hellvoice"), "a new player: every cue off (BiS Cues starts quiet)")
+    ok(RD.Sw("names"), "the deck's other switches untouched (nil still on)")
+    -- someone who had the deck, and had turned the Hellfire voice off
+    r.cues, r.sw, r.swStamp = nil, { hellvoice = false, tap = false }, 1
+    CU.Stamp()
+    ok(CU.On("hell") and not CU.On("tap") and CU.Voice("hell") == "off", "an old deck: its switches kept, the voice switch becomes Hellfire's sound")
+    ok(not CU.Stamp(), "the stamp runs once")
+    -- one truth: the switches panel and the card
+    ok(RD.SetSw("tap", true) and CU.On("tap") and RD.Sw("tap"), "the panel's switch turns the cue on")
+    CU.SetOn("tap", false)
+    ok(not RD.Sw("tap"), "the card turns it off; the panel reads the same")
+    RD.SetSw("hellvoice", true)
+    ok(CU.Voice("hell") == "name" and RD.Sw("hellvoice"), "the panel's voice switch: Hellfire's voice with the name")
+    RD.SwPreset("bare")
+    ok(not CU.On("hell") and not CU.On("rip"), "BARE: the cues off too")
+    RD.SwPreset("full")
+    ok(CU.On("hell") and CU.On("swift") and RD.SwPresetNow() == "full", "FULL: the cues on, and FULL still matches")
+    -- the order and the squares
+    r.cues.order = nil
+    CU.SetOn("tap", true)
+    local x1 = CU.SquareXY("hell")
+    local x2 = CU.SquareXY("tap")
+    ok(x1 == CU.SQUARE.x and x2 == CU.SQUARE.x + CU.SQUARE.px + CU.SQUARE.gap, "Hellfire's square first, Life Tap's next to it", x1 .. " " .. x2)
+    ok(CU.Move("tap", -1) == "now" and CU.Order()[1] == "tap", "re-order in game: Life Tap up")
+    ok(CU.SquareXY("tap") == CU.SQUARE.x and CU.SquareXY("hell") == x2, "the squares swap with it")
+    ok(CU.Move("tap", -1) == nil, "already first: nothing")
+    CU.SetOn("tap", false)
+    ok(CU.SquareXY("hell") == CU.SQUARE.x, "an off cue before it gives up its square")
+    STATE.inCombat = true
+    ok(CU.Move("tap", 1) == "after" and CU.pending, "in a fight: saved, laid out when it ends")
+    STATE.inCombat = false
+    fire(CU.events, "PLAYER_REGEN_ENABLED")
+    ok(not CU.pending, "the fight's end lays it out")
+    -- looks and sounds
+    ok(CU.SetLook("hell", "word") == "now" and CU.Look("hell") == "word" and CU.ModelOf("hell") == nil, "Hellfire as the word")
+    ok(CU.SetLook("hell", "nonsense") == nil and CU.Look("hell") == "word", "an unknown look: refused")
+    ok(CU.SetSound("hell", "kit:8959") and CU.Sound("hell") == "kit:8959", "a game sound")
+    local played
+    local keepPS = _G.PlaySound
+    _G.PlaySound = function(id, ch) played = { id, ch } return true end
+    CU.spoke = {}
+    ok(CU.Say("hell", "party1") and played and played[1] == 8959 and played[2] == "SFX", "the cue plays its game sound on the SFX channel")
+    played = nil
+    ok(not CU.Say("hell", "party1") and not played, "the same box again within 12 s: quiet")
+    ok(CU.Say("hell", "party1", true) and played, "TRY plays it anyway")
+    CU.SetOn("tap", false)
+    played = nil
+    ok(not CU.Say("tap", "party1") and not played, "an off cue never sounds")
+    _G.PlaySound = keepPS
+    ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "off" and CU.Voice("hell") == "name", "BACK TO DEFAULT: the fireball and the voice")
+    ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
+    -- the middle cue's look
+    local sp = { cue = { hold = CreateFrame("Frame"), word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
+                         icon = CreateFrame("Frame"):CreateTexture(), edge = CreateFrame("Frame"):CreateTexture(), ck = "rip", tex = 136037 } }
+    CU.SetLook("rip", "icon")
+    RD.CueShow(sp, true)
+    ok(sp.cue.icon:IsShown() and not sp.cue.word:IsShown(), "Riptide's cue as the icon: the icon, no word")
+    CU.SetLook("rip", "word")
+    RD.CueShow(sp, true)
+    ok(sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "as the word: the word, no icon")
+    CU.SetLook(sp.cue.ck, "model:198692")
+    RD.CueShow(sp, true)
+    ok(sp.cue.face and sp.cue.face.sq:IsShown() and sp.cue.face.model.__drawn == 198692 and not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(),
+       "a middle cue with a model: the model, no word, no icon")
+    RD.CueShow(sp, false)
+    ok(not sp.cue.word:IsShown() and not sp.cue.icon:IsShown() and not sp.cue.face.sq:IsShown(), "no cue: none of it")
+    CU.SetLook(sp.cue.ck, "icon")
+    -- the string
+    ok(CU.UnB64(CU.B64("a")) == "a" and CU.UnB64(CU.B64("ab")) == "ab" and CU.UnB64(CU.B64("abc")) == "abc", "base64 there and back, every padding")
+    ok(CU.B64("Man") == "TWFu" and CU.B64("Ma") == "TWE=", "the standard alphabet (what the browser's btoa writes)")
+    local back = CU.FromJSON(CU.JSON({ v = 1, order = { "hell", "tap" }, on = { hell = true }, look = { hell = "word" }, s = 'a"b\\c' }))
+    ok(back and back.v == 1 and back.order[2] == "tap" and back.on.hell == true and back.s == 'a"b\\c', "JSON there and back")
+    local bad, why = CU.FromJSON("{\"v\":1,")
+    ok(bad == nil and type(why) == "string", "broken JSON: nil and a reason", why)
+    CU.SetOn("hell", true) CU.SetOn("tap", true) CU.SetOn("rip", false) CU.SetLook("tap", "icon") CU.SetSound("hell", "kit:3090")
+    r.cues.order = { "tap", "hell" }
+    local s = CU.Export()
+    ok(s:match("^BiSCues1p:") ~= nil, "export: the plain form (until the game's gzip is proven)", s:sub(1, 20))
+    r.cues = { v = 1, stamp = 1 }
+    ok(CU.Import(s) == #CU.LIST, "import it back")
+    ok(CU.On("hell") and CU.On("tap") and not CU.On("rip") and CU.Look("tap") == "icon" and CU.Sound("hell") == "kit:3090"
+       and CU.Order()[1] == "tap", "everything as it was: on, look, sound, order")
+    local browser = "BiSCues1p:" .. CU.B64('{"v":1,"order":["swift","nonsense"],"on":{"swift":true,"nonsense":true},"look":{"swift":"rocket"},"extra":5}')
+    ok(CU.Import(browser) and CU.On("swift") and not CU.On("hell") and CU.Order()[1] == "swift" and CU.Look("swift") == "word",
+       "a string from elsewhere: unknown cues, looks and fields dropped")
+    local n0, w0 = CU.Import("hello")
+    ok(n0 == nil and w0:find("BiSCues1"), "not a cue string: refused, with a reason", w0)
+    local n1, w1 = CU.Import("BiSCues1p:" .. CU.B64('{"v":2}'))
+    ok(n1 == nil and w1:find("newer"), "a newer version's string: refused", w1)
+    local n2, w2 = CU.Import("BiSCues1:AAAA")
+    ok(n2 == nil and type(w2) == "string", "the zipped form without the game's unzip: refused, with a reason", w2)
+    -- the slash words keep the string's capitals
+    SlashCmdList.BISHEALING("import " .. s)
+    ok(CU.On("hell") and CU.Order()[1] == "tap", "/bish import <string>: the capitals survive the slash command")
+    -- the card
+    RD.BuildSwitches()
+    ok(RD.swPanel and RD.swPanel.cues, "the switches panel has a BiS CUES button")
+    RD.swPanel:Show()
+    RD.swPanel.cues:GetScript("OnClick")(RD.swPanel.cues)
+    local c = CU.card
+    ok(c and c:IsShown() and c.points[1][2] == RD.swPanel, "it opens the card beside the switches panel")
+    do   -- the family's colours (Arn, 21 Nov: "bis>cues has this blue tint to it")
+        local P = RD.PLATE
+        ok(c.bg.__color[1] == P[1] and c.bg.__color[2] == P[2] and c.bg.__color[3] == P[3], "the card stands on the deck's own black, as the switches panel does")
+        local ar, ag, ab = 0.73, 0.50, 1.00
+        if BiSTheme and BiSTheme.rgb then ar, ag, ab = BiSTheme.rgb("accent") end
+        local tc = c.title.__color
+        ok(tc and math.abs(tc[1] - ar) < 0.01 and math.abs(tc[2] - ag) < 0.01 and math.abs(tc[3] - ab) < 0.01, "and its title wears the theme's accent, never a colour of its own", tc and (tc[1] .. " " .. tc[2] .. " " .. tc[3]))
+    end
+    CU.sel = "hell"
+    CU.Paint()
+    ok(c.order[1].key == "tap" and c.order[2].key == "hell", "the order list in row order")
+    c.order[2].down:GetScript("OnClick")(c.order[2].down)
+    ok(CU.Order()[3] == "hell", "the down arrow moves Hellfire down")
+    c.look.q:SetText("fire")
+    c.look.q:GetScript("OnTextChanged")(c.look.q)
+    ok(c.look.rows[1].id == "model:198692" and not c.look.rows[2]:IsShown(), "search: 'fire' finds the Fireball only")
+    c.look.q:SetText("")
+    c.look.q:GetScript("OnTextChanged")(c.look.q)
+    c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])
+    ok(c.sound.rows[1].id and c.sound.rows[1].id:match("^kit:") and c.sound.cat == "Bells", "a chip: only that category", c.sound.cat)
+    -- TRY only plays (Arn, 21 Nov: trying Lightning crack picked it, and Hellfire stopped saying the name)
+    do
+        local keepPS, keepVC, kits, said = _G.PlaySound, _G.C_VoiceChat, {}, {}
+        _G.PlaySound = function(id) kits[#kits + 1] = id end
+        _G.C_VoiceChat = { SpeakText = function(_, words) said[#said + 1] = words end }
+        local was = CU.Sound("hell")
+        local row1 = c.sound.rows[1]
+        row1.try:GetScript("OnClick")(row1.try)
+        ok(#kits == 1 and "kit:" .. kits[1] == row1.id and CU.Sound("hell") == was and CU.DB().sound.hell ~= row1.id,
+            "TRY plays the sound and picks nothing", CU.Sound("hell"))
+        -- sound and voice, two picks (Arn: "yes make sound and voice separate")
+        row1:GetScript("OnClick")(row1)
+        ok(CU.Sound("hell") == row1.id and CU.Voice("hell") == "name", "a sound picked: the voice stays on")
+        c.voices[3]:GetScript("OnClick")(c.voices[3])
+        ok(said[1] == "Hellfire, Tin" and CU.Voice("hell") == "name", "SPELL + NAME says it", said[1])
+        kits, said = {}, {}
+        ok(CU.Say("hell", nil, true) and #kits == 1 and #said == 1, "a cue heard: the sound and the voice, both", #kits .. " " .. #said)
+        c.voices[2]:GetScript("OnClick")(c.voices[2])
+        ok(CU.Voice("hell") == "spell" and said[2] == "Hellfire", "SPELL: the spell alone", said[2])
+        ok(c.code:GetText():find(" k%d+%+v "), "the faint code says both", c.code:GetText())
+        c.voices[1]:GetScript("OnClick")(c.voices[1])
+        kits, said = {}, {}
+        ok(CU.Say("hell", nil, true) and #kits == 1 and #said == 0, "voice OFF: the sound alone")
+        CU.SetSound("hell", "off")
+        ok(not CU.Say("hell", nil, true) and #kits == 1, "both off: nothing")
+        ok(not RD.Sw("hellvoice"), "and the switches panel's voice reads off")
+        -- an old save and an old string: one pick becomes two
+        local keepDB = NS.DB().radar.cues
+        NS.DB().radar.cues = { v = 1, stamp = 1, on = {}, look = {}, order = {}, sound = { hell = "voice", crit = "voicename", tap = "kit:1506", rip = "off" } }
+        ok(CU.Voice("hell") == "spell" and CU.Sound("hell") == "off" and CU.Voice("crit") == "name" and CU.Sound("tap") == "kit:1506"
+           and CU.Voice("tap") == "off" and CU.Voice("rip") == "off", "a save from before the split reads as it sounded")
+        CU.Import("BiSCues1p:" .. CU.B64('{"v":1,"on":{"hell":true},"sound":{"hell":"voicename","tap":"kit:3090"}}'))
+        ok(CU.Voice("hell") == "name" and CU.Sound("hell") == "off" and CU.Sound("tap") == "kit:3090" and CU.Voice("tap") == "off", "an old string too")
+        CU.Import("BiSCues1p:" .. CU.B64('{"v":1,"on":{"hell":true},"sound":{"hell":"kit:1506"},"voice":{"hell":"name","tap":"loud"}}'))
+        ok(CU.Voice("hell") == "name" and CU.Sound("hell") == "kit:1506" and CU.Voice("tap") == "off", "a new string: both picks; an unknown voice dropped")
+        local back = CU.Decode(CU.Export())
+        ok(back.voice.hell == "name" and back.sound.hell == "kit:1506", "and out again")
+        NS.DB().radar.cues = keepDB
+        CU.SetVoice("hell", "name")
+        _G.PlaySound, _G.C_VoiceChat = keepPS, keepVC
+        c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])
+    end
+    c.look.rows[2]:GetScript("OnClick")(c.look.rows[2])
+    ok(CU.Look("hell") == c.look.rows[2].id, "a click on a look picks it")
+    c.def:GetScript("OnClick")(c.def)
+    ok(CU.Look("hell") == "model:198692", "BACK TO DEFAULT")
+    -- Arn's 21 Nov shot: the fireball never showed, the bar stopped short, a chip ran off the card
+    local pv = c.preview
+    ok(pv.model and pv.model:IsShown() and not pv.icon:IsShown() and pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM,
+       "the preview: the Fireball model on its own dark square (no icon over it)", pv.model and pv.model.__drawn)
+    local loads0 = pv.model.__loads
+    CU.Paint() CU.Paint()
+    ok(pv.model.__loads == loads0 and pv.model.__drawn == 198692, "repainting does not load it again (a fire that restarts flickers)", pv.model.__loads)
+    CU.sel = "tap" CU.Paint()
+    ok(pv.model.__drawn == nil and pv.icon:IsShown(), "another cue: its icon, no fireball")
+    CU.sel = "hell" CU.Paint()
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM and not pv.icon:IsShown(),
+       "and back: the fireball is drawn again, camera and all (Arn, 21 Nov: it disappeared after he switched)", pv.model.__drawn)
+    CU.SetLook("hell", "icon") CU.SetLook("hell", "model:198692")
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM, "a look to the icon and back: drawn again")
+    pv.model:__ParentHide() pv.model:__ParentShow()
+    ok(pv.model.__drawn == 198692 and pv.model.__cam == CU.MODEL_CAM, "the card closed and opened: drawn again")
+    pv.model.__cam = nil
+    pv.model:GetScript("OnModelLoaded")(pv.model)
+    ok(pv.model.__cam == CU.MODEL_CAM, "a late load: the camera goes back after it")
+    ok(CU.Code():find("mdl 198692sc", 1, true), "the faint code says what the model is doing", CU.Code())
+    local bp = {}
+    for _, p in ipairs(pv.bar.points) do bp[p[1]] = p end
+    ok(bp.TOPLEFT and bp.BOTTOMRIGHT and bp.BOTTOMRIGHT[2] == pv, "the preview's bar runs edge to edge (anchored to both corners)")
+    local edgeR = 314 + 138
+    local past = false
+    for _, b in ipairs(c.sound.chips) do
+        local pt = b.points[1]
+        if pt[4] + b.__w > edgeR + 0.5 then past = true end
+    end
+    ok(not past and edgeR <= CU.CARD_W - 6, "the sound chips stay inside the card (a second line when they don't fit)")
+    ok(c.sound.rows[1].points[1][5] == -116 - 50 - c.sound.extra, "and the list moves down under them")
+    ok(math.abs(CU.CARD_W / CU.CARD_H - 1.43) < 0.01, "the card keeps the family's shape", CU.CARD_W .. "x" .. CU.CARD_H)
+    local lastRow = c.sound.rows[CU.ROWS]
+    ok(-lastRow.points[1][5] + 15 <= CU.CARD_H - 44, "the last row clear of the faint code line", -lastRow.points[1][5] + 15)
+    local v3 = c.voices[3]
+    ok(v3.points[1][4] + v3.__w <= CU.CARD_W - 6 and -v3.points[1][5] + 17 <= 116, "the voice buttons inside the card, over the lists")
+    ok(c.code and c.code:GetText():find("hell on m198692 ", 1, true) and c.code:GetText():find(NS.VERSION, 1, true),
+       "the faint code: the build, and Hellfire's settings", c.code and c.code:GetText())
+    c.export:GetScript("OnClick")(c.export)
+    ok(CU.strWin and CU.strWin:IsShown() and CU.strWin.edit:GetText():match("^BiSCues1p:"), "EXPORT shows the string to copy")
+    c.import:GetScript("OnClick")(c.import)
+    CU.strWin.edit:SetText(s)
+    CU.strWin.go:GetScript("OnClick")(CU.strWin.go)
+    ok(CU.strWin.status:GetText():find("Done"), "IMPORT takes a paste", CU.strWin.status:GetText())
+    -- the Hellfire badge: its square, its look
+    local box = CreateFrame("Frame")
+    local btn = CreateFrame("Button")
+    BN.badges = {}
+    CU.DB().order = { "tap", "hell" } CU.SetOn("tap", true) CU.SetOn("hell", true)
+    BN.BadgeOn(btn, box, nil, { unit = "party1" })
+    local pt = btn.points[1]
+    ok(pt and pt[4] == CU.SquareXY("hell", BN.FLAME.px) and pt[4] > CU.SQUARE.x, "the game's Hellfire button sits in its square (second, after Life Tap)", pt and pt[4])
+    CU.SetLook("hell", "word")
+    ok(btn.bisWord:IsShown() and not btn.bisIcon:IsShown(), "the word look: FIRE, no icon")
+    CU.SetLook("hell", "icon")
+    ok(btn.bisIcon:IsShown() and not btn.bisWord:IsShown() and (not btn.bisModel or not btn.bisModel:IsShown()), "the icon look: no turning model")
+    CU.SetLook("hell", "model:198692")
+    ok(not btn.bisIcon:IsShown() and btn.bisDark:IsShown() and (not btn.bisModel or btn.bisModel:IsShown()),
+       "the Fireball look: the fireball on a dark square, no Hellfire icon under it (Arn's 21 Nov shot)")
+    ok(btn.bisModel.__drawn == 198692 and btn.bisModel.__cam == CU.MODEL_CAM, "and it is really drawn, camera back", btn.bisModel.__drawn)
+    btn.bisModel:__ParentHide() btn.bisModel:__ParentShow()
+    ok(btn.bisModel.__drawn == 198692 and btn.bisModel.__cam == CU.MODEL_CAM, "the game hides and shows the badge (Hellfire again): the fire is drawn again")
+    CU.Move("hell", -1)
+    ok(btn.points[1][4] == CU.SQUARE.x, "re-ordered out of a fight: the button moves to its new square")
+    -- only what your class can act on (Arn: "we wont see ones that arent our class ... like oath and light vigil")
+    local keepUC, keepAlpha = _G.UnitClass, NS.DB().alpha
+    NS.DB().alpha = nil
+    _G.UnitClass = function() return "Shaman", "SHAMAN", 7 end
+    local seen = {}
+    for _, k in ipairs(CU.Shown()) do seen[k] = true end
+    ok(seen.rip and seen.hell and seen.tap and seen.crit and not seen.oath and not seen.vigil and not seen.swift,
+       "a shaman's card: Riptide and the group cues, no Oath / Vigil / Swiftmend")
+    CU.DB().order = { "hell", "tap", "crit", "oath", "vigil", "rip", "swift" }
+    ok(CU.Move("rip", -1) and CU.Order()[3] == "rip", "the arrow steps over the paladin's cues (never seems to do nothing)", table.concat(CU.Order(), ","))
+    CU.sel = "oath"
+    CU.Toggle() CU.Toggle()
+    ok(CU.sel ~= "oath" and not c.order[5]:IsShown() and c.order[4]:IsShown(), "the card: four rows, a cue you cannot act on never chosen")
+    _G.UnitClass = function() return "Paladin", "PALADIN", 2 end
+    seen = {}
+    for _, k in ipairs(CU.Shown()) do seen[k] = true end
+    ok(seen.oath and seen.vigil and not seen.rip and not seen.swift, "a paladin's: Oath and Vigil, no Riptide or Swiftmend")
+    NS.DB().alpha = true
+    ok(not seen.rip and #CU.Shown() < #CU.LIST, "the secret alpha on (Arn tests with it): still only your class")
+    SlashCmdList.BISHEALING("cues all")
+    ok(CU.showAll and #CU.Shown() == #CU.LIST, "/bish cues all: every class's cues, for testing")
+    SlashCmdList.BISHEALING("cues all")
+    ok(not CU.showAll, "again: back to your class")
+    if CU.card then CU.card:Hide() end
+    _G.UnitClass, NS.DB().alpha = keepUC, keepAlpha
+    c:Hide() if CU.strWin then CU.strWin:Hide() end RD.swPanel:Hide()
+    r.cues, r.sw, r.swStamp = keepCues, keepSw, keepStamp
+end
+
+-- THE CLASS EFFECTS (Effects.lua, 21 Nov 2026 - BiS Cues sheet 3, Arn: "all")
+do
+    local FX, RD = NS.FX, NS.RD
+    local D = NS.DB()
+    D.radar = type(D.radar) == "table" and D.radar or {}
+    local d = D.radar
+    local keep = { sw = d.sw, fxStamp = d.fxStamp, swStamp = d.swStamp, view = d.view, spokes = RD.spokes, deck = RD.Deck,
+                   name = C_Spell.GetSpellName, desc = C_Spell.GetSpellDescription, timer = _G.C_Timer, alias = RD.bounceAlias,
+                   marks = RD.cueMarks.vigil, click = RD.lastClick, clickAt = RD.lastClickAt, over = RD.over,
+                   sent = RD.sentTarget, sentAt = RD.sentAt, combat = STATE.inCombat, fight = RD.inFight }
+    local HS, LV, POM, POH, WG, FH = 20473, 990001, 33076, 596, 48438, 2061
+    local NAMES = { [HS] = "Holy Shock", [LV] = "Light's Vigil", [POM] = "Prayer of Mending", [POH] = "Prayer of Healing",
+                    [WG] = "Wild Growth", [FH] = "Flash Heal" }
+    C_Spell.GetSpellName = function(id) if NAMES[id] then return NAMES[id] end return keep.name(id) end
+    local later = {}
+    _G.C_Timer = { After = function(_, fn) later[#later + 1] = fn end, NewTicker = keep.timer and keep.timer.NewTicker }
+    local function runLater() local l = later later = {} for _, fn in ipairs(l) do fn() end end
+    STATE.inCombat, RD.inFight = false, nil
+
+    -- the switches: on the deck's panel, after the druid's, FULL only
+    local at, keys = nil, {}
+    for i, s in ipairs(RD.SW) do
+        if s.group == "CLASS EFFECTS" then at = at or i keys[#keys + 1] = s.key end
+    end
+    ok(table.concat(keys, ",") == "fxvigil,fxmend,fxpoh,fxwild" and RD.SW[at - 1].group == "DRUID",
+       "four CLASS EFFECTS switches on the deck's panel, right after the druid's", table.concat(keys, ","))
+    local plainWords = true
+    for _, s in ipairs(RD.SW) do
+        if s.group == "CLASS EFFECTS" then
+            for _, w in ipairs({ "fuel", "chaff", "bingo", "fighter" }) do
+                if (s.name .. " " .. s.tip):lower():find(w, 1, true) then plainWords = false end
+            end
+        end
+    end
+    ok(plainWords, "their words are plain (no flight words)")
+    ok(RD.SW_PRESETS.full.fxvigil and RD.SW_PRESETS.full.fxwild and not RD.SW_PRESETS.lean.fxmend and not RD.SW_PRESETS.bare.fxpoh,
+       "FULL turns them on (everything); LEAN and BARE do not")
+
+    -- DEFAULT OFF: a save nobody touched (nil = on for every other switch) gets them written off once, at login
+    d.sw, d.fxStamp, d.swStamp, d.view = nil, nil, 1, nil
+    FX.Arm()                                            -- (an earlier block's FULL armed them: switched off now, it lets go)
+    FX.armed = nil
+    ok(not FX.Sw("fxvigil") and not FX.AnyOn(), "nil reads OFF for a class effect (RD.Sw reads it on)")
+    ok(fire(FX.loginEv, "PLAYER_LOGIN"), "the login reaches the effects")
+    ok(d.fxStamp == 1 and d.sw.fxvigil == false and d.sw.fxmend == false and d.sw.fxpoh == false and d.sw.fxwild == false,
+       "the login writes the four off, once")
+    ok(not RD.Sw("fxvigil") and RD.Sw("names") and RD.Sw("bounce"), "so the panel draws them off - and nothing else changed")
+    ok(not FX.armed and not (FX.castEv.__events and FX.castEv.__events.UNIT_SPELLCAST_SENT) and not FX.listening,
+       "all four off: not one event registered")
+    d.sw.fxvigil = true
+    ok(FX.Stamp() == false and d.sw.fxvigil == true, "a second login keeps what you picked")
+    -- the engineer's view still moves to LEAN (RD.SwStamp needs sw == nil, so it runs first)
+    d.sw, d.fxStamp, d.swStamp, d.view = nil, nil, nil, "console"
+    ok(FX.Stamp() and RD.SwPresetNow() == "lean" and d.sw.fxwild == false, "an engineer user: LEAN, the effects off", RD.SwPresetNow())
+
+    -- THE COLD START: a switch on in the save, no click at all - the login alone listens
+    d.sw, d.fxStamp = { fxvigil = true, fxmend = true, fxpoh = true, fxwild = true }, 1
+    FX.armed = nil
+    fire(FX.loginEv, "PLAYER_LOGIN")
+    local ce = FX.castEv
+    ok(FX.armed and ce.__events.UNIT_SPELLCAST_SENT and ce.__unitFilter.UNIT_SPELLCAST_SENT.player
+       and ce.__events.UNIT_SPELLCAST_SUCCEEDED and ce.__unitFilter.UNIT_SPELLCAST_SUCCEEDED.player,
+       "after a login with a switch on: your own casts are heard (you only)")
+    ok(not (FX.combatEv.__events and FX.combatEv.__events.UNIT_COMBAT), "but not UNIT_COMBAT until one of the spells goes out")
+
+    -- the deck: four boxes the client has placed
+    local function box(unit, x, y)
+        local p = CreateFrame("Frame")
+        p:Show()
+        p.GetCenter = function() return x, y end
+        return { unit = unit, deckPlate = p }
+    end
+    local A, B, C, E = box("player", 110, 220), box("party1", 210, 160), box("party2", 310, 160), box("party3", 410, 160)
+    RD.spokes, RD.bounceAlias = { A, B, C, E }, {}
+    RD.Deck = function() return true end
+    local L = FX.Layer()
+    L.GetLeft = function() return 10 end
+    L.GetBottom = function() return 20 end
+    ok(not L.__secure and not L:IsProtected(), "the layer is a plain frame, never a secure one")
+    local function sent(id, target) return fire(ce, "UNIT_SPELLCAST_SENT", "player", target, "Cast-1", id) end
+    local function landed(id) return fire(ce, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", id) end
+    local function heard(u, a) return fire(FX.combatEv, "UNIT_COMBAT", u, a or "HEAL", "", secret(), 2) end
+    local function shown(kind, colour)
+        local n = 0
+        for _, ko in ipairs((FX.lastDraw and FX.lastDraw.item.objs) or {}) do
+            local o = ko[2]
+            if ko[1] == kind and o:IsShown() then
+                local c = (kind == "line" and o.color) or (kind == "ring" and o.edges[1].__color) or (kind == "glow" and o.__vertex) or nil
+                if not colour or (c and math.abs(c[2] - colour[2]) < 0.01 and math.abs(c[3] - colour[3]) < 0.01) then n = n + 1 end
+            end
+        end
+        return n
+    end
+    local function click(sp) RD.lastClick, RD.lastClickAt, RD.over, RD.sentTarget = sp, GetTime(), nil, nil end
+    local function settle() TICK(10) FX.Tick() heard("nameplate1", "WOUND") later = {} end
+
+    -- PALADIN: Holy Shock through Light's Vigil
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    ok(sent(HS) and FX.pend and FX.pend.kind == "vigil" and FX.listening and FX.combatEv.__events.UNIT_COMBAT,
+       "your Holy Shock on a box with your Light's Vigil: UNIT_COMBAT heard from now")
+    heard(B.unit) heard(C.unit) heard("target") heard("nameplate2", "WOUND") heard(E.unit)
+    landed(HS)
+    TICK(0.1)
+    heard("raid7")                                      -- (a raid token with no box here: nothing)
+    runLater()
+    ok(FX.last and FX.last.kind == "vigil" and FX.last.n == 3, "it healed three boxes: the target and two of its party",
+       FX.last and FX.last.n)
+    ok(shown("line", FX.GOLD) == 30, "gold dashed rays from the target's box: 10 dashes to the box 100 px away, 20 to the one 200 px away",
+       shown("line"))
+    ok(shown("ring", FX.GOLD) == 3, "a gold ring on each of the three boxes")
+    local r1 = FX.lastDraw.item.objs[#FX.lastDraw.item.objs][2]
+    ok(r1.box == E.deckPlate and r1.points[1][2] == E.deckPlate, "a ring is pinned round its box")
+    ok(L:IsShown() and L:GetScript("OnUpdate"), "it shows and fades")
+    TICK(FX.HOLD.vigil + 0.05)
+    FX.Tick()
+    ok(not L:IsShown() and not L:GetScript("OnUpdate") and shown("line") == 0, "after " .. FX.HOLD.vigil .. " s it is gone, nothing left running")
+    local made = L.pool.line.made
+    settle()
+    click(B)
+    sent(HS) heard(B.unit) heard(C.unit) heard(E.unit) landed(HS) runLater()
+    ok(FX.last.n == 3 and L.pool.line.made == made and shown("line", FX.GOLD) == 30, "the second burst reuses the first one's lines (pooled)", L.pool.line.made)
+    settle()
+    -- no splash: nothing; no Vigil: nothing; an enemy: nothing
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    sent(HS) heard(B.unit) landed(HS) runLater()
+    ok(FX.last.kind == "vigil" and FX.last.n == 0, "only the target healed: no burst", FX.last.n)
+    settle()
+    RD.cueMarks.vigil = {}
+    click(B)
+    ok(not sent(HS) or FX.pend == nil, "no Light's Vigil on that box: a plain Holy Shock, nothing listens")
+    ok(FX.pend == nil, "(nothing waits)")
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    sent(HS, "Hogger")
+    ok(FX.pend == nil, "a Holy Shock the game says went to an enemy: no burst")
+    ok(FX.Sent(nil, secret()) == false, "a hidden spell id is never compared")
+
+    -- PRIEST: Prayer of Healing
+    settle()
+    click(A)
+    sent(POH)
+    TICK(1.5)
+    heard(E.unit)                                       -- (someone else's heal while you cast)
+    TICK(1.5)
+    heard(A.unit) heard(B.unit) heard(C.unit)
+    landed(POH)
+    runLater()
+    ok(FX.last.kind == "poh" and FX.last.n == 3 and shown("ring", FX.WHITE) == 3 and shown("line") == 0,
+       "Prayer of Healing: a white ring on each of the three boxes it healed, none on the box healed a moment before",
+       FX.last.n)
+
+    -- PRIEST: Prayer of Mending hops
+    settle()
+    FX.mendWords = nil
+    C_Spell.GetSpellDescription = function(s)
+        if s == "Prayer of Mending" then
+            return "Places a spell on the target that heals them for 800 the next time they take damage. When the heal occurs, Prayer of Mending jumps to a party or raid member within 20 yards. Jumps up to 5 times and lasts 30 sec after each jump."
+        end
+        return keep.desc and keep.desc(s)
+    end
+    click(B)
+    sent(POM) landed(POM)
+    ok(FX.mend and FX.mend.left == 5 and FX.mend.first == B and FX.listening, "Prayer of Mending on a box: 5 heals, listening")
+    TICK(2)
+    heard(C.unit, "WOUND") heard(C.unit)
+    ok(FX.mend.hops == 0, "a hit and a heal on ANOTHER box first: not it (its first heal is on the box you cast it on)")
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    ok(FX.mend.hops == 1 and FX.mend.left == 4 and shown("line") == 0 and shown("ring", FX.WHITE) == 1,
+       "hit, then healed in the same moment: the first heal - a white ring, no arc yet")
+    local lab
+    for _, ko in ipairs(FX.lastDraw.item.objs) do if ko[1] == "label" then lab = ko[2] end end
+    ok(lab and lab:GetText() == "4", "and the heals it has left: 4", lab and lab:GetText())
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    ok(FX.mend.hops == 1, "the same box again: it has jumped away from there")
+    TICK(1)
+    heard(E.unit)
+    ok(FX.mend.hops == 1, "a heal alone (another healer, a HoT): not a hop")
+    TICK(1)
+    heard(E.unit, "WOUND") heard(E.unit)
+    ok(FX.mend.hops == 2 and FX.mend.left == 3 and shown("line", FX.WHITE) == FX.ARC_SEGS,
+       "the next box hit and healed: a white arc from the last box to it", shown("line"))
+    local first = FX.lastDraw.item.objs[1][2]
+    ok(first.from[1] == 200 and first.from[2] == 140, "the arc starts in the middle of the box it came from", first.from[1], first.from[2])
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local nC, by = Cost.Count(function() for _ = 1, 100 do heard("nameplate4", "WOUND") end end)
+    ok(nC <= 200, "100 enemy hits while a Prayer of Mending lives: at most 2 client calls each", nC, Cost.Top(by, 3))
+    print(("   cost: class effects, 100 enemy hits while listening = %d calls (%s)"):format(nC, Cost.Top(by, 3)))
+    -- its words unread: no number
+    FX.mendWords = { charges = nil, life = 30 }
+    TICK(1)
+    click(B)
+    sent(POM) landed(POM)
+    TICK(1)
+    heard(B.unit, "WOUND") heard(B.unit)
+    lab = nil
+    for _, ko in ipairs(FX.lastDraw.item.objs) do if ko[1] == "label" and ko[2]:IsShown() then lab = ko[2] end end
+    ok(FX.mend.hops == 1 and FX.mend.left == nil and not lab, "its words unread: the hop, no number")
+    TICK(31)
+    heard("nameplate4", "WOUND")
+    ok(not FX.listening and FX.mend == nil and not FX.combatEv.__events.UNIT_COMBAT, "30 s with no heal: it lets UNIT_COMBAT go")
+
+    -- DRUID: Wild Growth
+    settle()
+    click(C)
+    sent(WG)
+    TICK(3)
+    landed(WG)
+    ok(shown("glow", FX.GREEN) == 1, "Wild Growth lands: its target's box glows at once")
+    TICK(1.0)
+    heard(A.unit) heard(B.unit) heard(C.unit) heard(E.unit)
+    TICK(0.2)
+    heard(A.unit)                                       -- (a heal of someone else's, alone)
+    runLater()
+    ok(FX.last.kind == "wild" and FX.last.n == 4 and shown("glow", FX.GREEN) == 4,
+       "its first tick on four boxes in one moment: all four bloom", FX.last.n)
+    local g = FX.lastDraw.item.objs[1][2]
+    TICK(2)
+    FX.Tick()
+    local a1 = g.__alpha
+    TICK(3)
+    FX.Tick()
+    ok(type(a1) == "number" and a1 > 0 and a1 <= FX.GLOW_A and g.__alpha < a1, "a soft glow, fading", a1, g.__alpha)
+    TICK(2)
+    FX.Tick()
+    ok(not g:IsShown() and not L:GetScript("OnUpdate"), "gone after its 7 s")
+
+    -- IN A FIGHT: the same, and no secure call (the mock refuses Show/Hide/SetAttribute on a secure frame in combat)
+    settle()
+    STATE.inCombat, RD.inFight = true, true
+    RD.cueMarks.vigil = { [RD.RipKey(B.unit)] = GetTime() + 20 }
+    click(B)
+    local okF, errF = pcall(function()
+        sent(HS) heard(B.unit) heard(C.unit) landed(HS) runLater()
+        click(A) sent(POH) heard(A.unit) heard(B.unit) landed(POH) runLater()
+        TICK(1) FX.Tick()
+    end)
+    ok(okF and FX.last.kind == "poh" and FX.last.n == 2, "in a fight: drawn, and no secure call", errF)
+    STATE.inCombat, RD.inFight = false, nil
+
+    -- SWITCHED OFF: nothing
+    settle()
+    RD.SetSw("fxvigil", false)
+    click(B)
+    ok(not sent(HS) or FX.pend == nil, "Light's Vigil burst off: the Holy Shock draws nothing")
+    RD.SetSw("fxpoh", false)
+    sent(POH)
+    ok(FX.pend == nil, "Prayer of Healing pulse off: nothing")
+    RD.SetSw("fxmend", false)
+    RD.SetSw("fxwild", false)
+    ok(not FX.armed and not sent(WG) and not ce.__events.UNIT_SPELLCAST_SENT, "all four off: your casts are not even heard")
+    RD.SetSw("fxwild", true)
+    ok(FX.armed and ce.__events.UNIT_SPELLCAST_SENT, "one back on: heard again")
+    RD.Deck = function() return false end
+    click(C)
+    sent(WG)
+    ok(FX.pend == nil, "the deck not on screen: nothing")
+
+    settle()
+    RD.Deck, RD.spokes, RD.bounceAlias = keep.deck, keep.spokes, keep.alias
+    C_Spell.GetSpellName, C_Spell.GetSpellDescription, _G.C_Timer = keep.name, keep.desc, keep.timer
+    RD.cueMarks.vigil, RD.lastClick, RD.lastClickAt, RD.over = keep.marks, keep.click, keep.clickAt, keep.over
+    RD.sentTarget, RD.sentAt, STATE.inCombat, RD.inFight = keep.sent, keep.sentAt, keep.combat, keep.fight
+    d.sw, d.fxStamp, d.swStamp, d.view = keep.sw, keep.fxStamp, keep.swStamp, keep.view
+    FX.Arm()
+    FX.mendWords = nil
+end
+
+-- BiS>Cues: the raid layout's switches ride the string (dev/CUES.md "raid")
+do
+    local CU, RD = NS.CU, NS.RD
+    local r = NS.DB().radar
+    local keepSw, keepSort = r.sw, r.deckSort
+    RD.SetRaidSettings({ gtag = true, sort = "class", cols = true })
+    local s = CU.Export()
+    RD.SetRaidSettings({ gtag = false, sort = "tanks", cols = false })
+    ok(CU.Import(s), "a string with the raid layout in it imports")
+    local t = RD.RaidSettings()
+    ok(t.gtag == true and t.sort == "class" and t.cols == true, "group tags, the sort and columns came back with it")
+    r.sw, r.deckSort = keepSw, keepSort
+    RD.SwApply()
+    -- the switches panel: your class's groups only
+    local keepUC = _G.UnitClass
+    _G.UnitClass = function() return "Shaman", "SHAMAN", 7 end
+    local byKey = {}
+    for _, s in ipairs(RD.SW) do byKey[s.key] = s end
+    ok(RD.SwForMe(byKey.totems) and RD.SwForMe(byKey.rip) and not RD.SwForMe(byKey.oath) and not RD.SwForMe(byKey.swift)
+       and not RD.SwForMe(byKey.fxvigil) and not RD.SwForMe(byKey.fxwild) and RD.SwForMe(byKey.names) and RD.SwForMe(byKey.hell),
+       "a shaman's switches: SHAMAN and everyone's, no paladin / druid / priest rows or effects")
+    _G.UnitClass = function() return "Priest", "PRIEST", 5 end
+    ok(RD.SwForMe(byKey.fxmend) and RD.SwForMe(byKey.fxpoh) and not RD.SwForMe(byKey.totems), "a priest's: the Prayer effects, no totems")
+    _G.UnitClass = keepUC
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")

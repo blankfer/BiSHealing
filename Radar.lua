@@ -726,8 +726,13 @@ local function buildSpoke(f, i)
     sp.amberPulse = RD.Pulse(b.amberFace, RD.PULSE_MID)
     -- the GCD's sweep, its swipe dark only while the pip is lit (RD.SwipeCurve on their health, RD.PaintHeal)
     sp.cd = RD.Sweep(b.face)
-    b:HookScript("OnEnter", function() RD.over = sp if NS.OV then NS.OV.Enter(sp) end end)
+    b:HookScript("OnEnter", function()
+        RD.over = sp
+        if NS.OV then NS.OV.Enter(sp) end
+        if sp.raidGroup then RD.GroupWash(sp, true) end          -- a raid deck: its group mates lit (sheet 6)
+    end)
     b:HookScript("OnLeave", function()
+        if sp.raidGroup then RD.GroupWash(sp, false) end
         if RD.over == sp then RD.over = nil end
         if NS.OV then NS.OV.Leave(sp) end
     end)
@@ -1379,6 +1384,10 @@ function RD.SwReset()
     RD.SetDeckWidth(nil)
     RD.SetBoxHeight(nil)
     RD.ScaleHome()
+    -- the raid layout back to its own too (21 Nov 2026): no group tags, groups as rows, tanks then groups
+    local d = db()
+    if type(d.sw) == "table" then d.sw.gtag, d.sw.cols = nil, nil end
+    d.deckSort = nil
     return RD.SwPreset("full")
 end
 
@@ -1725,6 +1734,13 @@ RD.SW = {
     { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
     { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
     { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
+    -- RAID GROUPS (21 Nov 2026, BiS Cues sheet 6, Arn picked B + its own switch). OFF until switched on (`off`, see RD.Sw),
+    -- and left alone by the presets and RESET's "everything on" - they change where boxes stand, not what a box shows.
+    -- The sort switch (one setting that cycles) has its own row under these (RD.SORTS).
+    { key = "gtag",   group = "LAYOUT",    name = "Group tags",               off = true, layout = true,
+      tip = "In a raid: a small G2 in the corner of each box - that person's raid group. The first thing to go when the boxes get small." },
+    { key = "cols",   group = "LAYOUT",    name = "Groups as columns",        off = true, layout = true,
+      tip = "In a raid: each group stands top to bottom, the groups side by side. Off: each group is a row. The window's width decides how many groups fit side by side." },
     { key = "target", group = "THE FIGHT", name = "Target + its target",      tip = "Your target and who it is hitting, in the top row." },
     { key = "kicks",  group = "THE FIGHT", name = "Kick buttons",             tip = "Your interrupt on a box when their target casts." },
     { key = "cures",  group = "THE FIGHT", name = "Cure chips",               tip = "A chip when they carry something you can remove." },
@@ -1742,20 +1758,30 @@ RD.SW = {
     { key = "oath",   group = "PALADIN",   name = "Oath of Light cue",        tip = "Holy Light in the middle of the box of whoever carries your Oath of Light: your heals land harder there." },
     { key = "vigil",  group = "PALADIN",   name = "Light's Vigil + synergy",  tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil (that Holy Shock skips its cooldown and splashes their party), and the synergy bar on top counting its 30 s down." },
     { key = "swift",  group = "DRUID",     name = "Swiftmend + synergy",      tip = "Swiftmend in the middle of the box of whoever carries your Rejuvenation or Regrowth while it is ready, and the synergy bar on top: your newest one's time left." },
+    -- 20 Nov 2026 (Arn: "remember all these are toggles"): the warlock's Hellfire and Life Tap (Burn.lua), Revelation (Reveal.lua)
+    { key = "hell",   group = "YOUR GROUP", name = "Hellfire box",            tip = "A warlock's box catches fire while he channels Hellfire (it burns him every second). The game draws it, even in a fight." },
+    { key = "hellvoice", group = "YOUR GROUP", name = "Hellfire voice",       tip = "Your PC's voice says \"Hellfire\" when a warlock's box catches fire. At most once every 12 s a warlock." },
+    { key = "tap",    group = "YOUR GROUP", name = "Life Tap tag",            tip = "TAP in amber under a warlock's name for 3 s after he trades health for mana. Only when the game shows his cast (often not in a fight)." },
+    { key = "crit",   group = "EXTRAS",    name = "Revelation CRIT",          tip = "The Revelation weapon enchant's proc: a gold CRIT on the synergy bar while your next spell will crit. The game draws it, even in a fight." },
     { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
     full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
-             oath = true, vigil = true, swift = true },
+             oath = true, vigil = true, swift = true, hell = true, hellvoice = true, tap = true, crit = true },
     bare = {},
     lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
 RD.SW_ORDER = { "bare", "lean", "full" }
 RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
+-- THE SWITCHES THAT START OFF (21 Nov 2026): every other switch reads nil as ON (nobody's deck changed when the switches
+-- came, 16 Nov). The raid-group tag and groups-as-columns are new parts of the layout nobody asked for yet, so nil must
+-- read as OFF for them - a player who touches nothing keeps today's deck.
+RD.SW_OFF = {}
+for _, s in ipairs(RD.SW) do if s.off then RD.SW_OFF[s.key] = true end end
 function RD.Sw(key)
     local t = db().sw
-    if type(t) ~= "table" or t[key] == nil then return true end
+    if type(t) ~= "table" or t[key] == nil then return not RD.SW_OFF[key] end
     return t[key] == true
 end
 --- The icon row under each box's bar: while kicks or cures are on.
@@ -1764,7 +1790,7 @@ function RD.SwIcons() return RD.Sw("kicks") or RD.Sw("cures") end
 function RD.SwPresetNow()
     for _, name in ipairs(RD.SW_ORDER) do
         local p, same = RD.SW_PRESETS[name], true
-        for _, s in ipairs(RD.SW) do if (p[s.key] == true) ~= RD.Sw(s.key) then same = false end end
+        for _, s in ipairs(RD.SW) do if not s.layout and (p[s.key] == true) ~= RD.Sw(s.key) then same = false end end
         if same then return name end
     end
     return nil
@@ -1789,9 +1815,51 @@ end
 function RD.SwPreset(name)
     local p = RD.SW_PRESETS[name]
     if not p then return nil end
-    local t = {}
-    for _, s in ipairs(RD.SW) do t[s.key] = p[s.key] == true end
+    local t, old = {}, db().sw
+    for _, s in ipairs(RD.SW) do
+        if s.layout then t[s.key] = type(old) == "table" and old[s.key] or nil   -- the layout keeps what it was
+        else t[s.key] = p[s.key] == true end
+    end
     db().sw = t
+    return RD.SwApply()
+end
+
+--[[ THE SORT (21 Nov 2026, BiS Cues sheet 6: "one switch"): who stands where. Decided in RD.Arm - out of a fight only - and
+  so FROZEN for the whole fight: a death never reshuffles a box. Saved per character as db().deckSort (nil = "tanks").
+    tanks  the tanks lifted into the top row, then everyone by raid group (today's deck, the default)
+    group  nobody lifted, everyone by raid group
+    class  by class (the order of RD.CLASS_ORDER), then group; in a raid the groups scatter (the G2 tag still says)
+    maxhp  the biggest max health first, read plain out of a fight; who cannot be read goes after, by group ]]
+RD.SORTS = { "tanks", "group", "class", "maxhp" }
+RD.SORT_WORD = { tanks = "Tanks, then groups", group = "By group", class = "By class", maxhp = "By max health" }
+RD.CLASS_ORDER = { WARRIOR = 1, PALADIN = 2, DRUID = 3, SHAMAN = 4, PRIEST = 5, ROGUE = 6, HUNTER = 7, MAGE = 8, WARLOCK = 9 }
+function RD.DeckSort()
+    local v = db().deckSort
+    return RD.SORT_WORD[v] and v or "tanks"
+end
+function RD.SetDeckSort(v)
+    if not RD.SORT_WORD[v] then return nil end
+    db().deckSort = (v ~= "tanks") and v or nil
+    return RD.SwApply()
+end
+--- The sort row's click: the next sort, round and round.
+function RD.NextSort()
+    local cur, nxt = RD.DeckSort(), RD.SORTS[1]
+    for k, v in ipairs(RD.SORTS) do if v == cur then nxt = RD.SORTS[k % #RD.SORTS + 1] end end
+    return RD.SetDeckSort(nxt), nxt
+end
+--- Sheet 6's three settings as one table (the BiS Cues string's `raid` part): { gtag, sort, cols }.
+function RD.RaidSettings()
+    return { gtag = RD.Sw("gtag"), sort = RD.DeckSort(), cols = RD.Sw("cols") }
+end
+--- ...and back. Unknown keys and values are ignored. Laid out now, or after the fight ("now" / "after").
+function RD.SetRaidSettings(t)
+    if type(t) ~= "table" then return nil end
+    local d = db()
+    d.sw = type(d.sw) == "table" and d.sw or {}
+    if type(t.gtag) == "boolean" then d.sw.gtag = t.gtag end
+    if type(t.cols) == "boolean" then d.sw.cols = t.cols end
+    if RD.SORT_WORD[t.sort] then d.deckSort = (t.sort ~= "tanks") and t.sort or nil end
     return RD.SwApply()
 end
 --- Once per character: whoever used the engineer's view starts LEAN; the view itself is retired (one window now).
@@ -2509,9 +2577,75 @@ function RD.DeckPlate(sp)
         p.edgeHold = CreateFrame("Frame", nil, p)        -- the edges on their own frame: a hidden "enemy?" sets its alpha
         p.edgeHold:SetAllPoints(p)
         p.edges = edge(p.edgeHold, RD.DIM, 1.5)
+        -- THE GROUP MATES' WASH (21 Nov 2026, sheet 6: "hovering a box lights up its group mates"): a faint wash over the
+        -- whole box on its own plain frame (over the bar; RD.DeckLayout sets its level), shown only from enter / leave
+        p.mateHold = CreateFrame("Frame", nil, p)
+        p.mateHold:SetAllPoints(p)
+        p.mate = p.mateHold:CreateTexture(nil, "OVERLAY")
+        p.mate:SetAllPoints(p.mateHold)
+        local mc = RD.MATE_WASH
+        p.mate:SetColorTexture(mc[1], mc[2], mc[3], mc[4])
+        p.mate:Hide()
         sp.deckPlate = p
     end
     return p
+end
+
+--[[ THE SIZE TIERS (21 Nov 2026, BiS Cues sheet 7, Arn: "dragging the window narrower never piles icons"; and the same
+  evening: "the bar cant have clickable things on frame or people will miss click and the bar must always go to the end of
+  the box no empty space" - so there is NO side column: the bar is always the box's whole width, the kick and the cures
+  only ever in the row under it). As a box gets narrower, parts drop in this order:
+    1 extra tags (MANA TIDE, TAP)   2 the pet's paw and the group tag   3 the name, cut to 4 letters
+    4 the second cure               5 the first cure                    6 the name
+  NEVER dropped: the health bar's click area (the whole box above the icon row) and the kick's spot.
+    FULL       RD.TIER_FULL+ wide     the kick + 2 cures, the full name, tags, extras
+    ONE CURE   the kick + 1 cure fit  the name cut to RD.NAME_CUT letters
+    KICK       narrower               the kick alone, the cut name
+    FLOOR      under RD.NAME_MIN      the bar + the kick; never narrower than FG.BOX_MIN_W (fewer boxes a row instead)
+  `ic` = the deck's one icon size (RD.IconPx). Answers the room table, kept on the spoke as sp.room. ]]
+RD.TIER_FULL = 74
+RD.NAME_MIN = 34
+RD.NAME_CUT = 4
+RD.NAME_LINE = 13                                   -- the name's line: RD.DECK_TAG.y down, 9 pt
+RD.EXTRA_NEED = 27                                  -- a bar this tall holds the line under the name (TAP, MANA TIDE)
+RD.ICON_MIN, RD.ICON_MAX = 16, 22
+RD.CORNER_W = 13                                    -- the group tag's (or the paw's) corner, taken off the name's width
+RD.GTAG = { size = 8, col = { 0.62, 0.66, 0.74, 1 } }
+RD.MATE_WASH = { 1, 1, 1, 0.10 }
+--- One icon size for the whole deck: scaled with the smallest box (`minW`), never under 16 or over 22 px.
+function RD.IconPx(minW)
+    if type(minW) ~= "number" then return RD.ICON_MAX end
+    return math.max(RD.ICON_MIN, math.min(RD.ICON_MAX, math.floor((minW - 6) / 2)))
+end
+function RD.BoxRoom(w, ph, ic)
+    ic = ic or RD.ICON_MAX
+    local tier
+    if w >= RD.TIER_FULL then tier = "full"
+    elseif 2 * ic + 6 <= w then tier = "one"            -- kick + cure + their gaps and margins
+    elseif w >= RD.NAME_MIN then tier = "kick"
+    else tier = "floor" end
+    local full = tier == "full"
+    local name = full and "full" or (tier ~= "floor" and "cut") or false
+    if (ph or 0) < RD.NAME_LINE then name = false end
+    return { tier = tier, cures = full and 2 or (tier == "one" and 1) or 0, name = name, tags = full,
+             extras = full and (ph or 0) >= RD.EXTRA_NEED }
+end
+--- Has this box room for `what` (extras / tags / name / cures)? A box the deck never laid out: yes.
+function RD.BoxHas(sp, what)
+    local r = sp and sp.room
+    if not r then return true end
+    return r[what] and true or false
+end
+--- Hovering a box in a raid lights its group mates (the other boxes of its raid group); the wash goes on leave.
+function RD.GroupWash(sp, on)
+    local g = sp and sp.raidGroup
+    local mates = g and RD.deckMates and RD.deckMates[g]
+    if not mates then return false end
+    for _, m in ipairs(mates) do
+        local p = m.deckPlate
+        if m ~= sp and p and p.mate then p.mate:SetShown(on and p:IsShown() and true or false) end
+    end
+    return true
 end
 
 --- THE CALLSIGN (Arn: "puts names on the boxes like a flight rader tracker"): the first name in capitals across the TOP
@@ -2529,7 +2663,18 @@ function RD.Callsign(unit)
     if type(n) ~= "string" or n == "" then return "" end
     return ((n:match("^(%S+)")) or n):upper()
 end
-function RD.DeckTag(sp, w)
+--- The name a box shows: the callsign, cut to RD.NAME_CUT letters while its tier says so (a plain name only - a hidden one
+--- may not be cut, it is handed whole and the label's width cuts it); "" while the tier has no room for a name.
+function RD.DeckName(sp)
+    local n = RD.BoxName(sp.unit)
+    local room = sp.room
+    if room and room.name == false then return "" end
+    if room and room.name == "cut" and type(n) == "string" and not (NS.Secret and NS.Secret(n)) then n = n:sub(1, RD.NAME_CUT) end
+    return n
+end
+--- `room` (RD.BoxRoom) cuts or drops the name; `group` = the raid group for the G2 tag (nil: none); `paw` = a pet's paw
+--- takes the top-right corner. The name never runs under the corner: its width stops RD.CORNER_W short.
+function RD.DeckTag(sp, w, room, group, paw)
     local t = sp.deckTag
     local plate = RD.DeckPlate(sp)
     if not t then
@@ -2544,9 +2689,26 @@ function RD.DeckTag(sp, w)
         sp.deckTag = t
     end
     t:SetFrameLevel(sp.heal:GetFrameLevel() + 5)            -- over the bar and the icons (they sit below its line)
-    if w then t.text:SetWidth(math.max(8, w - 6)) end
-    t.text:SetText(RD.BoxName(sp.unit))
-    t:SetShown(RD.Sw("names"))                              -- the names switch
+    local corner = (group or paw) and RD.CORNER_W or 0
+    if w then t.text:SetWidth(math.max(8, w - 6 - corner)) end
+    t.text:SetText(RD.DeckName(sp))
+    -- THE GROUP TAG (21 Nov 2026, sheet 6 B): "G2" in the box's top-right corner, its own switch (RD.Sw("gtag")), a raid only
+    if group and not t.group then
+        t.group = t:CreateFontString(nil, "OVERLAY")
+        t.group:SetFont(RD.DECK_TAG.font, RD.GTAG.size, "OUTLINE")
+        t.group:SetPoint("TOPRIGHT", t, "TOPRIGHT", -2, RD.DECK_TAG.y)
+        t.group:SetJustifyH("RIGHT")
+        t.group:SetWidth(RD.CORNER_W - 1)
+        local c = RD.GTAG.col
+        t.group:SetTextColor(c[1], c[2], c[3], c[4])
+    end
+    if t.group then
+        t.group:SetText(group and ("G" .. group) or "")
+        t.group:SetShown(group ~= nil)
+    end
+    local names = RD.Sw("names")
+    t.text:SetShown(names)
+    t:SetShown(names or group ~= nil)                       -- the names switch (the group tag has its own)
     return t
 end
 
@@ -2576,8 +2738,10 @@ end
 function RD.DeckClear()
     for _, t in ipairs(RD.timers or {}) do t:Hide() end   -- the totem timers are the deck's alone
     if RD.manaBox then RD.manaBox:Hide() end              -- and the mana group's outline
+    RD.deckMates = nil                                    -- (the deck lays them out again; nobody's group mates lit)
     for _, sp in ipairs(RD.spokes or {}) do
-        if sp.deckPlate then sp.deckPlate:Hide() end
+        sp.room, sp.raidGroup = nil, nil
+        if sp.deckPlate then sp.deckPlate:Hide() if sp.deckPlate.mate then sp.deckPlate.mate:Hide() end end
         if sp.deckTag then sp.deckTag.text:SetText("") sp.deckTag:Hide() end
         local k = sp.bogey
         if k and k.deckIcon then
@@ -2591,13 +2755,22 @@ end
 --- The deck's order: the tanks first (the radar's own answer, RD.LogicBand; nobody named = one guessed, RD.GuessTank),
 --- then everyone else in place order (a raid's place is its group and spot), the empty places last. Answers the order
 --- and how many of it are tanks.
-function RD.DeckOrder(units, n)
+--- THE SORT AND THE BLOCKS (21 Nov 2026, BiS Cues sheet 6): `sort` (RD.DeckSort() by default) - only "tanks" lifts anyone.
+--- In a raid (`raid`, RD.raid by default) a third answer: the BLOCKS, each { group = g, spots = { place, ... } } - a group
+--- sort gives one block per raid group that has anyone left in it (a lifted tank leaves his spot empty: the block keeps
+--- five spots, so the rows never shift); class and max health give blocks of five in their order (group = nil). The same
+--- group always gives the same order: every tie falls back to the place.
+function RD.DeckOrder(units, n, sort, raid)
+    sort = RD.SORT_WORD[sort] and sort or RD.DeckSort()
+    if raid == nil then raid = RD.raid end
     local tanks, rest, empty, present = {}, {}, {}, {}
     for i = 1, n do if units[i] then present[i] = true end end
     for i = 1, n do
         local u = units[i]
         if not u then
             empty[#empty + 1] = i
+        elseif sort ~= "tanks" then
+            rest[#rest + 1] = i
         else
             local okMe, me = false, nil
             if u == "player" then okMe, me = true, true elseif UnitIsUnit then okMe, me = pcall(UnitIsUnit, u, "player") end
@@ -2605,7 +2778,24 @@ function RD.DeckOrder(units, n)
             else rest[#rest + 1] = i end
         end
     end
-    if #tanks == 0 then
+    if sort == "class" or sort == "maxhp" then
+        local key = {}
+        for _, i in ipairs(rest) do
+            local u, k = units[i], nil
+            if sort == "class" then
+                local ok, _, c = pcall(UnitClass, u)
+                c = ok and plain(c) or nil
+                k = -(RD.CLASS_ORDER[c] or 99)
+            else
+                local ok, mx = pcall(UnitHealthMax, u)
+                mx = ok and plain(mx) or nil
+                k = (type(mx) == "number" and mx > 0) and mx or -1     -- unreadable: after everyone read, by place
+            end
+            key[i] = k
+        end
+        table.sort(rest, function(a, b) if key[a] ~= key[b] then return key[a] > key[b] end return a < b end)
+    end
+    if sort == "tanks" and #tanks == 0 then
         -- NOBODY NAMED: THE MOST HEALTH (Arn, 15 Nov: "as a fallback can we do it so if there is no tank in the group the one
         -- with the most health goes up there") - the biggest max health, read plain out of a fight, never you; only when no
         -- health can be read, the class guess (RD.GuessTank)
@@ -2621,7 +2811,31 @@ function RD.DeckOrder(units, n)
     for _, i in ipairs(tanks) do order[#order + 1] = i end
     for _, i in ipairs(rest) do order[#order + 1] = i end
     for _, i in ipairs(empty) do order[#order + 1] = i end
-    return order, #tanks
+    local blocks
+    if raid then
+        blocks = {}
+        if sort == "tanks" or sort == "group" then
+            local byGroup = {}
+            for _, i in ipairs(rest) do
+                local g = math.ceil(i / 5)
+                if not byGroup[g] then
+                    byGroup[g] = { group = g, spots = {} }
+                    blocks[#blocks + 1] = byGroup[g]
+                end
+                local sp = byGroup[g].spots
+                sp[#sp + 1] = i
+            end
+            table.sort(blocks, function(a, b) return a.group < b.group end)
+        else
+            for k, i in ipairs(rest) do
+                local b = math.ceil(k / 5)
+                blocks[b] = blocks[b] or { spots = {} }
+                local sp = blocks[b].spots
+                sp[#sp + 1] = i
+            end
+        end
+    end
+    return order, #tanks, blocks
 end
 
 --- The target box's two boxes repainted (a target change: the client re-points "target" / "targettarget" by itself; the
@@ -2631,7 +2845,7 @@ function RD.PaintDeckBox()
     for _, sp in ipairs(RD.spokes or {}) do
         if sp.unit and sp.slot and sp.slot.box then
             RD.PaintHeal(sp)
-            if sp.deckTag then sp.deckTag.text:SetText(RD.BoxName(sp.unit)) end    -- the new target's callsign, or the box's word
+            if sp.deckTag then sp.deckTag.text:SetText(RD.DeckName(sp)) end    -- the new target's callsign, or the box's word
         end
     end
     return true
@@ -2736,11 +2950,41 @@ function RD.DeckLayout(T, order)
     for k = 1, RD.deckPets or 0 do crew[#crew + 1] = T.n + 2 + k end     -- the pets: after the people, never a tank
     local place
     local dw = RD.DeckWidth()
+    local noTankRow = (RD.deckSorted or "tanks") ~= "tanks"          -- a sort that lifts nobody: no tank row
+    -- A RAID AS FIXED BLOCKS (21 Nov 2026, sheet 6): each raid group five spots, an empty spot where someone is missing
+    -- (lifted to the tank row, or never there); the pets a block of their own after the people
+    local blocks
+    if RD.raid and not RD.Compact() and RD.deckBlocks then
+        blocks = {}
+        for _, b in ipairs(RD.deckBlocks) do blocks[#blocks + 1] = { group = b.group, spots = b.spots } end
+        for k = 1, RD.deckPets or 0 do
+            local last = blocks[#blocks]
+            if not (last and last.pet and #last.spots < 5) then last = { pet = true, spots = {} } blocks[#blocks + 1] = last end
+            last.spots[#last.spots + 1] = T.n + 2 + k
+        end
+    end
     if RD.Compact() then
         place = NS.FG.EngPlace(nT, firstPet - 1, #crew - firstPet + 1, not RD.raid, M, dw or math.max(M.w, RD.FloorInner()))
+    elseif blocks then
+        local counts = {}
+        for b = 1, #blocks do counts[b] = 5 end
+        place = NS.FG.DeckBlocks(nT, counts, M, dw, not SW("target"), SW("cols"), noTankRow)
     else
-        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"))
+        place = NS.FG.DeckPlace(nT, #crew, not RD.raid, M, dw, not SW("target"), noTankRow)
     end
+    -- ONE ICON SIZE (sheet 7): scaled with the smallest box the deck places, held to RD.ICON_MIN .. RD.ICON_MAX
+    local minW
+    local function seen(r) if r and r.w and (not minW or r.w < minW) then minW = r.w end end
+    for k = 1, nT do seen(place.tanks[k]) end
+    if blocks then
+        for b, blk in ipairs(blocks) do for s = 1, #blk.spots do seen(place.blocks[b] and place.blocks[b].spots[s]) end end
+    else
+        for r = 1, #crew do seen(place.rest[r]) end
+    end
+    seen(place.target) seen(place.tot)
+    local ic = RD.IconPx(minW)
+    RD.deckIcon = ic
+    RD.deckMates = {}
     local W = C.pad * 2 + place.w                    -- the tools wrap and the totems stack to fit (RD.DeckTools / DeckTotemRow)
     RD.deckInnerW = place.w
     -- under the deck's taller alert strip; when the target pair sits in the top row, a band for its header line too (Arn,
@@ -2753,7 +2997,10 @@ function RD.DeckLayout(T, order)
     -- the healing frame cast the cure disease"). First they went to the box's sides; then (Arn: "lets go taller and put the
     -- kick dispells under") into a ROW UNDER THE BAR: the heal pip - your binds, the name, the bar - takes the box's whole
     -- width above, the icon row the bottom `icons` px, the kick at its left, the cures at its right. Nothing overlaps.
-    local function put(i, r, kick)
+    -- THE SIZE TIERS (21 Nov 2026, sheet 7 - RD.BoxRoom): what a box this wide has room for. The bar always runs the box's
+    -- whole width (Arn: "the bar must always go to the end of the box no empty space") and nothing clickable ever sits on
+    -- or beside it ("people will miss click"): the kick and the cures live only in the row UNDER the bar.
+    local function put(i, r, kick, group, pet)
         local sp = RD.spokes[i]
         if not (sp and r) then return end
         local cy, left, right = y0 + r.y + r.h / 2, x0 + r.x, x0 + r.x + r.w
@@ -2768,8 +3015,18 @@ function RD.DeckLayout(T, order)
         local ih = is and 0 or M.icons
         local ph = is and (r.h - 2) or (r.h - ih - 1)            -- the pip: the bar's height
         local pw = is and (r.w - 3 - is) or (r.w - 2)            -- and its width
-        local ks = is or math.min(M.kick, ih - 2)
-        local cs = is or math.min(M.chip, ih - 2)
+        local ks = is or math.min(M.kick, ih - 2, ic)
+        local cs = is or math.min(M.chip, ih - 2, ic)
+        local room = (not is) and RD.BoxRoom(r.w, ph, ic) or nil
+        sp.room, sp.raidGroup = room, (RD.raid and group) or nil
+        if sp.raidGroup then
+            RD.deckMates[group] = RD.deckMates[group] or {}
+            table.insert(RD.deckMates[group], sp)
+        end
+        if plate.mate then plate.mate:Hide() end                  -- (a wash left lit by a hover before this layout)
+        if plate.mateHold then plate.mateHold:SetFrameLevel(sp.heal:GetFrameLevel() + 6) end
+        if room and not room.extras and sp.tideTag then sp.tideTag:Hide() end   -- no room for MANA TIDE: it goes first
+        RD.TideTagWidth(sp)
         local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         sp.heal:SetSize(pw, ph)
         at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
@@ -2790,8 +3047,9 @@ function RD.DeckLayout(T, order)
         RD.PlaceCastStrip(sp, ih > 0 and { left + 1, y0 + r.y + r.h - ih, right - 1, y0 + r.y + r.h - 1 } or nil)
         local x = right - 2
         local cyCol = footY - ((kick and is) and (is + 1) or 0)  -- a short box: the cures stack above the kick
-        for _, c in ipairs(sp.cures or {}) do
-            if not SW("cures") then
+        for n, c in ipairs(sp.cures or {}) do
+            -- off by the switch, or no room in this box's icon row (the second cure goes first, then the first: RD.BoxRoom)
+            if not SW("cures") or (room and n > room.cures) then
                 if c.box:IsShown() then c.swHidden = true c.box:Hide() end
                 if c.container and c.container.Hide then c.container:Hide() end
             elseif c.swHidden then
@@ -2811,12 +3069,27 @@ function RD.DeckLayout(T, order)
             if c.holder then c.holder:SetFrameLevel(lvl + 4) end
             if c.container then c.container:ClearAllPoints() c.container:SetPoint("CENTER", c.box, "CENTER") end
         end
-        RD.DeckTag(sp, r.w)                               -- the name across the whole box
+        -- the name across the whole box; the corner (the group tag, or a pet's paw) only where the tier keeps it
+        local gtag = room and room.tags and sp.raidGroup and SW("gtag") and not pet
+        RD.DeckTag(sp, r.w, room, gtag and sp.raidGroup or nil, pet and (not room or room.tags))
     end
-    for k = 1, nT do put(order[k], place.tanks[k], true) end
-    for r, i in ipairs(crew) do
-        put(i, place.rest[r], r < firstPet)
-        RD.DeckPaw(RD.spokes[i], r >= firstPet)
+    local function groupOf(i) return (RD.raid and i and i <= T.n) and math.ceil(i / 5) or nil end
+    for k = 1, nT do put(order[k], place.tanks[k], true, groupOf(order[k])) end
+    if blocks then
+        for b, blk in ipairs(blocks) do
+            local pb = place.blocks[b]
+            for s, i in ipairs(blk.spots) do
+                put(i, pb and pb.spots[s], not blk.pet, (not blk.pet) and groupOf(i) or nil, blk.pet)
+                local sp = RD.spokes[i]
+                RD.DeckPaw(sp, blk.pet and RD.BoxHas(sp, "tags"))
+            end
+        end
+    else
+        for r, i in ipairs(crew) do
+            put(i, place.rest[r], r < firstPet, nil, r >= firstPet)
+            local sp = RD.spokes[i]
+            RD.DeckPaw(sp, r >= firstPet and RD.BoxHas(sp, "tags"))
+        end
     end
     for k = 1, nT do RD.DeckPaw(RD.spokes[order[k]], false) end
     for i = T.n + 1, T.n + 2 do if RD.spokes[i] then RD.DeckPaw(RD.spokes[i], false) end end
@@ -3481,6 +3754,18 @@ local function swWash(row, on)
     if row.wash then row.wash:SetShown(on) end
     if row.bar then row.bar:SetShown(on) end
 end
+--- ONLY WHAT YOUR CLASS CAN ACT ON (Arn, 21 Nov 2026, BiS>Cues: "we wont see ones that arent our class that we cant act on
+--- like oath and light vigil"): a switch in a class's group (SHAMAN / PALADIN / DRUID / PRIEST), or carrying `class`,
+--- shows on that class's panel only. Class unknown: shown. `/bish cues all` (NS.CU.showAll) shows all, for testing.
+local SW_CLASS_GROUP = { SHAMAN = true, PALADIN = true, DRUID = true, PRIEST = true }
+function RD.SwForMe(s)
+    local cls = s.class or (SW_CLASS_GROUP[s.group] and s.group) or nil
+    if not cls then return true end
+    local CU = NS.CU
+    if CU and CU.showAll then return true end
+    local mine = CU and CU.MyClass and CU.MyClass()
+    return mine == nil or mine == cls
+end
 function RD.BuildSwitches()
     if RD.swPanel then return RD.swPanel end
     local c = RD.PHOS
@@ -3602,7 +3887,9 @@ function RD.BuildSwitches()
     -- a row per switch, under its group's word
     p.rows = {}
     local y, group = -88, nil
-    for _, s in ipairs(RD.SW) do
+    local list = {}
+    for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then list[#list + 1] = s end end
+    for _, s in ipairs(list) do
         if s.group ~= group then
             group = s.group
             local h = p:CreateFontString(nil, "OVERLAY")
@@ -3651,6 +3938,7 @@ function RD.BuildSwitches()
         row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
         p.rows[#p.rows + 1] = row
         y = y - RD.SW_ROW_H
+        if s.key == "cols" then y = RD.BuildSortRow(p, y, font) end     -- the sort: one row that cycles (sheet 6)
     end
     local reset = CreateFrame("Button", nil, p)
     reset:SetSize(RD.SW_W - 16, 18)
@@ -3669,7 +3957,7 @@ function RD.BuildSwitches()
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("RESET")
-        GameTooltip:AddLine("Everything on, the window's own width, boxes and window at 100%.  Out of a fight.", 1, 1, 1, true)
+        GameTooltip:AddLine("Everything on, the window's own width, boxes and window at 100%.  The raid layout back to its own: no group tags, groups as rows, tanks then groups.  Out of a fight.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     reset:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -3681,11 +3969,48 @@ function RD.BuildSwitches()
     RD.swPanel = p
     return p
 end
+--- THE SORT ROW (21 Nov 2026, BiS Cues sheet 6): one row, a click moves to the next sort (RD.NextSort); its words say the
+--- sort now. Kept as p.sortRow, apart from p.rows (those are the on/off switches). Answers the next row's y.
+function RD.BuildSortRow(p, y, font)
+    local c = RD.PHOS
+    local row = CreateFrame("Button", nil, p)
+    row:SetPoint("TOPLEFT", p, "TOPLEFT", 4, y)
+    row:SetSize(RD.SW_W - 8, RD.SW_ROW_H)
+    row.wash = row:CreateTexture(nil, "BACKGROUND")
+    row.wash:SetAllPoints(row)
+    row.wash:SetColorTexture(c[1], c[2], c[3], 0.14)
+    row.wash:Hide()
+    row.bar = row:CreateTexture(nil, "ARTWORK")
+    row.bar:SetPoint("TOPLEFT", row, "TOPLEFT")
+    row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT")
+    row.bar:SetWidth(2)
+    row.bar:SetColorTexture(1, 0.31, 0.66, 1)
+    row.bar:Hide()
+    row.text = row:CreateFontString(nil, "OVERLAY")
+    row.text:SetFont(font, 10, "")
+    row.text:SetPoint("LEFT", row, "LEFT", 24, 0)
+    row.text:SetTextColor(1, 1, 1, 1)
+    row:SetScript("OnClick", function() RD.NextSort() end)
+    row:SetScript("OnEnter", function(self)
+        swWash(self, true)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("SORT")
+            GameTooltip:AddLine("Click for the next order: tanks, then groups / by group / by class / by max health.  "
+                .. "Picked out of a fight and kept for the whole fight, so a death never moves a box.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
+    p.sortRow = row
+    return y - RD.SW_ROW_H
+end
 --- The panel's ticks, the matching preset lit, and the fight note.
 function RD.PaintSwitches()
     local p = RD.swPanel
     if not p then return false end
     local c = RD.PHOS
+    if p.sortRow then p.sortRow.text:SetText("Sort: " .. RD.SORT_WORD[RD.DeckSort()]) end
     for _, row in ipairs(p.rows) do
         local on = RD.Sw(row.key)
         row.box.fill:SetShown(on)
@@ -3975,7 +4300,9 @@ function RD.ApplyShip(ship)
     local sh = RD.shield
     if sh then
         plate(sh.plate)
-        for _, t in ipairs(sh.cover or {}) do plate(t) end
+        -- (the cover stands in the game's own aura button: forbidden to us once made - BugGrabber, 20 and 21 Nov - and the
+        -- throw stopped RD.Arm halfway; a cover made later takes the new dark from RD.PLATE)
+        for _, t in ipairs(sh.cover or {}) do pcall(plate, t) end
     end
     -- (the last-charge stencil is the buff's own icon now, never painted the plate's dark)
     -- the scope: rings, cross and ticks at the ship's line, dimmed; the brackets; you in the middle in its accent
@@ -5196,8 +5523,20 @@ function RD.TideHeard(who, secs, mine, word)
     end
     return nil
 end
+--- The tag's line stays inside its box (it was a fixed 80 px, wider than a 74 px box - sheet 7's test found it).
+function RD.TideTagWidth(sp)
+    local t, p = sp and sp.tideTag, sp and sp.deckPlate
+    if not (t and p) then return false end
+    local w = p:GetWidth()
+    t:SetSize(math.max(8, ((type(w) == "number" and w > 0) and w or 80) - RD.DECK_TAG.x - 2), 11)
+    return true
+end
 function RD.TideTag(sp, secs, word)
     local t = sp.tideTag
+    if not RD.BoxHas(sp, "extras") then                      -- a box too small: the extra tags go first (sheet 7)
+        if t then t:Hide() end
+        return nil
+    end
     if not t then
         t = CreateFrame("Frame", nil, sp.deckPlate)
         -- UNDER THE NAME (Arn's shot, 16 Nov: on a narrow box "CHAINHEAL GROUNDING 34" ran together - "we can just move
@@ -5220,6 +5559,7 @@ function RD.TideTag(sp, secs, word)
         end)
         sp.tideTag = t
     end
+    RD.TideTagWidth(sp)
     local lvl = sp.heal and sp.heal.GetFrameLevel and sp.heal:GetFrameLevel()
     if type(lvl) == "number" then t:SetFrameLevel(lvl + 7) end      -- over the bar and the name line
     t.word = word or "MANA TIDE"
@@ -5428,6 +5768,10 @@ end
   middle of a box is kept for ONE thing - a sign that says heal THIS person now, with this. The Riptide mark is the first
   (a Riptide standing = Chain Heal starts here); the icon in the box's middle, edged white, over the health bar. ]]
 RD.CUE = { px = 20, edge = 1, col = { 1, 1, 1, 1 } }
+-- THE CUE IS A WORD, NOT AN ICON (20 Nov 2026, Arn: "the riptide buff is nice but maybe people will think if i click here
+-- ill riptide" - "maybe we write [Chain Heal] in a color that works on all class colors"): the spell to cast now, in white
+-- with a black outline on a dark box sized to it - white on black reads on every class colour the bar can be.
+RD.CUE_WORD = { font = "Fonts\\ARIALN.TTF", size = 10, padX = 3, padY = 1, back = { 0, 0, 0, 0.7 }, rip = "Chain Heal" }
 function RD.CueMark(sp)
     if sp.cue then return sp.cue end
     -- ITS OWN FRAME OVER THE BAR (Arn's shot, 16 Nov: "no mark on sushii" - a texture on the plate drew UNDER the health
@@ -5450,45 +5794,87 @@ function RD.CueMark(sp)
     m:SetPoint("CENTER", bar, "CENTER", 0, 0)
     b:SetSize(px + 2 * C.edge, px + 2 * C.edge)
     b:SetPoint("CENTER", m, "CENTER", 0, 0)
-    sp.cue = { hold = hold, edge = b, icon = m }
+    b:Hide() m:Hide()                                           -- (the icon kept for a later look; the word is the cue)
+    local W = RD.CUE_WORD
+    local back = hold:CreateTexture(nil, "OVERLAY", nil, 5)
+    back:SetColorTexture(W.back[1], W.back[2], W.back[3], W.back[4])
+    local word = hold:CreateFontString(nil, "OVERLAY", nil)
+    word:SetFont(W.font, W.size, "OUTLINE")
+    word:SetTextColor(1, 1, 1, 1)
+    word:SetPoint("CENTER", bar, "CENTER", 0, 0)
+    back:SetPoint("TOPLEFT", word, "TOPLEFT", -W.padX, W.padY)
+    back:SetPoint("BOTTOMRIGHT", word, "BOTTOMRIGHT", W.padX, -W.padY)
+    back:Hide() word:Hide()
+    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back }
     sp.ripHold = hold
     return sp.cue
 end
+RD.CUE_FACE = 22
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
-    q.edge:SetShown(on and true or false)
-    q.icon:SetShown(on and true or false)
+    -- BiS Cues (21 Nov 2026): the cue card's LOOK - "icon" shows the spell's icon in the middle, else the word
+    local icon = on and q.ck and q.tex and NS.CU and NS.CU.Look(q.ck) == "icon"
+    local model = on and q.ck and NS.CU and NS.CU.ModelOf(q.ck) or nil        -- (a model: its own dark square, CU.Face)
+    if model and not q.face then
+        q.face = NS.CU.Face(q.hold, q.ck, RD.CUE_FACE)
+        q.face.sq:SetPoint("CENTER", q.icon, "CENTER", 0, 0)
+    end
+    if q.face then
+        if q.ck then q.face.key = q.ck end
+        NS.CU.FaceShow(q.face, model ~= nil)
+    end
+    if on and not icon and not model then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    if icon then q.icon:Show() q.edge:Show() else q.icon:Hide() q.edge:Hide() end
 end
 
+RD.cueTold = {}                                    -- "rip:<person>" whose mark is up: its sound is not said again
 --- The marks on the boxes: the Riptide icon in the middle (the heal cue) on EVERY box of whoever has one of yours standing.
 function RD.RipMarks()
     local now = GetTime()
     -- EACH MARK ENDS WITH ITS OWN RIPTIDE (Arn's cousin, 16 Nov: "riptide one person and then another person but the icon
     -- stayed on two people, the second rip tide extended the timer for the first one"): the marks were cleared only at a
     -- cast or when the NEWEST one ran out; RD.ripNext = the soonest end, and the bar's ticker calls this when it comes
+    -- THE MARK GOES WHEN A CHAIN HEAL STARTED NOW COULD NOT LAND IN TIME (21 Nov 2026, Arn: "if the buff only has one
+    -- second left and the cast is 2.5 seconds, I won't benefit from that buff ... if my spell takes two seconds, we remove
+    -- it at" two seconds + the lag): shown while (its end - your Chain Heal's cast time with haste - your lag) is ahead
+    local lead = RD.CueLead(RD.CUE_WORD.rip)
     local nextAt
     for u, t in pairs(RD.rips) do
-        if t <= now then RD.rips[u] = nil elseif not nextAt or t < nextAt then nextAt = t end
+        if t <= now then RD.rips[u] = nil
+        else
+            local at = (t - lead > now) and (t - lead) or t        -- (the next change: the mark going, else the Riptide)
+            if not nextAt or at < nextAt then nextAt = at end
+        end
     end
     RD.ripNext = nextAt
     local cueNext = RD.CuePrune(now)
     local deck = RD.Deck()
     local on = deck and RD.Sw("rip")
+    local told, still = RD.cueTold, {}
     for _, sp in ipairs(RD.spokes or {}) do
         local shown = sp.unit and sp.deckPlate and sp.deckPlate:IsShown()
         local key = shown and RD.RipKey(sp.unit) or nil
-        local has = on and key and RD.rips[key]
-        local tex
+        local has = on and key and RD.rips[key] and RD.rips[key] - lead > now
+        local tex, word, ck
         if key and RD.CueDead(sp.unit) then key, has = nil, nil end   -- (dead: nothing to heal there - the mark waits)
-        if has then tex = RD.SpellTex(RD.RIPTIDE) elseif deck and key then tex = RD.CueFor(key, now) end
-        if tex then
+        if has then tex, word, ck = RD.SpellTex(RD.RIPTIDE), RD.CUE_WORD.rip, "rip" elseif deck and key then tex, word, ck = RD.CueFor(key, now) end
+        if tex or word then
             local q = RD.CueMark(sp)
+            q.ck = ck
             if q.tex ~= tex then q.tex = tex pcall(q.icon.SetTexture, q.icon, tex) end
-            if has then sp.ripMark = q.icon end
+            if q.text ~= word then q.text = word q.word:SetText(word or "") end
+            if has then sp.ripMark = q.word end
+            -- the card's sound, once when the mark comes on somebody (off unless picked; one person, however many boxes)
+            local id = ck and key and (ck .. ":" .. key) or nil
+            if id then
+                if not told[id] and not still[id] and NS.CU and not NS.CU.Quiet() then NS.CU.Say(ck, sp.unit) end
+                still[id] = true
+            end
         end
-        if sp.cue then RD.CueShow(sp, tex ~= nil) end
+        if sp.cue then RD.CueShow(sp, (tex or word) ~= nil) end
     end
+    RD.cueTold = still
     RD.CueArm(cueNext)
 end
 
@@ -5663,13 +6049,28 @@ end
 --- The ended ones gone; answers the soonest time anything changes (an end, Swiftmend coming ready), or nil.
 function RD.CuePrune(now)
     local nextAt
-    for _, m in pairs(RD.cueMarks) do
-        for k, t in pairs(m) do
-            if t <= now then m[k] = nil elseif not nextAt or t < nextAt then nextAt = t end
+    for _, d in ipairs(RD.CUE_DEFS) do
+        local m = RD.cueMarks[d.key]
+        local lead = m and next(m) and RD.CueLead(d.show) or 0
+        for k, t in pairs(m or {}) do
+            if t <= now then m[k] = nil
+            else
+                local at = (t - lead > now) and (t - lead) or t
+                if not nextAt or at < nextAt then nextAt = at end
+            end
         end
     end
     if RD.swiftAt and RD.swiftAt > now and (not nextAt or RD.swiftAt < nextAt) then nextAt = RD.swiftAt end
     return nextAt
+end
+--- How long before a mark ends its cue must go: the payoff's cast time over your haste (an instant: 0) plus your lag -
+--- a cast started later lands after the buff is gone (Arn, 21 Nov). Plain numbers only; the book's own cast time.
+function RD.CueLead(spell)
+    local FM, EN = NS.FM, NS.EN
+    local ct = (FM and FM.SeqCastTime and spell and FM.SeqCastTime(spell)) or 2.5
+    if spell ~= "Chain Heal" and FM and FM.CAST_GUESS and ct == FM.CAST_GUESS then ct = 0 end   -- (an instant)
+    local haste = (FM and FM.Haste and FM.Haste()) or 0
+    return ct / (1 + haste / 100) + ((EN and EN.Lag and EN.Lag()) or 0)
 end
 --- The icon a person's box should show for a class cue (the highest prio standing), or nil.
 function RD.CueFor(key, now)
@@ -5677,11 +6078,11 @@ function RD.CueFor(key, now)
     for _, d in ipairs(RD.CUE_DEFS) do
         local m = RD.cueMarks[d.key]
         local t = m and m[key]
-        if t and t > now and RD.Sw(d.sw) and (d.gate ~= "swift" or RD.SwiftReady(now)) and (not best or d.prio > best.prio) then
+        if t and t - RD.CueLead(d.show) > now and RD.Sw(d.sw) and (d.gate ~= "swift" or RD.SwiftReady(now)) and (not best or d.prio > best.prio) then
             best = d
         end
     end
-    return best and RD.SpellTex(best.show) or nil
+    return best and RD.SpellTex(best.show) or nil, best and best.show or nil, best and best.sw or nil
 end
 --- One timer for the next change (never one per cue): the marks repainted then.
 function RD.CueArm(at)
@@ -6761,7 +7162,9 @@ function RD.Arm()
         -- THE FLIGHT DECK: the tanks first, then everyone in group order; every place carries a kick; and two more places,
         -- after the crew, for the target box - your target and its target (the radar's own units list is left alone)
         if RD.Deck() then
-            order, RD.deckTanks = RD.DeckOrder(units, T.n)
+            -- (the sort is read HERE, out of a fight only: frozen for the fight - RD.DeckSort)
+            RD.deckSorted = RD.DeckSort()
+            order, RD.deckTanks, RD.deckBlocks = RD.DeckOrder(units, T.n, RD.deckSorted, raid)
             RD.conOrder = order
             local pets = RD.Sw("pets") and RD.DeckPets(units, T.n) or {}
             RD.deckPets = #pets
