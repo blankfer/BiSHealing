@@ -3247,12 +3247,15 @@ function RD.LearnTimers()
     if combat() or RD.inFight then return false end
     local d = db()
     d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
+    d.totemSetAt = nil                                            -- (an old save's clock times: never read again)
     for _, t in ipairs(RD.timers or {}) do
         local okI, _, name, start = pcall(GetTotemInfo, t.slot)
         name = okI and plain(name) or nil
         start = okI and plain(start) or nil
         -- (a totem standing from before a pick sent in by SetTotems - BiS Tools' combo - does not undo the pick)
-        local older = type(d.totemSetAt) == "table" and d.totemSetAt[t.slot] and type(start) == "number" and start < d.totemSetAt[t.slot]
+        -- (RD.setAt is this session's only: GetTime counts from the PC's start, so a time kept in the save blocked the box
+        -- forever after a restart - 20 Nov 2026, Arn: "earth totem always drops earth bind totem, yesterday it was working")
+        local older = RD.setAt[t.slot] and type(start) == "number" and start < RD.setAt[t.slot]
         if type(name) == "string" and name ~= "" and not older then d.totemSlots[t.slot] = RD.TotemSpell(name) end
         local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
@@ -3271,15 +3274,15 @@ end
 --[[ A TOTEM SET SENT IN (18 Nov 2026, Arn: "can we API-send the totems to BiS Healing's totem click areas - it's having me
   test a new totem setup, I click something and it changes the totems on my BiS Healing deck - out of combat of course"):
   `set` = { [slot] = "Spell Name" } (1 fire, 2 earth, 3 water, 4 air; a slot left out is left alone, false clears it). The
-  boxes drop the new ones from the next click; a totem already standing from before does not undo it (d.totemSetAt,
-  compared with the standing one's start). Out of a fight only (secure writes). Answers true, or nil and why. ]]
+  boxes drop the new ones from the next click; a totem already standing from before does not undo it (RD.setAt, this
+  session's GetTime - never saved - compared with the standing one's start). Out of a fight only (secure writes). Answers true, or nil and why. ]]
 RD.SLOT_OF = { fire = 1, earth = 2, water = 3, air = 4 }
+RD.setAt = {}                                                     -- [slot] = GetTime of a set sent in, this session only
 function RD.SetTotems(set)
     if combat() or RD.inFight then return nil, "in a fight" end
     if type(set) ~= "table" then return nil, "no totems" end
     local d = db()
     d.totemSlots = type(d.totemSlots) == "table" and d.totemSlots or {}
-    d.totemSetAt = type(d.totemSetAt) == "table" and d.totemSetAt or {}
     local now = GetTime and GetTime() or 0
     local n = 0
     for k, v in pairs(set) do
@@ -3287,7 +3290,7 @@ function RD.SetTotems(set)
         if slot and slot >= 1 and slot <= 4 then
             if v == false then d.totemSlots[slot] = nil
             elseif type(v) == "string" and v ~= "" then d.totemSlots[slot] = RD.TotemSpell(v) end
-            d.totemSetAt[slot] = now
+            RD.setAt[slot] = now
             n = n + 1
         end
     end

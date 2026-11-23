@@ -15535,8 +15535,15 @@ do
         local okF, why = BiSHealingAPI.SetTotems({ air = "Grace of Air Totem" })
         ok(okF == nil and why == "in a fight", "in a fight: refused, nothing changes")
         STATE.inCombat = false
+        -- a PC restart: GetTime starts again near 0, so a set time kept in the save would block every totem after it
         _G.GetTotemInfo = keepGTI
-        NS.DB().radar.totemSetAt = nil
+        NS.DB().radar.totemSetAt = { [2] = 719057 }                  -- (Arn's save, 20 Nov: kept from before the restart)
+        RD.setAt = {}                                                -- (a new session: nothing sent in yet)
+        TOTEMS[2], STATE.totemName[2] = true, "Strength of Earth Totem III"
+        RD.LearnTimers()
+        ok(timers[3].totem == "Strength of Earth Totem" and NS.DB().radar.totemSetAt == nil,
+           "after a restart the earth box learns the dropped totem again (an old save's set time is dropped)", timers[3].totem)
+        STATE.totemName[2] = nil
         for k = 1, 4 do TOTEMS[k] = keepT[k] end
         STATE.totemName[3] = nil
         NS.DB().radar.totemSlots = nil
