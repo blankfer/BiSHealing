@@ -175,10 +175,13 @@ function RV.Badge(button)
     end)
     RV.badges = (RV.badges or 0) + 1
     RV.buttons[#RV.buttons + 1] = button
-    local faced = NS.CU and NS.CU.FaceShow(button.bisFace, true) or false     -- (this one only: the others may be forbidden)
-    if faced then for _, part in ipairs(button.bisTag or {}) do NS.CU.Touch(part, "Hide") end end
+    pcall(function()                                         -- (never throw here: an error in initializeFrame refuses the slot)
+        local faced = NS.CU and NS.CU.FaceShow(button.bisFace, true) or false     -- (this one only: the others may be forbidden)
+        if faced then for _, part in ipairs(button.bisTag or {}) do NS.CU.Touch(part, "Hide") end end
+    end)
 end
 RV.FACE_PX = 20
+RV.TRIES = 3
 RV.buttons = {}
 --- The cue card's sound for Revelation, once per CU.EVERY (the button's showing, the combat text, or the read aura).
 function RV.Speak()
@@ -210,7 +213,7 @@ function RV.Icon()
     local EN, FA = NS.EN, NS.FA
     local q = EN and EN.heads and EN.heads.rip
     if not (q and FA and FA.Available and FA.Available() and FA.AddSlot) then return nil end
-    if fight() then return nil end
+    if fight() or RV.gaveUp then return nil end
     local ok, c = pcall(CreateFrame, "AuraContainer", nil, q, "CustomAuraContainerTemplate")
     if not ok or not c then RV.iconSeen = "refused" return nil end
     c:SetAllPoints(q)
@@ -218,11 +221,34 @@ function RV.Icon()
     if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 4) end
     c:SetUnit("player")
     RV.host = q
-    local slot = FA.AddSlot(c, "BiSHealRevelation", "HELPFUL", {
-        candidateFilters = { includeSpellIDs = RV.ICON_IDS },
-        initializeFrame = RV.Badge,
-    })
-    if not slot then RV.iconSeen = "no slot" return nil end
+    -- A REFUSED SLOT STILL HANDS ITS BUTTONS OVER (22 Nov 2026, Arn: "crit is still there and i dont have relevation buff"; his
+    -- /bish reveal: "icon no slot ... game's button: 1: SHOWN / 2: SHOWN"): the client made the buttons, called our
+    -- initializeFrame, then said no - and nothing ever hid them, so CRIT stood there for good. Now: a fresh key each container
+    -- (a key the client already knows may be the refusal), the refused container is switched off and hidden with whatever it
+    -- handed over, and after RV.TRIES refusals we stop asking (the word of our own, RV.Word, is the road then).
+    RV.made = (RV.made or 0) + 1
+    local before = #RV.buttons
+    local why
+    local opts = { candidateFilters = { includeSpellIDs = RV.ICON_IDS }, initializeFrame = RV.Badge }
+    local slot
+    if c.AddAuraSlot then
+        RV.slotKey = "BiSHealRevelation" .. RV.made
+        local fine, got = pcall(c.AddAuraSlot, c, RV.slotKey, "HELPFUL", opts)
+        if fine and got then slot = got else why = fine and "no answer" or tostring(got) end
+    end
+    if not slot and FA.AddSlot then RV.slotKey = "BiSHealRevelationG" .. RV.made slot = FA.AddSlot(c, RV.slotKey, "HELPFUL", opts) end
+    if not slot then
+        if c.SetEnabled then pcall(c.SetEnabled, c, false) end
+        pcall(c.Hide, c)
+        for i = #RV.buttons, before + 1, -1 do
+            local b = table.remove(RV.buttons, i)
+            if b and b.Hide then pcall(b.Hide, b) end
+        end
+        RV.fails = (RV.fails or 0) + 1
+        RV.gaveUp = RV.fails >= RV.TRIES
+        RV.iconSeen, RV.slotWhy = "no slot", why
+        return nil
+    end
     if c.SetEnabled then c:SetEnabled(true) end
     RV.container, RV.iconSeen = c, "built"
     RV.look = NS.CU and NS.CU.Look and NS.CU.Look("crit") or nil
@@ -305,7 +331,7 @@ function RV.Status()
     local pas = {}
     for id in pairs(d.passive) do pas[#pas + 1] = tostring(id) end
     local line = string.format("reveal: up %s | icon %s | the buff's id %s | passive %s | last read: %s | combat text: %s | game's button: %s", tostring(RV.Up()),
-        tostring(RV.iconSeen or "not built"),
+        tostring(RV.iconSeen or "not built") .. (RV.slotWhy and (" (" .. RV.slotWhy .. ")") or "") .. (RV.gaveUp and ", stopped asking" or ""),
         tostring(d.buff or "not seen yet"), #pas > 0 and table.concat(pas, ", ") or "none", RV.seen or "nothing yet",
         RV.seenText or "nothing heard", RV.ButtonSays())
     if NS.Print then NS.Print(line) end

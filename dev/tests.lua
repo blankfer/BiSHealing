@@ -17163,7 +17163,7 @@ do
     RV.Paint()
     local c = RV.container
     ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
-    local rs = c.slots.BiSHealRevelation
+    local rs = c.slots[RV.slotKey]
     ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418] and rs.opts.candidateFilters.includeSpellIDs[1323377]
        and rs.opts.candidateFilters.includeSpellIDs[1323400] and rs.opts.candidateFilters.includeSpellIDs[1323419]
        and not rs.opts.candidateFilters.includeSpellIDs[1248806], "its one slot: Revelation's buff for every class (shaman, priest, druid, paladin...), never the passive")
@@ -17196,7 +17196,7 @@ do
         local function hand()
             local b = CreateFrame("Button")
             b.Icon = b:CreateTexture()
-            RV.container.slots.BiSHealRevelation.opts.initializeFrame(b)
+            RV.container.slots[RV.slotKey].opts.initializeFrame(b)
             return b
         end
         CU.SetLook("crit", "icon")
@@ -17226,7 +17226,7 @@ do
            tostring(RV.container ~= c1) .. " " .. tostring(c1:IsShown()) .. " " .. tostring(RV.container and RV.container.enabled) .. " " .. #RV.buttons)
         local btn2 = CreateFrame("Button")
         btn2.Icon = btn2:CreateTexture()
-        okL, why = pcall(RV.container.slots.BiSHealRevelation.opts.initializeFrame, btn2)
+        okL, why = pcall(RV.container.slots[RV.slotKey].opts.initializeFrame, btn2)
         ok(okL and btn2.bisFace.sq:IsShown() and not btn2.bisCrit:IsShown(), "its new button wears the pick", tostring(why))
         local looked = 0
         RV.container.UpdateAllAuras = function() looked = looked + 1 end
@@ -17243,6 +17243,42 @@ do
     ON[1248808] = 15
     RV.Paint()
     ok(not fs:IsShown(), "with the game's badge built, our own word stays out (no second CRIT)")
+    ON[1248808] = nil
+    RV.Paint()
+    -- A REFUSED SLOT THAT HANDED ITS BUTTONS OVER (Arn, 22 Nov: "crit is still there and i dont have relevation buff";
+    -- /bish reveal: "icon no slot ... 1: SHOWN / 2: SHOWN")
+    do
+        local keepC, keepB, keepCF = RV.container, RV.buttons, _G.CreateFrame
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = nil, {}, 0, nil
+        local made = {}
+        _G.CreateFrame = function(kind, ...)
+            local f = keepCF(kind, ...)
+            if kind == "AuraContainer" then
+                made[#made + 1] = f
+                f.AddAuraSlot = function(self, key, filter, opts)
+                    local b = keepCF("Button") b.Icon = b:CreateTexture() b:Show()
+                    opts.initializeFrame(b)
+                    self.handed = b
+                    error("refused")
+                end
+                f.AddAuraGroup = nil
+            end
+            return f
+        end
+        RV.Paint()
+        ok(RV.container == nil and RV.iconSeen == "no slot" and RV.slotWhy and #RV.buttons == 0 and not made[1].handed:IsShown() and not made[1]:IsShown(),
+           "refused after handing a button over: that button and its container hidden, no CRIT standing for good", tostring(RV.slotWhy))
+        RV.Paint() RV.Paint() RV.Paint() RV.Paint()
+        ok(#made == RV.TRIES and RV.gaveUp and RV.Status():find("stopped asking", 1, true), "three refusals: it stops asking (no container a paint)", #made)
+        ON[1248808] = 15
+        RV.Paint()
+        ok(fs:IsShown(), "and our own CRIT word is the road: on with the buff")
+        ON[1248808] = nil
+        RV.Paint()
+        ok(not fs:IsShown(), "off without it")
+        _G.CreateFrame = keepCF
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = keepC, keepB, 0, nil
+    end
     ON[1248808] = nil
     local Cost = dofile("../_bisdev/dev/cost.lua")
     local n = Cost.Count(function() RV.Paint() end)
