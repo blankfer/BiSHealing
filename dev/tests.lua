@@ -16684,7 +16684,7 @@ do
     -- the G tag
     RD.SetSw("gtag", true)
     local g11 = spOf("raid11").deckTag
-    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 8, "group tags on: G3 in the corner",
+    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 12, "group tags on: G3 in the corner, 12 pt (Arn: \"group tags are so small\")",
        g11.group and g11.group.__text)
     ok(spOf("raid7").deckTag.group.__text == "G2", "the lifted tank too says his group")
     RD.SetSw("gtag", false)
@@ -16754,7 +16754,7 @@ do
                         parts[#parts + 1] = { L + RD.DECK_TAG.x, T - RD.DECK_TAG.y, L + RD.DECK_TAG.x + tag.text.__w, T - RD.DECK_TAG.y + 9, "name" }
                     end
                     if tag.group and tag.group:IsShown() then
-                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + 8, "gtag" }
+                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + RD.GTAG.size, "gtag" }
                         seen.gtag = true
                     end
                     if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then seen.name = true end

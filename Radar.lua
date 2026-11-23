@@ -2609,8 +2609,9 @@ RD.NAME_CUT = 4
 RD.NAME_LINE = 13                                   -- the name's line: RD.DECK_TAG.y down, 9 pt
 RD.EXTRA_NEED = 27                                  -- a bar this tall holds the line under the name (TAP, MANA TIDE)
 RD.ICON_MIN, RD.ICON_MAX = 16, 22
-RD.CORNER_W = 13                                    -- the group tag's (or the paw's) corner, taken off the name's width
-RD.GTAG = { size = 8, col = { 0.62, 0.66, 0.74, 1 } }
+RD.CORNER_W = 20                                    -- the group tag's (or the paw's) corner, taken off the name's width
+-- (22 Nov 2026, Arn in a battleground: "group tags are so small" - 8 pt grey read as a dash: now 12 pt in gold)
+RD.GTAG = { size = 12, col = { 1.00, 0.83, 0.30, 1 } }
 RD.MATE_WASH = { 1, 1, 1, 0.10 }
 --- One icon size for the whole deck: scaled with the smallest box (`minW`), never under 16 or over 22 px.
 function RD.IconPx(minW)
