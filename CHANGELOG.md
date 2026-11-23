@@ -1,5 +1,10 @@
 # BiS Healing
 
+## 1.9.1
+
+- **Double-click the deck's bottom-right corner** to put it back at 100% and its own width (out of a fight).
+- **Fixed: a totem box could stop learning after a restart** (it stayed on the old totem, like Earthbind). Totems set by BiS Tools now count for this session only.
+
 ## 1.9.0
 
 - **BiS Cues: one card for every cue.** A BiS CUES button under the deck's switches opens a card where each cue gets its look (a word, the spell's icon or a turning 3D model), its sound and its voice, in the order you like. Only your class's cues are listed. Share your setup with an export string; an offline page in the addon folder (Explorer) makes one too.
