@@ -3,7 +3,7 @@
 ## Category: |cffb980ffBiS>|rAddons
 ## Notes: Click-cast healing cells for any healer. The client draws what it will not let an addon read.
 ## Author: Kumlust
-## Version: 1.8.0
+## Version: 1.9.0
 ## OptionalDeps: BiSTheme, Blizzard_AuraContainer
 ## SavedVariables: BiSHealingDB
 ## SavedVariablesPerCharacter: BiSHealingCharDB
@@ -40,7 +40,15 @@ Radar.lua
 Overheal.lua
 # the engineer's boxes as health bars (class colour, range dim, the heal ghost)
 Engineer.lua
+# the class effects on the deck (Light's Vigil burst, Prayer of Mending hops, Prayer of Healing pulse, Wild Growth bloom), off by default
+Effects.lua
 MiniBars.lua
+# a warlock hurting himself (Hellfire = the burning bar, Life Tap = the TAP tag), on his deck box
+Burn.lua
+# Revelation (the weapon enchant's proc: your next spell crits) = a gold CRIT on the synergy bar
+Reveal.lua
+# BiS Cues: one card for every cue - its look, its sound, its place in the cue row; the import string
+Cues.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets
@@ -49,6 +57,9 @@ Rhythm.lua
 BlackBox.lua
 # healing with a controller: the D-pad lights one person, A/B/X/Y are your binds on them (off by default)
 PadHeal.lua
+# Shift over the deck's CALL: every Call and its totems
+CallPeek.lua
+Mvp.lua
 # last before the UI-only files: BiSHealingAPI, for other addons (playbook 5a)
 API.lua
 

@@ -225,10 +225,23 @@ FG.DECK_SIZES = { cell = FRAME_W, row = FRAME_H + NAME_BAND, tank = FRAME_H + NA
 --- FG.TOP_SPLIT the top row splits: the tanks on their own row, the target pair on the next (Ellesmere's width, Arn: "we gotta
 --- be able to go down to that size").
 FG.TOP_SPLIT = 200
-function FG.DeckPlace(nTanks, nRest, party, m, W, noTarget)
+--- `noTankRow` (21 Nov 2026, BiS Cues sheet 6, the sort switch): a sort other than "tanks, then groups" lifts nobody, so
+--- there is no tank row at all - the target pair (if on) is the top row alone, in halves. A raid goes to FG.DeckBlocks
+--- (each raid group a fixed block of five); a party keeps the rows below, exactly as before.
+function FG.DeckPlace(nTanks, nRest, party, m, W, noTarget, noTankRow)
     m = m or FG.DECK_SIZES
     local cell, P = m.cell, m.gap
     W = W or (5 * cell + 4 * P)
+    if not party then
+        -- A RAID: the people as blocks of five, in order (FG.DeckBlocks); rest[i] = the i-th spot, block by block
+        local blocks = {}
+        for b = 1, math.ceil(nRest / 5) do blocks[b] = math.min(5, nRest - (b - 1) * 5) end
+        local pl = FG.DeckBlocks(nTanks, blocks, m, W, noTarget, false, noTankRow)
+        pl.rest = {}
+        for b = 1, #blocks do for s = 1, blocks[b] do pl.rest[#pl.rest + 1] = pl.blocks[b].spots[s] end end
+        return pl
+    end
+    if noTankRow and nTanks == 0 then return FG.DeckPlaceSplit(0, nRest, party, m, W, noTarget, true) end
     if noTarget or W < FG.TOP_SPLIT then return FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget) end
     -- THE TOP ROW IN EQUAL SHARES (Arn, 15 Nov: "as wide as the boxes need to fit, so for us thats 3 boxes so thats how wide
     -- each box gets"): the tanks, your target and its target split the row evenly - one tank = thirds, two = quarters. No
@@ -263,16 +276,16 @@ end
 
 --- The top row as its own row of tanks (no tank: one empty tank's place), the target pair - unless switched off - on the
 --- row under it at `m.pair` (or the people's row height), then everyone as DeckPlace lays them.
-function FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget)
+function FG.DeckPlaceSplit(nTanks, nRest, party, m, W, noTarget, noTankRow)
     local cell, P = m.cell, m.gap
     local n = math.max(nTanks, 1)
     local bw = math.floor((W - (n - 1) * P) / n)
     local tanks = {}
     for i = 1, nTanks do tanks[i] = { x = (i - 1) * (bw + P), y = 0, w = (i == n) and (W - (i - 1) * (bw + P)) or bw, h = m.tank } end
-    local y = m.tank + P
+    local y = (noTankRow and nTanks == 0) and 0 or (m.tank + P)     -- no tank row at all: the pair (or the people) on top
     local target, tot, box
     if not noTarget then
-        local ph = m.pair or m.row
+        local ph = m.pair or ((noTankRow and nTanks == 0) and m.tank or m.row)   -- on top: the tank row's height
         local hw = math.floor((W - P) / 2)
         target = { x = 0, y = y, w = hw, h = ph }
         tot = { x = hw + P, y = y, w = W - hw - P, h = ph }
@@ -301,6 +314,69 @@ function FG.PerRow(W, bw, P, raid)
     local per = math.max(1, math.floor((W + P) / (bw + P)))
     if raid then per = (per >= 10) and 10 or 5 end
     return per
+end
+
+--[[ A RAID AS FIXED BLOCKS (21 Nov 2026, BiS Cues sheet 6, Arn's "fix": "today a row is not always a group: lifting a tank
+  or a group of 3 shifts everyone after it"). Each block is FIVE spots wide (or tall) whatever it holds, so a row (or a
+  column) is always one block - one raid group - and a missing person is an empty spot, never a shift. The top row as
+  FG.DeckPlace makes it (the tanks, your target and its target; split under FG.TOP_SPLIT; none with `noTankRow`).
+    ROWS (`cols` false): each block a row of five; as many blocks side by side as fit at the boxes' own width (m.cell),
+         spread evenly over as few lines as they need, FG.BLOCK_GAP apart.
+    COLUMNS (`cols` true): each block a column of five boxes, as many columns side by side as fit at m.cell (Arn: "the
+         window's width decides how many groups sit side by side"), evenly spread.
+  A box is never under FG.BOX_MIN_W wide: at the floor the gap inside a block closes to make room (118 = 5 x 22 + 4 x 2).
+  `blocks` = how many spots each block holds (a number each, 5 at most). Pure: numbers in, rectangles out. ]]
+FG.BLOCK_GAP = 6
+FG.BOX_MIN_W = 22
+function FG.DeckBlocks(nTanks, blocks, m, W, noTarget, cols, noTankRow)
+    m = m or FG.DECK_SIZES
+    local P = m.gap
+    W = W or (5 * m.cell + 4 * P)
+    local top
+    if noTarget or W < FG.TOP_SPLIT or (noTankRow and nTanks == 0) then
+        top = FG.DeckPlaceSplit(nTanks, 0, false, m, W, noTarget, noTankRow)
+    else
+        top = FG.DeckPlace(nTanks, 0, true, m, W, noTarget)     -- the top row in equal shares, as a party's
+    end
+    local y0 = 0
+    for _, r in ipairs(top.tanks) do y0 = math.max(y0, r.y + r.h + P) end
+    if top.target then y0 = math.max(y0, top.target.y + top.target.h + P) end
+    local n, G = #blocks, FG.BLOCK_GAP
+    local out, y = {}, y0
+    if n > 0 then
+        local minW = cols and m.cell or (5 * m.cell + 4 * P)
+        local per = math.max(1, math.min(n, math.floor((W + G) / (minW + G))))
+        local lines = math.ceil(n / per)
+        per = math.ceil(n / lines)
+        local bw = math.floor((W - (per - 1) * G) / per)
+        local lineH = cols and (5 * m.row + 4 * P) or m.row
+        -- the gap inside a block: closed at the floor so five boxes stay at least FG.BOX_MIN_W
+        local Pi = P
+        if not cols and math.floor((bw - 4 * Pi) / 5) < FG.BOX_MIN_W then
+            Pi = math.max(0, math.floor((bw - 5 * FG.BOX_MIN_W) / 4))
+        end
+        for b = 1, n do
+            local c, ln = (b - 1) % per, math.floor((b - 1) / per)
+            local bx = c * (bw + G)
+            local w = (c == per - 1) and (W - bx) or bw             -- the last block of a line reaches the window's edge
+            local by = y0 + ln * (lineH + (cols and G or P))
+            local blk = { x = bx, y = by, w = w, h = lineH, spots = {}, n = blocks[b] }
+            for s = 1, 5 do
+                if cols then
+                    blk.spots[s] = { x = bx, y = by + (s - 1) * (m.row + P), w = w, h = m.row }
+                else
+                    local sw = math.floor((w - 4 * Pi) / 5)
+                    local sx = bx + (s - 1) * (sw + Pi)
+                    blk.spots[s] = { x = sx, y = by, w = (s == 5) and (bx + w - sx) or sw, h = m.row }
+                end
+            end
+            out[b] = blk
+            y = by + lineH + P
+        end
+    end
+    local h = math.max(0, y - P)
+    if n == 0 then h = math.max(0, y0 - P) end
+    return { tanks = top.tanks, target = top.target, tot = top.tot, box = top.box, blocks = out, w = W, h = h }
 end
 
 --[[ THE ENGINEER'S PLACES (15 Nov 2026, Arn: "if our deck is 16:9 engineering is 9:16" - picked A from the mockup, then
