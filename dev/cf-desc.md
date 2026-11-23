@@ -1,7 +1,12 @@
-# BiS Healing — CurseForge page text (1.7.0)
+# BiS Healing — CurseForge page text (1.9.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.7.0 text (22 Nov, 1.9.0): "The deck" - the heal cue is a word now; a warlock burning himself (Hellfire,
+Life Tap), Revelation's CRIT, raids (group tags, the sort, groups as columns, boxes that drop the extras first), the
+CALL button's Shift panel, our MVP in a battleground. A new section after it: "BiS Cues: your cues, your way" (the cue
+card, the export string, the class effects).
 
 Changed since the 1.6.1 text (17 Nov, 1.7.0): "The deck" gains the heal cues (Riptide / Oath of Light / Light's Vigil /
 Swiftmend in the middle of the bar), the synergy bar, DEAD / OFFLINE / AFK, and the top strip as the grab band; the
@@ -157,15 +162,31 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
 - **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
 - **Mana Tide, quietly:** one click drops it; click again to ping the totem so your group knows where to stand. Nothing goes in chat. Other BiS Healing users see a tag under your name.
-- **Heal cues:** the middle of a person's bar carries one white-edged icon that says heal them now, with this - **Riptide** on whoever has yours (start the Chain Heal there), **Holy Light** on a paladin's Oath of Light, **Holy Shock** on Light's Vigil, **Swiftmend** on a druid's Rejuvenation or Regrowth while it's ready. On every box that person is in.
+- **Heal cues:** the middle of a person's bar says heal them now, with this - **Chain Heal** on whoever has your Riptide, **Holy Light** on a paladin's Oath of Light, **Holy Shock** on Light's Vigil, **Swiftmend** on a druid's Rejuvenation or Regrowth while it's ready. On every box that person is in.
+- **A warlock hurting himself:** Hellfire shows as a fire under his name with the game's own countdown, and his box flashes; Life Tap shows a **TAP** tag.
+- **Revelation:** a gold **CRIT** on the synergy bar while the enchant says your next heal will crit.
 - **The synergy bar** on top: how many of your casts still land before that window closes, counted from your own cast time, haste and lag.
 - **DEAD, OFFLINE, AFK** across the bar, in dark red, grey and white.
-- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL, and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
+- **Raids:** a **G1, G2...** tag in each box's corner, sort by tanks, group, class or health, groups as rows or columns - and when the boxes get small, the extras go first and the health bar stays.
+- **In a battleground:** a gold **MVP** square on the box of your side's best healer and best killer (with BiS Tools).
+- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL (hold **Shift** over CALL to see every Call with its totems, and click one to make CALL drop that one), and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
 - **The black box** along the bottom.
 - **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
 - **Move it** by its top strip; **resize** by dragging the bottom-right corner (Shift-drag for width). Out of a fight.
 
 Pick **the deck** in the options' look row. It and classic are the two looks.
+
+## BiS Cues: your cues, your way
+
+The **BiS CUES** button under the deck's switches opens one card for every cue - Hellfire, Life Tap, Revelation and the heal cues:
+
+- **Its look:** a word, the spell's icon, or a turning 3D model.
+- **Its sound and its voice:** a game sound, the spell or the person's name spoken, or nothing.
+- **The order** the cues stand in, and which are on. Only your class's cues are listed.
+- **Share it:** EXPORT gives a string, IMPORT takes one. An offline page in the addon's Explorer folder makes one too.
+- **Class effects**, each its own switch: a paladin's **Light's Vigil burst**, a priest's **Prayer of Mending hops** and **Prayer of Healing pulse**, a druid's **Wild Growth bloom** - drawn across the boxes your heal reached.
+
+Every cue starts off for a new player.
 
 ## Heal with a controller
 
