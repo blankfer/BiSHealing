@@ -204,6 +204,7 @@ function RV.Relook(fresh)
         RV.Icon()
     end
     if not fight() then RV.look = look end
+    if RV.PaintGhost then RV.PaintGhost(not (NS.RD and NS.RD.Sw) or NS.RD.Sw("crit")) end
 end
 function RV.Icon()
     if RV.container then return RV.container end
@@ -236,10 +237,79 @@ function RV.Refresh()
     local c = RV.container
     if c and c.UpdateAllAuras and not fight() then pcall(c.UpdateAllAuras, c) end
 end
+--[[ ITS PLACE, ALWAYS (22 Nov 2026, Arn: "the crit always show even without revelation"): a dim CRIT tag of our own in
+  the middle of the synergy bar while the cue is on - the place where the lit one comes. It sits UNDER the game's button
+  (a lower frame level), so when the client shows Revelation its gold badge covers it; nothing of ours decides that.
+  Plain textures on a plain frame: shown and hidden in a fight too. An icon or model look gets the spell's icon, greyed. ]]
+RV.GHOST_A = 0.35
+function RV.Ghost()
+    local EN = NS.EN
+    local q = EN and EN.heads and EN.heads.rip
+    if not q then return nil end
+    if q.bisGhost then return q.bisGhost end
+    local B, c = RV.BADGE, RV.COL
+    local g = CreateFrame("Frame", nil, q)
+    g:SetSize(B.w, B.h)
+    g:SetPoint("CENTER", q, "CENTER", 0, 0)
+    local lvl = q.GetFrameLevel and q:GetFrameLevel()
+    if type(lvl) == "number" and g.SetFrameLevel then g:SetFrameLevel(lvl + 3) end   -- (over the bar, under the game's +4)
+    g.tag = {}
+    local bg = g:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(g)
+    bg:SetColorTexture(B.bg[1], B.bg[2], B.bg[3], B.bg[4])
+    g.tag[1] = bg
+    for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", 0, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", 0, 1 },
+                         { "TOPLEFT", "BOTTOMLEFT", 1, 0 }, { "TOPRIGHT", "BOTTOMRIGHT", 1, 0 } }) do
+        local t = g:CreateTexture(nil, "BORDER")
+        t:SetColorTexture(c[1], c[2], c[3], RV.GHOST_A)
+        t:SetPoint(e[1], g, e[1], 0, 0)
+        t:SetPoint(e[2], g, e[2], 0, 0)
+        if e[3] > 0 then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+        g.tag[#g.tag + 1] = t
+    end
+    local fs = g:CreateFontString(nil, "OVERLAY")
+    fs:SetFont("Fonts\\ARIALN.TTF", B.size, "OUTLINE")
+    fs:SetPoint("CENTER", g, "CENTER", 0, 0)
+    fs:SetTextColor(c[1], c[2], c[3], RV.GHOST_A)
+    fs:SetText(RV.WORD)
+    g.word = fs
+    g.tag[#g.tag + 1] = fs
+    local ic = g:CreateTexture(nil, "ARTWORK")
+    ic:SetSize(RV.FACE_PX, RV.FACE_PX)
+    ic:SetPoint("CENTER", g, "CENTER", 0, 0)
+    if ic.SetTexCoord then ic:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, tex = pcall(C_Spell.GetSpellTexture, RV.CLASS_IDS[1])
+        if ok and tex then pcall(ic.SetTexture, ic, tex) end
+    end
+    if ic.SetDesaturated then ic:SetDesaturated(true) end
+    ic:SetAlpha(RV.GHOST_A)
+    ic:Hide()
+    g.icon = ic
+    q.bisGhost = g
+    return g
+end
+--- Show or hide its place: the cue on = always there; its look follows the card (the word = the tag, else the icon).
+function RV.PaintGhost(on)
+    local g = on and RV.Ghost() or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.bisGhost)
+    if not g then return false end
+    if not on then if g.bisState ~= "off" then g:Hide() g.bisState = "off" end return false end
+    local look = NS.CU and NS.CU.Look and NS.CU.Look("crit") or "word"
+    local word = look == nil or look == "word"
+    local state = word and "word" or "icon"
+    if g.bisState == state then return true end                  -- (only a change touches it: the pull's paints stay cheap)
+    for _, part in ipairs(g.tag) do if word then part:Show() else part:Hide() end end
+    if word then g.icon:Hide() else g.icon:Show() end
+    g:Show()
+    g.bisState = state
+    return true
+end
+
 --- Paint it: shown while Revelation is on you.
 function RV.Paint()
     local on = not (NS.RD and NS.RD.Sw) or NS.RD.Sw("crit")   -- (the deck's switch, RD.SW "crit")
     if on then RV.Icon() end
+    RV.PaintGhost(on)
     local c = RV.container
     if c and c.bisOn ~= on and not fight() and c.SetEnabled then pcall(c.SetEnabled, c, on) c.bisOn = on end
     if not on then
@@ -253,6 +323,8 @@ function RV.Paint()
     local fs = (up or (NS.EN and NS.EN.heads and NS.EN.heads.rip and NS.EN.heads.rip.rip and NS.EN.heads.rip.rip.crit)) and RV.Word()
     if not fs then return up end
     if up and not RV.container then fs:Show() else fs:Hide() end   -- (the game's badge, when built, is the CRIT)
+    local g = NS.EN.heads.rip.bisGhost
+    if g then local hide = up and not RV.container if g.bisHid ~= hide then g.bisHid = hide g:SetAlpha(hide and 0 or 1) end end   -- (our own lit word there: no dim one under it)
     return up
 end
 

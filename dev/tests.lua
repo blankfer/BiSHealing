@@ -17135,6 +17135,22 @@ do
     ok(fs and fs:IsShown() and fs:GetText() == "CRIT", "a gold CRIT in the middle of the synergy bar")
     ON[1248808] = nil
     ok(RV.Paint() == false and not fs:IsShown(), "spent: the word goes")
+    -- ITS PLACE, ALWAYS (Arn, 22 Nov: "the crit always show even without revelation")
+    local g = q.bisGhost
+    ok(g and g:IsShown() and g:GetAlpha() == 1 and g.word:GetText() == "CRIT" and g.word:IsShown() and not g.icon:IsShown(),
+       "no Revelation: a dim CRIT still stands in its place")
+    ON[1248808] = 15
+    RV.Paint()
+    ok(fs:IsShown() and g:GetAlpha() == 0, "our own lit word there: no dim one under it")
+    ON[1248808] = nil
+    RV.Paint()
+    ok(g:GetAlpha() == 1, "spent: the dim one again")
+    NS.CU.DB().on.crit = false
+    RV.Paint()
+    ok(not g:IsShown(), "the cue off: no place either")
+    NS.CU.DB().on.crit = true
+    RV.Paint()
+    ok(g:IsShown(), "on again: there")
     ON[1248808] = "secret"
     ok(RV.Paint() == true and fs:IsShown(), "in a fight, a hidden answer about the known buff: up (a missing one answers nil)")
     ON[1248808] = nil
@@ -17163,6 +17179,7 @@ do
     RV.Paint()
     local c = RV.container
     ok(RV.iconSeen == "built" and c.unit == "player" and c.enabled, "a container on you, on the synergy bar", RV.iconSeen)
+    ok(q.bisGhost:IsShown() and q.bisGhost:GetFrameLevel() < c:GetFrameLevel(), "the dim CRIT under the game's button: its badge covers it when the buff comes")
     local rs = c.slots.BiSHealRevelation
     ok(rs and rs.filter == "HELPFUL" and rs.opts.candidateFilters.includeSpellIDs[1323418] and rs.opts.candidateFilters.includeSpellIDs[1323377]
        and rs.opts.candidateFilters.includeSpellIDs[1323400] and rs.opts.candidateFilters.includeSpellIDs[1323419]
@@ -17202,6 +17219,7 @@ do
         CU.SetLook("crit", "icon")
         btn = hand()
         ok(btn.bisFace.sq:IsShown() and btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "the icon look: the spell's icon, no tag")
+        ok(q.bisGhost.icon:IsShown() and not q.bisGhost.word:IsShown(), "its place follows the look: the icon, greyed")
         CU.SetLook("crit", "model:198692")
         btn = hand()
         ok(btn.bisFace.model and btn.bisFace.model.__drawn == 198692 and not btn.bisFace.icon:IsShown() and not btn.bisCrit:IsShown(), "a model look: the fireball")
@@ -17209,6 +17227,7 @@ do
         CU.SetLook("crit", "word")
         btn = hand()
         ok(btn.bisCrit:IsShown() and not btn.bisFace.sq:IsShown(), "and back to the word")
+        ok(q.bisGhost.word:IsShown() and not q.bisGhost.icon:IsShown(), "and its place too")
         -- AS THE CLIENT IS (Arn's BugGrabber, 21 Nov): once made, what stands in its button is forbidden to us
         local c1 = RV.container
         local function forbid(o) for _, m in ipairs({ "Show", "Hide", "SetTexture", "SetModel", "ClearModel", "SetShown" }) do
