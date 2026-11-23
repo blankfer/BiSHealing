@@ -1,5 +1,16 @@
 # BiS Healing
 
+## 1.9.0
+
+- **BiS Cues: one card for every cue.** A BiS CUES button under the deck's switches opens a card where each cue gets its look (a word, the spell's icon or a turning 3D model), its sound and its voice, in the order you like. Only your class's cues are listed. Share your setup with an export string; an offline page in the addon folder (Explorer) makes one too.
+- **A warlock burning himself:** Hellfire shows as a 3D fire under his name with the game's own countdown, and his box flashes; Life Tap shows a TAP tag when the game shows his cast.
+- **Revelation:** a gold CRIT in the middle of the synergy bar while the enchant's proc says your next heal will crit.
+- **Class effects** (each its own switch, off to start): Light's Vigil burst, Prayer of Mending hops, Prayer of Healing pulse, Wild Growth bloom.
+- **Raids:** group tags (G1, G2...) in each box's corner, the sort (tanks, group, class, max health), groups as columns, and boxes that drop the extras first when they get small.
+- **The CALL button:** hold Shift over it to see every Call with its totems, and click one to make CALL drop that Call.
+- **In a battleground:** a gold MVP square on the box of our side's best healer and best killer (switch: PVP > Our MVP on their box; with BiS Tools' next version, 1.8).
+- **Fixed:** the heal cue word on a box is plain white on dark; heal cues end when your heal could no longer land in time.
+
 ## 1.8.0
 
 - **BiS Tools can set your deck's totems.** BiS Tools 1.6.0's SET DECK (on the combo list's TRY NEXT strip, or a right-click on a combo) sends that combo's totems to the deck's totem boxes, each under its element. Water is left alone. Out of a fight only.

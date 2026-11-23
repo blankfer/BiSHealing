@@ -16684,10 +16684,31 @@ do
     -- the G tag
     RD.SetSw("gtag", true)
     local g11 = spOf("raid11").deckTag
-    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 8, "group tags on: G3 in the corner",
+    ok(g11.group and g11.group:IsShown() and g11.group.__text == "G3" and g11.group.__size >= 12, "group tags on: G3 in the corner, 12 pt (Arn: \"group tags are so small\")",
        g11.group and g11.group.__text)
     ok(spOf("raid7").deckTag.group.__text == "G2", "the lifted tank too says his group")
     RD.SetSw("gtag", false)
+    -- OUR MVP ON THEIR BOX (Mvp.lua, 22 Nov 2026 - Arn: "in the healing frame we can show our mvp ... like how we mark who is hellfire")
+    do
+        local MV = NS.MV
+        local keepII, keepAPI = _G.IsInInstance, rawget(_G, "BiSToolsAPI")
+        local keepGUN = _G.GetUnitName
+        _G.GetUnitName = function(u) return u == "raid11" and "Mvpguy Surname" or "Other Person" end    -- (the suite's raid all shares one name)
+        local first = "Mvpguy"
+        _G.IsInInstance = function() return true, "pvp" end
+        _G.BiSToolsAPI = { BGMarks = function() return { inBG = true, mvps = { { name = first .. " Surname", what = "healer" } }, healers = {} } end }
+        ok(MV.Look() == 0, "the switch off (as it starts): no MVP square")
+        RD.SetSw("pvpmvp", true)
+        local tag = spOf("raid11").mvpTag
+        ok(MV.Look() == 1 and tag and tag:IsShown() and tag.text.__text == "MVP" and tag.what == "healer", "on, in a battleground: a gold MVP square on our best's box (by first name)", MV.shown)
+        _G.BiSToolsAPI = nil
+        ok(MV.Look() == 0 and not tag:IsShown(), "no BiS Tools: nothing, no error")
+        _G.BiSToolsAPI = { BGMarks = function() return { inBG = true, mvps = { { name = first .. " Surname", what = "killer" } }, healers = {} } end }
+        _G.IsInInstance = function() return false, "none" end
+        ok(MV.Look() == 0 and not tag:IsShown() and not MV.Arm(), "outside a battleground: gone, nothing ticking")
+        RD.SetSw("pvpmvp", false)
+        _G.IsInInstance, _G.BiSToolsAPI, _G.GetUnitName = keepII, keepAPI, keepGUN
+    end
     ok(not spOf("raid11").deckTag.group:IsShown(), "off again: gone")
 
     -- A FIGHT: the order is frozen; a sort picked in one waits for its end, and nothing secure is touched (the mock refuses)
@@ -16754,7 +16775,7 @@ do
                         parts[#parts + 1] = { L + RD.DECK_TAG.x, T - RD.DECK_TAG.y, L + RD.DECK_TAG.x + tag.text.__w, T - RD.DECK_TAG.y + 9, "name" }
                     end
                     if tag.group and tag.group:IsShown() then
-                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + 8, "gtag" }
+                        parts[#parts + 1] = { R - 2 - tag.group.__w, T - RD.DECK_TAG.y, R - 2, T - RD.DECK_TAG.y + RD.GTAG.size, "gtag" }
                         seen.gtag = true
                     end
                     if tag.text:IsShown() and tag.text.__text and tag.text.__text ~= "" then seen.name = true end
