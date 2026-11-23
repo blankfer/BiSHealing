@@ -234,9 +234,12 @@ function RV.Icon()
     if c.AddAuraSlot then
         RV.slotKey = "BiSHealRevelation" .. RV.made
         local fine, got = pcall(c.AddAuraSlot, c, RV.slotKey, "HELPFUL", opts)
-        if fine and got then slot = got else why = fine and "no answer" or tostring(got) end
+        -- A SLOT THAT ANSWERS NOTHING BUT HANDED ITS BUTTON OVER IS MADE (22 Nov 2026, Arn after the fix: "now revelation crit does not
+        -- show up"): the client may return nothing from AddAuraSlot; a button given to initializeFrame without an error means it took.
+        -- The old road then made a SECOND slot by AddAuraGroup on top - the two stuck buttons of /bish reveal.
+        if fine and (got or #RV.buttons > before) then slot = got or true else why = fine and "no answer" or tostring(got) end
     end
-    if not slot and FA.AddSlot then RV.slotKey = "BiSHealRevelationG" .. RV.made slot = FA.AddSlot(c, RV.slotKey, "HELPFUL", opts) end
+    if not slot and #RV.buttons == before and FA.AddSlot then RV.slotKey = "BiSHealRevelationG" .. RV.made slot = FA.AddSlot(c, RV.slotKey, "HELPFUL", opts) end
     if not slot then
         if c.SetEnabled then pcall(c.SetEnabled, c, false) end
         pcall(c.Hide, c)

@@ -17276,6 +17276,28 @@ do
         ON[1248808] = nil
         RV.Paint()
         ok(not fs:IsShown(), "off without it")
+        -- a slot that answers nothing but hands its button over: made (Arn: "now revelation crit does not show up")
+        RV.container, RV.buttons, RV.fails, RV.gaveUp = nil, {}, 0, nil
+        made = {}
+        local groups = 0
+        _G.CreateFrame = function(kind, ...)
+            local f = keepCF(kind, ...)
+            if kind == "AuraContainer" then
+                made[#made + 1] = f
+                f.AddAuraSlot = function(self, key, filter, opts)
+                    local b = keepCF("Button") b.Icon = b:CreateTexture() b:Show()
+                    opts.initializeFrame(b)
+                    self.handed = b
+                end
+                f.AddAuraGroup = function() groups = groups + 1 end
+            end
+            return f
+        end
+        RV.Paint()
+        ok(RV.container == made[1] and RV.iconSeen == "built" and made[1].handed:IsShown() and #RV.buttons == 1 and groups == 0,
+           "no answer, but its button handed over: the slot is made, kept, and no second one on top", tostring(RV.iconSeen))
+        RV.Paint()
+        ok(#made == 1, "and no new container a paint")
         _G.CreateFrame = keepCF
         RV.container, RV.buttons, RV.fails, RV.gaveUp = keepC, keepB, 0, nil
     end
