@@ -14376,6 +14376,81 @@ do
             ok(RD.OnCast("player", 36936) == "recall" and not RD.TotemsUp() and RD.slotUp[2] == false, "recalled mid-fight: every slot empty")
             STATE.inCombat, RD.inFight = false, false
             RD.slotUp, RD.slotSeen, RD.lifeSlot = {}, {}, nil
+            -- EVERY CALL AND ITS TOTEMS, with Shift over CALL (Arn, 22 Nov: "if i hold shift while hovering over the call icon can you
+            -- show me the 3 call buttons with what totems it has set up")
+            do
+                local CP = NS.CP
+                local kb, kg, kn, ke, kl, kbt = rawget(_G, "GetMultiCastBarIndex"), rawget(_G, "GetActionInfo"), C_Spell.GetSpellName, RD.call.IsVisible, RD.call.GetLeft, RD.call.GetBottom
+                BOOK[52] = { name = "Call of the Spirits", rank = "" }
+                NS.FM.BookChanged()
+                RD.Arm()
+                local AT = { [133] = 1, [134] = 2, [135] = 3, [136] = 4, [141] = 5 }
+                local TN = { "Flametongue Totem II", "Strength of Earth Totem III", "Mana Spring Totem", "Windfury Totem", "Magma Totem" }
+                _G.GetMultiCastBarIndex = function() return 12 end
+                _G.GetActionInfo = function(x) if AT[x] then return "spell", AT[x], "spell" end end
+                C_Spell.GetSpellName = function(id) return TN[id] end
+                ok(RD.call.tip[2]:find("Hold Shift", 1, true), "CALL's words say it")
+                local sets = CP.Sets()
+                ok(#sets == 3 and sets[1].totems[1].name == "Flametongue" and sets[1].totems[2].name == "Strength of Earth" and sets[1].totems[3].name == "Mana Spring" and next(sets[2].totems) == nil
+                   and sets[3].totems[1].name == "Magma", "the three Calls, what stands in each", #sets)
+                RD.call.IsVisible = function() return true end
+                RD.call.GetLeft = function() return 300 end
+                RD.call.GetBottom = function() return 200 end
+                local enter = RD.call:GetScript("OnEnter")
+                RD.call.__mouseOver, STATE.shift = true, false
+                enter(RD.call)
+                ok(not CP.frame or not CP.frame:IsShown(), "no Shift: nothing")
+                STATE.shift = true
+                enter(RD.call)
+                local f2 = CP.frame
+                ok(f2 and f2:IsShown() and f2.rows[1].name:GetText() == "Elements" and f2.rows[3].name:GetText() == "Spirits", "Shift over CALL: the panel", f2 and f2.rows[1].name:GetText())
+                f2.IsVisible = function(self) return self:IsShown() end
+                f2.GetLeft = function() return 250 end
+                f2.GetTop = function() return 199 end
+                CP.Show()
+                ok(CP.btn and CP.btn[3]:IsShown() and CP.btn[3]:GetAttribute("*macrotext1") == "/cast Call of the Spirits" and CP.btn[3].tip[2]:find("Fire: Magma", 1, true)
+                   and CP.btn[1].points[1][2] == UIParent, "each row a button that drops it; by numbers, hung on nothing of ours", CP.btn and CP.btn[3].tip and CP.btn[3].tip[2])
+                ok(not RD.frame.__secureKids or CP.btn[1]:GetParent() == CP.root, "(they stand on a root of their own)")
+                local tick = f2:GetScript("OnUpdate")
+                RD.call.__mouseOver, f2.__mouseOver, STATE.shift = false, true, false
+                tick(f2, 1)
+                ok(f2:IsShown(), "the mouse on the panel, Shift let go: it stays")
+                f2.__mouseOver = false
+                tick(f2, 1)
+                ok(not f2:IsShown() and not CP.btn[1]:IsShown(), "the mouse away: gone, the clicks with it")
+                -- Shift pressed while already there; let go again
+                RD.call.__mouseOver, STATE.shift = true, true
+                fire(CP.events, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+                ok(f2:IsShown(), "already over CALL: Shift brings it")
+                STATE.shift = false
+                fire(CP.events, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+                ok(not f2:IsShown(), "and takes it away")
+                -- a fight: nothing secure is touched, it only shows; a hidden bar shows what was read before
+                STATE.shift = true
+                enter(RD.call)
+                STATE.inCombat = true
+                ok(pcall(fire, CP.events, "PLAYER_REGEN_DISABLED") and not f2:IsShown(), "a pull while it is up: gone, no protected call")
+                _G.GetActionInfo = function() return nil end
+                ok(pcall(enter, RD.call) and f2:IsShown() and CP.Sets()[1].totems[1].name == "Flametongue", "in a fight: it shows, from what was read before it")
+                ok(f2:IsMouseEnabled() == false and CP.late == true, "and takes no click")
+                RD.call.__mouseOver = false
+                tick(f2, 1)
+                ok(not f2:IsShown(), "gone with the mouse")
+                STATE.inCombat = false
+                fire(CP.events, "PLAYER_REGEN_ENABLED")
+                ok(not CP.late and not CP.btn[1]:IsShown(), "after it the clicks are put away")
+                -- the switch
+                RD.call.__mouseOver = true
+                RD.SetSw("callpeek", false)
+                enter(RD.call)
+                ok(not f2:IsShown(), "switched off: nothing")
+                RD.SetSw("callpeek", true)
+                RD.call.__mouseOver, STATE.shift = false, false
+                _G.GetMultiCastBarIndex, _G.GetActionInfo, C_Spell.GetSpellName, RD.call.IsVisible, RD.call.GetLeft, RD.call.GetBottom = kb, kg, kn, ke, kl, kbt
+                BOOK[52] = nil
+                NS.FM.BookChanged()
+                RD.Arm()
+            end
             -- the engineer's view: their own line under the tools, the console a line taller
             local f = RD.frame
             ok(RD.ToggleView() == "console", "the engineer's view")
