@@ -530,6 +530,8 @@ local function hotIcon(auraButton)
     end
 end
 
+FA.HotIcon = hotIcon                    -- the client's icon + its countdown swipe, no border (Reveal.lua too)
+
 --- A fingerprint of what the containers were built for: the debug switch and every heal-over-time
 --- id. When it changes - the book filled in after login, a new rank learned, /bish hots - each
 --- cell's container is rebuilt; otherwise the one it has is only pointed at its unit.
