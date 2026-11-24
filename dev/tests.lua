@@ -17722,7 +17722,7 @@ do
             CU.DB().on.past = false
             HP.Paint(sp, true)
             ok(not h.container.enabled, "switched off in BiS Cues: the container stops")
-            ok(HP.Status():find("off", 1, true) and HP.Status():find("1 debuff", 1, true), "/bish past says what it watches", HP.Status())
+            ok(HP.Status():find("off", 1, true) and HP.Status():find("2 debuffs", 1, true), "/bish past says what it watches (Grievous Garrote + Spinning Glaive)", HP.Status())
             sp.heal.GetWidth = keepW
             sp.hp = keepHP
         end
@@ -17766,6 +17766,17 @@ do
                "the fight's end: a new debuff on party1 read, written down, guessed (heal past 80%)")
             ok(NS.HP.All()[990001] and NS.HP.All()[990001].learned and NS.HP.All()[1271761].pct == 0.9,
                "a learned line joins the heal-past lines; ours stay")
+            local DD = NS.DD
+            ok(DD and NS.HP.All()[1288524] and NS.HP.All()[1288524].pct == 0.9, "the known list's Spinning Glaive joins the 90% line")
+            ok(DD and DD.Of("nodispel")[1271351] and DD.Of("nodispel")[1271352] and DD.TANK_BUFFS[16177] and DD.TANK_BUFFS[14893],
+               "the known list: Hyjal's two marks are DON'T DISPEL; the tanks' armor procs are there")
+            local acts = { past = true, nodispel = true, dispel = true, reduce = true, noheal = true, watch = true }
+            local bad
+            for id, r in pairs(DD and DD.LIST or {}) do
+                if not acts[r.act] or type(r.name) ~= "string" or (r.act == "past" and not (r.pct and r.pct > 0 and r.pct < 1))
+                   or (r.act == "reduce" and not (r.cut and r.cut > 0 and r.cut <= 1)) then bad = id end
+            end
+            ok(DD and not bad, "every known row has a real action, a name, and its number", bad)
             DK.Sweep()
             ok(book[990001].n == 2, "seen again: counted, not written twice")
             STATE.inCombat = true

@@ -55,6 +55,7 @@ function HP.All()
     local all = {}
     local learned = NS.DK and NS.DK.Past and NS.DK.Past() or {}
     for id, d in pairs(learned) do all[id] = d end
+    for id, d in pairs((NS.DD and NS.DD.Of and NS.DD.Of("past")) or {}) do all[id] = d end   -- the known list (Debuffs.lua)
     for id, d in pairs(HP.DEBUFFS) do all[id] = d end
     return all
 end

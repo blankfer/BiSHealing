@@ -200,6 +200,7 @@ function DK.Report(max)
         local r = rows[i].row
         local act = DK.WORD[r.act or "watch"] or "-"
         if r.act == "past" and r.pct then act = act .. " " .. math.floor(r.pct * 100 + 0.5) .. "%" end
+        if NS.DD and NS.DD.LIST[rows[i].id] then act = act .. " (known)" end
         lines[#lines + 1] = ("%d %s [%s] %s x%d, %s%s"):format(rows[i].id, tostring(r.name or "?"), tostring(r.dtype or "-"),
             act, r.n or 1, tostring(r.where or "?"),
             r.shown == true and " - shows in a fight" or (r.shown == false and " - HIDDEN in a fight" or ""))
