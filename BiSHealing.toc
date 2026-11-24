@@ -49,6 +49,8 @@ Burn.lua
 Reveal.lua
 # BiS Cues: one card for every cue - its look, its sound, its place in the cue row; the import string
 Cues.lua
+# heal past the line: a debuff that wants them healed above a % - the line on the deck box's bar, the gap, the edge (BiS Cues)
+HealPast.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

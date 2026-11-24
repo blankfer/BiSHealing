@@ -2336,6 +2336,9 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "past" then
+        -- HEAL PAST THE LINE (HealPast.lua, 24 Nov 2026): on or off, and whether the client took the filter
+        Print(NS.HP and NS.HP.Status() or "heal past the line: not loaded")
     elseif msg == "cues" or msg:match("^cues ") or msg == "export" or msg:match("^import") then
         -- BiS Cues (Cues.lua): the card; the string out and in
         -- (the string is base64 - its capitals matter, so the import gets what was typed, not the lowered msg)

@@ -49,6 +49,10 @@ CU.LIST = {
     { key = "swift", name = "Swiftmend",   cat = "DRUID",      kind = "middle", spell = "Swiftmend", word = "Swiftmend",
       look = "word", sound = "off", say = "Swiftmend",
       tip = "Whoever carries your Rejuvenation or Regrowth while Swiftmend is ready." },
+    -- HEAL PAST THE LINE (HealPast.lua, 24 Nov 2026 - Arn picked sketch C): every healer's, so no class
+    { key = "past",  name = "Heal past the line", cat = "DEBUFFS", kind = "line", spell = 1271761, word = "90%",
+      look = "icon", sound = "off", say = "Heal past",
+      tip = "A debuff that wants them healed above a line (Grievous Garrote: 90%). The line on their bar, the gap you owe in red, the debuff's icon, the edge pulsing until they are past it." },
 }
 CU.BY = {}
 local CLASS_CAT = { SHAMAN = true, PALADIN = true, DRUID = true, PRIEST = true }

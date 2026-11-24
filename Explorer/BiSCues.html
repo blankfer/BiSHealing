@@ -251,14 +251,17 @@ var CUES = [
   { key: "vigil", name: "Light's Vigil", cat: "paladin", kind: "middle", word: "Holy Shock", say: "Holy Shock",
     sub: "Light's Vigil is up: Holy Shock is the payoff." },
   { key: "swift", name: "Swiftmend",     cat: "druid",   kind: "middle", word: "Swiftmend", say: "Swiftmend",
-    sub: "Swiftmend is ready on a box with your heal over time." }
+    sub: "Swiftmend is ready on a box with your heal over time." },
+  { key: "past",  name: "Heal past the line", cat: "debuffs", kind: "line", word: "90%", say: "Heal past",
+    sub: "A debuff that wants them healed above a line (Grievous Garrote: 90%): the line on their bar, the gap in red, the edge pulsing." }
 ];
 var CATS = [
   { key: "group",   label: "YOUR GROUP", colour: "#9482c9" },
   { key: "procs",   label: "YOUR PROCS", colour: "#ffd34d" },
   { key: "shaman",  label: "SHAMAN",     colour: "#2a6fdb" },
   { key: "paladin", label: "PALADIN",    colour: "#f48cba" },
-  { key: "druid",   label: "DRUID",      colour: "#ff7d0a" }
+  { key: "druid",   label: "DRUID",      colour: "#ff7d0a" },
+  { key: "debuffs", label: "DEBUFFS",    colour: "#e0a526" }
 ];
 var SORTS = ["tanks", "group", "class", "maxhp"];
 var P_GZ = "BiSCues1:", P_PLAIN = "BiSCues1p:";

@@ -17685,6 +17685,49 @@ do
        "a shaman's card: Riptide and the group cues, no Oath / Vigil / Swiftmend")
     CU.DB().order = { "hell", "tap", "crit", "oath", "vigil", "rip", "swift" }
     ok(CU.Move("rip", -1) and CU.Order()[3] == "rip", "the arrow steps over the paladin's cues (never seems to do nothing)", table.concat(CU.Order(), ","))
+    -- HEAL PAST THE LINE (Arn, 24 Nov: Grievous Garrote on a party member showed nothing; he picked sketch C)
+    do
+        local HP = NS.HP
+        ok(HP and CU.BY.past and CU.BY.past.kind == "line" and not CU.BY.past.class, "heal past the line: a cue row for every healer")
+        local keepOn = CU.DB().on.past
+        CU.DB().on.past = nil
+        ok(HP and not HP.On(), "off by default, as every cue")
+        local sp
+        for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit then sp = s break end end
+        ok(sp ~= nil, "a deck box to test on")
+        if HP and sp then
+            local keepHP = sp.hp
+            sp.hp = nil
+            HP.Paint(sp, true)
+            ok(not (sp.hp and sp.hp.container), "off: nothing built")
+            CU.DB().on.past = true
+            local keepW = sp.heal.GetWidth
+            sp.heal.GetWidth = function() return 102 end
+            HP.Paint(sp, true)
+            local h = sp.hp
+            local slot = h and h.container and h.container.slots["BiSHealPast" .. tostring(sp.i or "") .. "_90"]
+            ok(slot and slot.filter == "HARMFUL" and slot.opts.candidateFilters.includeSpellIDs[1271761]
+               and h.container.unit == sp.unit and h.container.enabled,
+               "on: one HARMFUL slot on the box's unit, Grievous Garrote's id - nothing read, the client draws it")
+            ok(h and math.abs(h.marks[0.9]:GetWidth() - 90) < 0.01, "the line at 90% of the bar", h and h.marks[0.9]:GetWidth())
+            ok(h and #h.lines[0.9] == 1 and #h.edges[0.9] == 4 and h.gap, "the client's button: the line, the gap and the four edges hang off it")
+            local lp = h.lines[0.9][1].points and h.lines[0.9][1].points[1]
+            ok(lp and lp[2] == h.marks[0.9] and lp[3] == "TOPRIGHT", "the line rides the 90% mark (it moves with the box's width)")
+            local gp = h.gap.points and h.gap.points[1]
+            ok(gp and gp[2] == h.e.bar:GetStatusBarTexture() and gp[3] == "TOPRIGHT", "the gap starts where their health ends")
+            ok(slot.clicks == false or slot.__mouse == false, "nothing to click on the bar")
+            sp.heal.GetWidth = function() return 202 end
+            NS.EN.Size(sp)
+            ok(math.abs(h.marks[0.9]:GetWidth() - 180) < 0.01, "a wider box: the line moves with it", h.marks[0.9]:GetWidth())
+            CU.DB().on.past = false
+            HP.Paint(sp, true)
+            ok(not h.container.enabled, "switched off in BiS Cues: the container stops")
+            ok(HP.Status():find("off", 1, true) and HP.Status():find("1 debuff", 1, true), "/bish past says what it watches", HP.Status())
+            sp.heal.GetWidth = keepW
+            sp.hp = keepHP
+        end
+        CU.DB().on.past = keepOn
+    end
     -- WHERE IT OPENS (Arn, 24 Nov: "it opens at the right and I already have my deck at the right"): toward the middle
     do
         local p = NS.RD.swPanel
@@ -17723,7 +17766,7 @@ do
     end
     CU.sel = "oath"
     CU.Toggle() CU.Toggle()
-    ok(CU.sel ~= "oath" and not c.order[5]:IsShown() and c.order[4]:IsShown(), "the card: four rows, a cue you cannot act on never chosen")
+    ok(CU.sel ~= "oath" and not c.order[6]:IsShown() and c.order[5]:IsShown(), "the card: five rows (heal past the line is everyone's), a cue you cannot act on never chosen")
     _G.UnitClass = function() return "Paladin", "PALADIN", 2 end
     seen = {}
     for _, k in ipairs(CU.Shown()) do seen[k] = true end
