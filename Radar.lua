@@ -6843,10 +6843,16 @@ function RD.ArmRes()
         b.ringIcon = true
         RD.SpellIcon(b, res)                          -- your res spell's own icon, the button's full size
     end
-    local macro = unit and ("/cast [@" .. unit .. ",help] " .. res) or nil
+    -- THE BOX'S OWN ROAD (23 Nov 2026, Arn: "i can click the frame and res the person but the button that is suppose to
+    -- choose the best person is not workin"): the res is the button's spell, cast on its unit - exactly what a dead box
+    -- does (Mouse.lua FM.ApplyTo, type = spell on the box's unit), which works live. The old macro carried [help], which
+    -- the box never asked. b.macro stays as words only, for change and for /bish status.
+    local macro = unit and ("/cast [@" .. unit .. "] " .. res) or nil
     if macro ~= b.macro then
-        b:SetAttribute("*type1", macro and "macro" or nil)
-        b:SetAttribute("*macrotext1", macro)
+        b:SetAttribute("*macrotext1", nil)
+        b:SetAttribute("*type1", macro and "spell" or nil)
+        b:SetAttribute("*spell1", macro and res or nil)
+        b:SetAttribute("unit", unit)
         b.macro = macro
     end
     if unit ~= b.unit then b.losUntil = nil end
@@ -6888,6 +6894,8 @@ function RD.ResOff()
     if not combat() then
         b:SetAttribute("*type1", nil)
         b:SetAttribute("*macrotext1", nil)
+        b:SetAttribute("*spell1", nil)
+        b:SetAttribute("unit", nil)
         b:EnableMouse(false)
         b.macro, b.unit = nil, nil
     end
