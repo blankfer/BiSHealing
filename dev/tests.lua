@@ -17768,16 +17768,14 @@ do
             ok(rs and rs.opts.candidateFilters.includeSpellIDs[16856], "Mortal Strike's icon in the row after the name")
             ok(sp.deckTag and sp.deckTag.dcGhost and d.row.points[1][2] == sp.deckTag.dcGhost and d.row.points[1][3] == "RIGHT",
                "the row starts where the name ends (an invisible copy of the name, no width)")
-            -- tank armor: tank boxes only
+            -- tank armor: on every box (Arn: "we can display those buffs on everyone")
             CU.DB().on.armor = true
             local keepRole = NS.RD.Role
             NS.RD.Role = function() return "damage" end
             DC.Paint(sp, true)
-            ok(not sp.dc.rowSlots.armor, "tank armor: not on a damage dealer's box")
-            NS.RD.Role = function() return "tank" end
-            DC.Paint(sp, true)
             ok(sp.dc.rowSlots.armor and sp.dc.rowSlots.armor.filter == "HELPFUL" and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[16177]
-               and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[14893], "a tank: Ancestral Fortitude / Inspiration from anyone (HELPFUL, not only yours)")
+               and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[14893],
+               "armor procs on anyone's box (a damage dealer's too), from anyone (HELPFUL, not only yours)")
             NS.RD.Role = keepRole
             -- mind control: the client's answer drives it
             CU.DB().on.mc = true
@@ -17869,6 +17867,27 @@ do
             C_Spell.GetSpellDescription = keepDesc
             for k in pairs(book) do book[k] = nil end
             for k, v in pairs(keepBook) do book[k] = v end
+        end
+    end
+    -- THE SWITCHES OPEN THE CARD (Arn, 24 Nov: "too many clicks to reach the cues window")
+    do
+        local p = NS.RD.swPanel
+        if p then
+            local keepPC, keepUC = p.GetCenter, UIParent.GetCenter
+            UIParent.GetCenter = function() return 960, 540 end
+            p.GetCenter = function() return 1500, 600 end
+            p:Hide()
+            if c:IsShown() then c:Hide() end
+            p:Show()
+            if p.__scripts.OnShow then p.__scripts.OnShow(p) end          -- (the kit's Show fires no OnShow; the client's does)
+            local cp = c.points[1]
+            ok(c:IsShown() and cp and cp[1] == "TOPRIGHT" and cp[2] == p, "the switches open: the cues card opens beside them, on the far side from the deck")
+            p:Hide()
+            if p.__scripts.OnHide then p.__scripts.OnHide(p) end
+            ok(not c:IsShown(), "the switches close: the card goes with them")
+            p.GetCenter, UIParent.GetCenter = keepPC, keepUC
+        else
+            ok(false, "the switches panel for the pairing test")
         end
     end
     -- WHERE IT OPENS (Arn, 24 Nov: "it opens at the right and I already have my deck at the right"): toward the middle

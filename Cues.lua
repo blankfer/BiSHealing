@@ -65,7 +65,7 @@ CU.LIST = {
     { key = "mc",     name = "Mind controlled", cat = "DEBUFFS", kind = "line", word = "MIND CONTROL", look = "word", sound = "off", say = "Mind control",
       tip = "A friend the game now lets you attack: MIND CONTROL across their bar. Not on the target boxes or pets." },
     { key = "armor",  name = "Tank armor",     cat = "DEBUFFS", kind = "line", word = "AF", look = "icon", sound = "off", say = "Armor",
-      tip = "Ancestral Fortitude / Inspiration on the tanks, whoever's crit gave it: the icon after the tank's name." },
+      tip = "Ancestral Fortitude / Inspiration, whoever's crit gave it: the icon after the name - on everyone (the tanks are who it is for)." },
 }
 CU.BY = {}
 local CLASS_CAT = { SHAMAN = true, PALADIN = true, DRUID = true, PRIEST = true }
@@ -1158,6 +1158,18 @@ function CU.Try()
     return CU.Say(CU.sel, "Tin", true)
 end
 
+--- Open the card beside the switches panel (the panel opened): its side toward the screen's middle.
+function CU.OpenBeside(p)
+    local c = CU.Card()
+    c:ClearAllPoints()
+    if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
+    else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
+    c:Show()
+    c.withPanel = true
+    CU.Paint()
+    return true
+end
+
 --- The drag's end: let go, and keep the spot (by the screen, never by the panel) for the next opening.
 function CU.EndDrag()
     local c = CU.card
@@ -1271,6 +1283,15 @@ function CU.HookPanel()
     RD.BuildSwitches = function(...)
         local had = RD.swPanel
         local p = build(...)
+        -- THE SWITCHES OPEN THE CARD TOO (Arn, 24 Nov: "too many clicks to reach the cues window, when I open the switches it
+        -- should also open the cues on the other side"): beside the panel, on its side toward the screen's middle; it goes
+        -- when the panel goes
+        if p and not p.cuesPaired and p.HookScript then
+            p.cuesPaired = true
+            p:HookScript("OnShow", function(self) CU.OpenBeside(self) end)
+            p:HookScript("OnHide", function() if CU.card and CU.card.withPanel then CU.card:Hide() end end)
+            if p:IsShown() then CU.OpenBeside(p) end
+        end
         if p and not had and not p.cues then
             local h = p:GetHeight()
             p:SetHeight((type(h) == "number" and h or 0) + 24)

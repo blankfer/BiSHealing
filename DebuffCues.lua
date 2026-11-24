@@ -20,8 +20,8 @@
 
   WHO SEES WHAT (Arn: "all stuff that our class can do"): CURE and NO CURE only for debuffs of a type YOUR cures remove
   (FA.Cures); the rest for every healer. TANK ARMOR (Ancestral Fortitude / Inspiration from anyone, Arn: "big in raid to
-  track that the tanks have that buff even if it's not ours") on tank boxes only - the role is the game's, asked out of a
-  fight when the box is armed.
+  track that the tanks have that buff even if it's not ours") on EVERY box ("we can display those buffs on everyone i just
+  said tanks because that's who i really care about").
 
   Every kind is its own BiS Cues row, off by default. The data: Debuffs.lua (known) + DebuffBook.lua (learned lines).
   UNVERIFIED LIVE: the spell-id filter on a FRIENDLY debuff in a fight (only NeverSecret ids, solved.md 15 Oct); the flow
@@ -95,11 +95,11 @@ function DC.Cuts()
     return out
 end
 
---- The kinds switched on for this box (`tank` = the box is a tank's).
-function DC.Kinds(tank)
+--- The kinds switched on (the same on every box - tank armor too, Arn 24 Nov: "we can display those buffs on everyone").
+function DC.Kinds()
     local k = {}
     for _, key in ipairs(DC.ROW) do
-        if on(key) and (key ~= "armor" or tank) and next(DC.Ids(key)) then k[#k + 1] = key end
+        if on(key) and next(DC.Ids(key)) then k[#k + 1] = key end
     end
     return k
 end
@@ -171,16 +171,7 @@ function DC.Arm(sp)
         return false
     end
     local inFight = InCombatLockdown and InCombatLockdown()
-    if not inFight and on("armor") then
-        local tank = false
-        local RD = NS.RD
-        if RD and RD.Role then
-            local okR, r = pcall(RD.Role, sp.unit)
-            tank = okR and r == "tank"
-        end
-        if not DC.NOT_MC[sp.unit] and not tostring(sp.unit):find("pet", 1, true) then sp.dcTank = tank else sp.dcTank = false end
-    end
-    local kinds = DC.Kinds(sp.dcTank)
+    local kinds = DC.Kinds()
     local sig = table.concat(kinds, ",")
     if d and d.sig == sig then
         if d.unit ~= sp.unit then
