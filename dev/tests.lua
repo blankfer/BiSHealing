@@ -17766,8 +17766,20 @@ do
             ok(not cueHold or (wr:GetFrameLevel() > cueHold:GetFrameLevel()), "every debuff word over Chain Heal's payoff word")
             local rs = d.rowSlots and (d.rowSlots.reduce)
             ok(rs and rs.opts.candidateFilters.includeSpellIDs[16856], "Mortal Strike's icon in the row after the name")
-            ok(sp.deckTag and sp.deckTag.dcGhost and d.row.points[1][2] == sp.deckTag.dcGhost and d.row.points[1][3] == "RIGHT",
-               "the row starts where the name ends (an invisible copy of the name, no width)")
+            local rp = d.row.points[1]
+            ok(rp and rp[2] ~= sp.deckTag.dcGhost and rp[2] ~= sp.deckTag.text and (d.where == "name" or d.where == "corner"),
+               "the row is never hung off the name (a secret name made it secret - Arn's /bish dc, 24 Nov)", d.where)
+            if d.where == "name" then
+                ok(rp[1] == "TOPLEFT" and rp[2] == sp.deckTag and rp[4] > (NS.RD.DECK_TAG.x or 4), "measured: just after the name, on the box's own frame")
+            end
+            -- a name we may not measure: the box's top-right corner
+            local keepSW = sp.deckTag.text.GetStringWidth
+            sp.deckTag.text.GetStringWidth = function() return _G.__SECRET_NUMBER or error("secret") end
+            ok(DC.PlaceRow(sp, d.row) == "corner" and d.row.points[1][1] == "TOPRIGHT" and d.row.points[1][2] == sp.heal,
+               "a secret name: the top-right corner")
+            sp.deckTag.text.GetStringWidth = function() return 40 end
+            ok(DC.PlaceRow(sp, d.row) == "name" and d.row.points[1][2] == sp.deckTag, "a plain name: after it")
+            sp.deckTag.text.GetStringWidth = keepSW
             ok(d.row:GetWidth() >= 3 * 10 and d.row:GetHeight() >= 10, "the row is wide enough for its icons (it was 1 x 1 - Arn's AF never showed)")
             local st = DC.Status()
             local hit = false

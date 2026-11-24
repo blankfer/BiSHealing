@@ -125,6 +125,30 @@ function DC.Ghost(sp)
     return g
 end
 
+--- WHERE THE ICON ROW SITS, by numbers we may read (Arn, 24 Nov, `/bish dc`: the row anchored to the name's invisible copy
+--- had a SECRET width - a name is secret, so everything hung off it is too - and the client handed it 55 buttons and drew
+--- none). Now never anchored to the name: the name's width MEASURED (out of a fight it is plain) and the row put that far
+--- along the box's own frame, just after the name; a name we may not measure = the box's top-right corner (left of the
+--- G2 tag). Returns "name" / "corner".
+function DC.PlaceRow(sp, row)
+    if not (row and row.ClearAllPoints) then return nil end
+    row:ClearAllPoints()
+    local RD, t = NS.RD, sp.deckTag
+    local tag = (RD and RD.DECK_TAG) or { x = 4, y = -3 }
+    if t and t.text and (not t.text.IsShown or t.text:IsShown()) then
+        local okS, sw = pcall(t.text.GetStringWidth, t.text)
+        local okB, bw = pcall(t.text.GetWidth, t.text)
+        if okS and type(sw) == "number" and not secret(sw) then
+            if okB and type(bw) == "number" and not secret(bw) and bw > 0 then sw = math.min(sw, bw) end
+            row:SetPoint("TOPLEFT", t, "TOPLEFT", (tag.x or 4) + sw + 3, (tag.y or -3) + 1)
+            return "name"
+        end
+    end
+    local corner = (t and t.group and t.group.IsShown and t.group:IsShown() and RD and RD.CORNER_W) or 0
+    row:SetPoint("TOPRIGHT", sp.heal, "TOPRIGHT", -2 - corner, -2)
+    return "corner"
+end
+
 -- ----------------------------------------------------------------- building
 
 local function quiet(button)
@@ -177,6 +201,7 @@ function DC.Arm(sp)
         if d.unit ~= sp.unit then
             for _, c in ipairs({ d.row, d.words }) do if c then pcall(c.SetUnit, c, sp.unit) end end
             d.unit = sp.unit
+            if d.row then d.where = DC.PlaceRow(sp, d.row) end
         end
         for _, c in ipairs({ d.row, d.words }) do if c and c.SetEnabled then pcall(c.SetEnabled, c, true) end end
         return true
@@ -199,10 +224,11 @@ function DC.Arm(sp)
         -- A ROW WIDE ENOUGH TO HOLD ITS ICONS (Arn, 24 Nov: Ancestral Fortitude up on him, no icon after his name): it was
         -- 1 x 1, and the client lays a flow row out INSIDE the container - an icon wider than the row may get no place at
         -- all. Now as wide as every icon it can hold, an icon tall, and over the box's own layers (Burn.lua's proven road).
-        row:SetSize(#kinds * 3 * (px + DC.GAP), px)
+        row:SetSize(#kinds * (px + DC.GAP), px)
         local lvl = (sp.deckTag or sp.heal).GetFrameLevel and (sp.deckTag or sp.heal):GetFrameLevel()
         if type(lvl) == "number" and row.SetFrameLevel then row:SetFrameLevel(lvl + 5) end
-        if ghost then row:SetPoint("LEFT", ghost, "RIGHT", 3, 0) else row:SetPoint("TOPLEFT", sp.heal, "TOPLEFT", 4, -3) end
+        d.row = row
+        d.where = DC.PlaceRow(sp, row)
         row:SetUnit(sp.unit)
         local flow = row.SetFlowLayoutAxis and AnchorUtil and AnchorUtil.FlowLayoutAxis and row.AddAuraGroup
         if flow then
@@ -313,12 +339,13 @@ function DC.Status()
             local okS, shown = pcall(function() return r and r:IsShown() end)
             local okV, vis = pcall(function() return r and r:IsVisible() end)
             local okW, w = pcall(function() return r and r:GetWidth() end)
+            if okW and secret(w) then w = "secret" end
             local okL, lv = pcall(function() return r and r:GetFrameLevel() end)
             local n = 0
             for _ in pairs(d.rowSlots or {}) do n = n + 1 end
-            lines[#lines + 1] = ("  %s: [%s] %s, %d slot(s), row shown %s seen %s w %s lvl %s, buttons handed %d, ghost %s"):format(
+            lines[#lines + 1] = ("  %s: [%s] %s, %d slot(s), row shown %s seen %s w %s lvl %s, buttons handed %d, at %s"):format(
                 tostring(sp.unit), tostring(d.sig), tostring(d.how or "-"), n, tostring(okS and shown), tostring(okV and vis),
-                tostring(okW and w and math.floor(w)), tostring(okL and lv), d.handed or 0, tostring(sp.deckTag and sp.deckTag.dcGhost and true or false))
+                tostring(okW and (type(w) == "number" and math.floor(w) or w)), tostring(okL and lv), d.handed or 0, tostring(d.where))
         end
     end
     if #lines == 1 then lines[2] = "  no box has built any yet (tick a cue, then let the deck repaint)" end
@@ -366,6 +393,7 @@ do
         RD.DeckTag = function(sp, ...)
             local t = tag(sp, ...)
             if sp and sp.deckTag and sp.deckTag.dcGhost then DC.Ghost(sp) end
+            if sp and sp.dc and sp.dc.row then sp.dc.where = DC.PlaceRow(sp, sp.dc.row) end   -- the name changed: re-measure
             return t
         end
     end
