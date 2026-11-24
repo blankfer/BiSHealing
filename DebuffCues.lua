@@ -196,7 +196,12 @@ function DC.Arm(sp)
     -- THE ICON ROW
     local okR, row = pcall(CreateFrame, "AuraContainer", nil, sp.deckTag or sp.heal, "CustomAuraContainerTemplate")
     if okR and row then
-        row:SetSize(1, 1)
+        -- A ROW WIDE ENOUGH TO HOLD ITS ICONS (Arn, 24 Nov: Ancestral Fortitude up on him, no icon after his name): it was
+        -- 1 x 1, and the client lays a flow row out INSIDE the container - an icon wider than the row may get no place at
+        -- all. Now as wide as every icon it can hold, an icon tall, and over the box's own layers (Burn.lua's proven road).
+        row:SetSize(#kinds * 3 * (px + DC.GAP), px)
+        local lvl = (sp.deckTag or sp.heal).GetFrameLevel and (sp.deckTag or sp.heal):GetFrameLevel()
+        if type(lvl) == "number" and row.SetFrameLevel then row:SetFrameLevel(lvl + 5) end
         if ghost then row:SetPoint("LEFT", ghost, "RIGHT", 3, 0) else row:SetPoint("TOPLEFT", sp.heal, "TOPLEFT", 4, -3) end
         row:SetUnit(sp.unit)
         local flow = row.SetFlowLayoutAxis and AnchorUtil and AnchorUtil.FlowLayoutAxis and row.AddAuraGroup
@@ -210,7 +215,7 @@ function DC.Arm(sp)
         d.rowSlots = {}
         for i, key in ipairs(kinds) do
             local filter = (key == "armor") and "HELPFUL" or "HARMFUL"
-            local init = function(button) quiet(button) end
+            local init = function(button) quiet(button) d.handed = (d.handed or 0) + 1 end
             local slot
             if flow then
                 local okG, g = pcall(row.AddAuraGroup, row, "BiSDC" .. key, filter, {
@@ -219,6 +224,7 @@ function DC.Arm(sp)
                     initializeFrame = init,
                 })
                 slot = okG and g or nil
+                d.how = d.how or (slot and "flow" or ("flow refused: " .. tostring(g)))
             end
             if not slot then
                 slot = FA.AddSlot(row, "BiSDC" .. key, filter, {
@@ -226,6 +232,7 @@ function DC.Arm(sp)
                     initializeFrame = FA.Placed(init, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
                 })
             end
+            if slot and not flow then d.how = "fixed" end
             d.rowSlots[key] = slot
             if not slot then DC.refused = true end
         end
@@ -294,6 +301,28 @@ function DC.PaintMC(sp)
     else
         m:SetAlpha(can == true and 1 or 0)
     end
+end
+
+--- `/bish dc`: what each box built for the cues - for a screenshot when an icon does not show.
+function DC.Status()
+    local lines = { ("debuff cues: on = %s; refused = %s"):format(table.concat(DC.Kinds(), ","), tostring(DC.refused or false)) }
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        local d = sp.dc
+        if sp.unit and d then
+            local r = d.row
+            local okS, shown = pcall(function() return r and r:IsShown() end)
+            local okV, vis = pcall(function() return r and r:IsVisible() end)
+            local okW, w = pcall(function() return r and r:GetWidth() end)
+            local okL, lv = pcall(function() return r and r:GetFrameLevel() end)
+            local n = 0
+            for _ in pairs(d.rowSlots or {}) do n = n + 1 end
+            lines[#lines + 1] = ("  %s: [%s] %s, %d slot(s), row shown %s seen %s w %s lvl %s, buttons handed %d, ghost %s"):format(
+                tostring(sp.unit), tostring(d.sig), tostring(d.how or "-"), n, tostring(okS and shown), tostring(okV and vis),
+                tostring(okW and w and math.floor(w)), tostring(okL and lv), d.handed or 0, tostring(sp.deckTag and sp.deckTag.dcGhost and true or false))
+        end
+    end
+    if #lines == 1 then lines[2] = "  no box has built any yet (tick a cue, then let the deck repaint)" end
+    return lines
 end
 
 --- With every repaint of a deck box.

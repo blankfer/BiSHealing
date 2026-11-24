@@ -17768,6 +17768,11 @@ do
             ok(rs and rs.opts.candidateFilters.includeSpellIDs[16856], "Mortal Strike's icon in the row after the name")
             ok(sp.deckTag and sp.deckTag.dcGhost and d.row.points[1][2] == sp.deckTag.dcGhost and d.row.points[1][3] == "RIGHT",
                "the row starts where the name ends (an invisible copy of the name, no width)")
+            ok(d.row:GetWidth() >= 3 * 10 and d.row:GetHeight() >= 10, "the row is wide enough for its icons (it was 1 x 1 - Arn's AF never showed)")
+            local st = DC.Status()
+            local hit = false
+            for i = 2, #st do if st[i]:find(tostring(sp.unit) .. ":", 1, true) then hit = true end end
+            ok(type(st) == "table" and hit, "/bish dc: a line per box that built cues", st[2])
             -- tank armor: on every box (Arn: "we can display those buffs on everyone")
             CU.DB().on.armor = true
             local keepRole = NS.RD.Role
