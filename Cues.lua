@@ -1161,9 +1161,7 @@ end
 --- Open the card beside the switches panel (the panel opened): its side toward the screen's middle.
 function CU.OpenBeside(p)
     local c = CU.Card()
-    c:ClearAllPoints()
-    if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
-    else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
+    CU.PlaceBeside(c, p)
     c:Show()
     c.withPanel = true
     CU.Paint()
@@ -1181,6 +1179,27 @@ function CU.EndDrag()
         local r = CU.DB() and (NS.DB().radar)
         if r then r.cuesPos = { pt, rel or pt, x, y } end
     end
+end
+
+--- WHERE THE CARD GOES WITH THE SWITCHES (Arn, 24 Nov, a shot of it: "i want it like this"): the deck in the middle, the
+--- switches on its right (RD.ToggleSwitches puts them there), the card against the deck's LEFT edge, tops level. No deck
+--- showing, or no room left of it on the screen: beside the panel, toward the screen's middle (CU.SideOf).
+function CU.PlaceBeside(c, p)
+    c:ClearAllPoints()
+    local f = NS.RD and NS.RD.frame
+    if f and f.IsShown and f:IsShown() then
+        local ok, left = pcall(f.GetLeft, f)
+        local fs = (f.GetEffectiveScale and f:GetEffectiveScale()) or 1
+        local cs = (c.GetEffectiveScale and c:GetEffectiveScale()) or 1
+        local cw = c.GetWidth and c:GetWidth()
+        if ok and type(left) == "number" and type(cw) == "number" and left * fs >= (cw + 6) * cs then
+            c:SetPoint("TOPRIGHT", f, "TOPLEFT", -6, 0)
+            return "deck"
+        end
+    end
+    if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
+    else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
+    return CU.SideOf(p)
 end
 
 --- Which side of the switches panel the card opens on: TOWARD THE SCREEN'S MIDDLE (Arn, 24 Nov: "it opens at the right
@@ -1204,9 +1223,7 @@ function CU.Toggle()
     local pos = (NS.DB().radar or {}).cuesPos
     if type(pos) == "table" and type(pos[1]) == "string" and type(pos[3]) == "number" then
         c:SetPoint(pos[1], UIParent, pos[2] or pos[1], pos[3], pos[4] or 0)
-    elseif p and p:IsShown() then
-        if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
-        else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
+    elseif p and p:IsShown() then CU.PlaceBeside(c, p)
     else c:SetPoint("CENTER", UIParent, "CENTER", 0, 60) end
     c:Show()
     CU.Paint()

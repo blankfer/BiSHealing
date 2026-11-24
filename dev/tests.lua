@@ -17898,6 +17898,8 @@ do
             local r = NS.DB().radar
             local keepPos = r.cuesPos
             r.cuesPos = nil
+            local keepFrame = NS.RD.frame
+            NS.RD.frame = nil                                   -- (no deck first: the card goes by the panel)
             p.IsShown = function() return true end
             UIParent.GetCenter = function() return 960, 540 end
             if c:IsShown() then c:Hide() end
@@ -17910,6 +17912,31 @@ do
             CU.Toggle()
             cp = c.points[1]
             ok(cp and cp[1] == "TOPLEFT" and cp[2] == p and cp[3] == "TOPRIGHT", "a panel on the left: on its right, as before")
+            -- Arn, 24 Nov ("i want it like this"): the deck showing, the card against the deck's LEFT, the switches on its right
+            CU.Toggle()
+            local deck = CreateFrame("Frame", nil, UIParent)
+            deck:SetSize(400, 300)
+            deck.IsShown = function() return true end
+            deck.GetLeft = function() return 1000 end
+            NS.RD.frame = deck
+            CU.Toggle()
+            cp = c.points[1]
+            ok(cp and cp[1] == "TOPRIGHT" and cp[2] == deck and cp[3] == "TOPLEFT", "the deck showing: the card against its left edge, tops level")
+            CU.Toggle()
+            ok(CU.OpenBeside(p) and c.points[1][2] == deck, "the switches opening put it there too")
+            c:Hide()
+            deck.GetLeft = function() return 100 end
+            p.GetCenter = function() return 600, 600 end
+            CU.Toggle()
+            cp = c.points[1]
+            ok(cp and cp[2] == p, "no room left of the deck: back beside the panel")
+            CU.Toggle()
+            deck.IsShown = function() return false end
+            deck.GetLeft = function() return 1000 end
+            CU.Toggle()
+            ok(c.points[1][2] == p, "the deck hidden: beside the panel")
+            CU.Toggle()
+            NS.RD.frame = keepFrame
             -- dragged: it opens there next time, and the drag ends at the pull
             c.__scripts.OnDragStart(c)
             ok(c.moving, "it drags")
