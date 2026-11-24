@@ -51,6 +51,8 @@ Reveal.lua
 Cues.lua
 # heal past the line: a debuff that wants them healed above a % - the line on the deck box's bar, the gap, the edge (BiS Cues)
 HealPast.lua
+# the debuff book: learns every new debuff it sees on the group (out of a fight) and guesses what a healer does about it
+DebuffBook.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

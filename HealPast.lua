@@ -50,10 +50,33 @@ function HP.On()
     return CU and CU.On and CU.On("past") or false
 end
 
+--- Every line: ours first, then what the debuff book learned on the fly (DebuffBook.lua) - ours wins on a shared id.
+function HP.All()
+    local all = {}
+    local learned = NS.DK and NS.DK.Past and NS.DK.Past() or {}
+    for id, d in pairs(learned) do all[id] = d end
+    for id, d in pairs(HP.DEBUFFS) do all[id] = d end
+    return all
+end
+
+--- A new line was learned: every box builds its container again at its next repaint (out of a fight only - a fight
+--- keeps what it has; the book learns only out of one anyway).
+function HP.Reset()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
+        local h = sp.hp
+        if h then
+            if h.container and h.container.SetEnabled then pcall(h.container.SetEnabled, h.container, false) end
+            sp.hp = nil
+        end
+    end
+    return true
+end
+
 --- The lines: { pct = { ids } }, one slot per distinct %.
 function HP.Groups()
     local out = {}
-    for id, d in pairs(HP.DEBUFFS) do
+    for id, d in pairs(HP.All()) do
         local p = tonumber(d.pct)
         if p and p > 0 and p < 1 then
             out[p] = out[p] or {}
@@ -269,7 +292,7 @@ end
 --- `/bish past`: what it watches and whether the client took the filter.
 function HP.Status()
     local n = 0
-    for _ in pairs(HP.DEBUFFS) do n = n + 1 end
+    for _ in pairs(HP.All()) do n = n + 1 end
     local boxes = 0
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do if sp.hp and sp.hp.container then boxes = boxes + 1 end end
     return ("heal past the line: %s, %d debuff%s watched, %d box%s armed%s"):format(HP.On() and "ON" or "off (tick it in BiS Cues)",

@@ -2336,6 +2336,9 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "debuffs" then
+        -- THE DEBUFF BOOK (DebuffBook.lua, 24 Nov 2026): what it learned on the fly, newest first
+        if NS.DK then for _, l in ipairs(NS.DK.Report(12)) do Print(l) end else Print("debuff book: not loaded") end
     elseif msg == "past" then
         -- HEAL PAST THE LINE (HealPast.lua, 24 Nov 2026): on or off, and whether the client took the filter
         Print(NS.HP and NS.HP.Status() or "heal past the line: not loaded")

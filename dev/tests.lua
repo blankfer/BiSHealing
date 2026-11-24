@@ -17728,6 +17728,69 @@ do
         end
         CU.DB().on.past = keepOn
     end
+    -- THE DEBUFF BOOK (Arn, 24 Nov: "if the helpers didn't pick up a [debuff], it can learn on the fly")
+    do
+        local DK = NS.DK
+        ok(DK ~= nil, "the debuff book is loaded")
+        if DK then
+            local g = function(w, t) return (DK.Guess(w, t)) end
+            local a1, p1 = DK.Guess("Deals 10 damage every 3 sec until the target is healed above 90% health.", nil)
+            ok(a1 == "past" and math.abs(p1 - 0.9) < 1e-9, "\"healed above 90%\": heal past, the line at 90%")
+            ok(g("Poison. When dispelled, stuns all nearby allies for 4 sec.", "Poison") == "nodispel", "\"when dispelled ...\": don't dispel")
+            ok(g("Healing received reduced by 50%.", "Magic") == "reduce", "healing received reduced: heals land weaker")
+            ok(g("Absorbs the next 2000 healing received.", nil) == "absorb", "absorbs the next healing")
+            ok(g("Inflicts Nature damage every 2 sec.", "Poison") == "dispel" and g("Bleeding.", nil) == "watch",
+               "a plain poison: dispel; a plain bleed: nothing to say yet")
+            local book = DK.Book()
+            local keepBook = {}
+            for k, v in pairs(book) do keepBook[k] = v book[k] = nil end
+            local keepDesc, keepSec = C_Spell and C_Spell.GetSpellDescription, _G.C_Secrets
+            _G.C_Spell = _G.C_Spell or {}
+            C_Spell.GetSpellDescription = function(id)
+                if id == 990001 then return "Bleeds for 50. Lasts until healed above 80% health." end
+                return ""
+            end
+            STATE.inCombat = false
+            _G.C_UnitAuras = _G.C_UnitAuras or {}
+            local keepWalk = C_UnitAuras.GetAuraDataByIndex
+            C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)       -- (the client's walk: throws in a fight)
+                if STATE.inCombat then error("Auras cannot be accessed when secret while tainted", 2) end
+                local list = AURAS[unit] and AURAS[unit][filter or "HELPFUL"]
+                return list and list[i] or nil
+            end
+            local keepAur = AURAS.party1
+            AURAS.party1 = { HARMFUL = { { spellId = 990001, name = "Test Rend", dispelName = nil, isHarmful = true } } }
+            DK.Sweep()
+            local row = book[990001]
+            ok(row and row.name == "Test Rend" and row.act == "past" and math.abs(row.pct - 0.8) < 1e-9 and row.n == 1,
+               "the fight's end: a new debuff on party1 read, written down, guessed (heal past 80%)")
+            ok(NS.HP.All()[990001] and NS.HP.All()[990001].learned and NS.HP.All()[1271761].pct == 0.9,
+               "a learned line joins the heal-past lines; ours stay")
+            DK.Sweep()
+            ok(book[990001].n == 2, "seen again: counted, not written twice")
+            STATE.inCombat = true
+            local before = book[990001].n
+            DK.Sweep()
+            ok(book[990001].n == before, "in a fight: nothing read (auras are secret there)")
+            STATE.inCombat = false
+            ok(DK.Report(5)[2]:find("990001 Test Rend", 1, true) and DK.Report(5)[2]:find("HEAL PAST 80%", 1, true), "/bish debuffs lists it", DK.Report(5)[2])
+            -- LEAN (the standing order): a raid's aura chatter out of a fight costs almost nothing - a known debuff
+            local Cost = dofile("../_bisdev/dev/cost.lua")
+            local onEv = DK.events.__scripts.OnEvent
+            local known = { addedAuras = { { spellId = 990001, name = "Test Rend", isHarmful = true } } }
+            local quiet = { updatedAuraInstanceIDs = { 7 } }
+            local nC, by = Cost.Count(function()
+                for i = 1, 100 do onEv(DK.events, "UNIT_AURA", "raid" .. (i % 40 + 1), (i % 4 == 0) and known or quiet) end
+            end)
+            ok(nC <= 300, "100 aura events out of a fight (a quarter carry a known debuff): at most 3 client calls each", nC, Cost.Top(by, 3))
+            print(("   cost: debuff book, 100 aura events out of a fight = %d calls (%s)"):format(nC, Cost.Top(by, 3)))
+            AURAS.party1 = keepAur
+            C_UnitAuras.GetAuraDataByIndex = keepWalk
+            C_Spell.GetSpellDescription = keepDesc
+            for k in pairs(book) do book[k] = nil end
+            for k, v in pairs(keepBook) do book[k] = v end
+        end
+    end
     -- WHERE IT OPENS (Arn, 24 Nov: "it opens at the right and I already have my deck at the right"): toward the middle
     do
         local p = NS.RD.swPanel
