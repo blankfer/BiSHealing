@@ -55,6 +55,8 @@ Debuffs.lua
 HealPast.lua
 # the debuff book: learns every new debuff it sees on the group (out of a fight) and guesses what a healer does about it
 DebuffBook.lua
+# what to do about a debuff, on the deck box: one word across the bar (CURE, NO CURE, -50%, NO HEAL, MIND CONTROL), icons after the name
+DebuffCues.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

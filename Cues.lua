@@ -53,6 +53,19 @@ CU.LIST = {
     { key = "past",  name = "Heal past the line", cat = "DEBUFFS", kind = "line", spell = 1271761, word = "90%",
       look = "icon", sound = "off", say = "Heal past",
       tip = "A debuff that wants them healed above a line (Grievous Garrote: 90%). The line on their bar, the gap you owe in red, the debuff's icon, the edge pulsing until they are past it." },
+    -- WHAT TO DO ABOUT A DEBUFF (DebuffCues.lua, 24 Nov 2026 - Arn's pick: one word across the bar, icons after the name)
+    { key = "cure",   name = "Cure it",        cat = "DEBUFFS", kind = "line", word = "CURE", look = "word", sound = "off", say = "Cure",
+      needCure = true, tip = "A debuff the guides say to dispel now, of a type YOUR cures remove: CURE across their bar." },
+    { key = "nocure", name = "Don't cure it",  cat = "DEBUFFS", kind = "line", word = "NO CURE", look = "word", sound = "off", say = "Don't cure",
+      needCure = true, tip = "A debuff that does something bad when removed (Hyjal's Lunar / Umbral Mark): NO CURE across their bar." },
+    { key = "reduce", name = "Heals weaker",   cat = "DEBUFFS", kind = "line", word = "-50%", look = "word", sound = "off", say = "Heals weaker",
+      tip = "Mortal Strike and friends: how much healing they lose (-50%) across their bar, the icon after their name." },
+    { key = "noheal", name = "No heals land",  cat = "DEBUFFS", kind = "line", word = "NO HEAL", look = "word", sound = "off", say = "No heal",
+      tip = "Direct heals do nothing on them right now (Veil of Darkness): NO HEAL across their bar." },
+    { key = "mc",     name = "Mind controlled", cat = "DEBUFFS", kind = "line", word = "MIND CONTROL", look = "word", sound = "off", say = "Mind control",
+      tip = "A friend the game now lets you attack: MIND CONTROL across their bar. Not on the target boxes or pets." },
+    { key = "armor",  name = "Tank armor",     cat = "DEBUFFS", kind = "line", word = "AF", look = "icon", sound = "off", say = "Armor",
+      tip = "Ancestral Fortitude / Inspiration on the tanks, whoever's crit gave it: the icon after the tank's name." },
 }
 CU.BY = {}
 local CLASS_CAT = { SHAMAN = true, PALADIN = true, DRUID = true, PRIEST = true }
@@ -75,7 +88,10 @@ end
 function CU.ForMe(key)
     local q = CU.BY[key]
     if not q then return false end
-    if not q.class or CU.showAll then return true end
+    if CU.showAll then return true end
+    -- a cure cue only for someone with a cure (Arn: "all stuff that our class can do")
+    if q.needCure and NS.FA and NS.FA.Cures and #NS.FA.Cures() == 0 then return false end
+    if not q.class then return true end
     local mine = CU.MyClass()
     return mine == nil or mine == q.class                 -- (class unknown: show it rather than hide it)
 end

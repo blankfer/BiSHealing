@@ -17728,6 +17728,75 @@ do
         end
         CU.DB().on.past = keepOn
     end
+    -- WHAT TO DO ABOUT A DEBUFF (Arn, 24 Nov: "C across the bar, but put the icons next to the name")
+    do
+        local DC = NS.DC
+        ok(DC ~= nil and CU.BY.cure and CU.BY.nocure and CU.BY.reduce and CU.BY.noheal and CU.BY.mc and CU.BY.armor,
+           "six new BiS Cues rows: cure, don't cure, heals weaker, no heal, mind control, tank armor")
+        local sp
+        for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit == "party1" then sp = s break end end
+        if not sp then for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit then sp = s break end end end
+        if DC and sp then
+            local keepOn = {}
+            for _, k in ipairs({ "cure", "nocure", "reduce", "noheal", "mc", "armor", "past" }) do keepOn[k] = CU.DB().on[k] CU.DB().on[k] = nil end
+            local keepDC = sp.dc
+            sp.dc = nil
+            DC.Paint(sp, true)
+            ok(not (sp.dc and (sp.dc.row or sp.dc.words)), "all off by default: nothing built on the box")
+            local keepCures = NS.FA.Cures
+            NS.FA.Cures = function() return { { name = "Cure Poison", types = { Poison = true } } } end
+            ok(DC.Ids("cure")[1323656] and not DC.Ids("cure")[1287756] and not DC.Ids("cure")[1271351],
+               "CURE only for your types: Poisoned Shot yes (poison), Fiery Talons no (magic), the Hyjal marks never")
+            ok(not next(DC.Ids("nocure")), "NO CURE: the marks are magic - a poison-only healer is never told")
+            NS.FA.Cures = function() return { { name = "Dispel Magic", types = { Magic = true } } } end
+            ok(DC.Ids("nocure")[1271351] and DC.Ids("nocure")[1271352], "a magic dispeller: NO CURE on Lunar / Umbral Mark")
+            CU.DB().on.reduce, CU.DB().on.cure, CU.DB().on.nocure = true, true, true
+            DC.Paint(sp, true)
+            local d = sp.dc
+            ok(d and d.row and d.words and d.row.unit == sp.unit, "switched on: the icon row and the word on the box's unit")
+            local half = d and d.words.slots["BiSDCwreduce50"]
+            ok(half and half.opts.candidateFilters.includeSpellIDs[16856] and half.filter == "HARMFUL", "-50%: Mortal Strike's word slot")
+            ok(d and d.words.slots["BiSDCwcure"] and d.words.slots["BiSDCwnocure"], "CURE and NO CURE word slots for a magic dispeller")
+            local wc, wn = d.words.slots["BiSDCwcure"].dcWord, d.words.slots["BiSDCwnocure"].dcWord
+            local wr = half and half.dcWord
+            ok(wc and wn and wr and wn:GetFrameLevel() > wc:GetFrameLevel() and wc:GetFrameLevel() > wr:GetFrameLevel(),
+               "ONE word wins: NO CURE over CURE over -50% (each on a plate, the top one covers the rest)")
+            ok(wc and wc.text:GetText() == "CURE" and wr.text:GetText() == "-50%", "the words", wr and wr.text:GetText())
+            local cueHold = sp.cue and sp.cue.hold
+            ok(not cueHold or (wr:GetFrameLevel() > cueHold:GetFrameLevel()), "every debuff word over Chain Heal's payoff word")
+            local rs = d.rowSlots and (d.rowSlots.reduce)
+            ok(rs and rs.opts.candidateFilters.includeSpellIDs[16856], "Mortal Strike's icon in the row after the name")
+            ok(sp.deckTag and sp.deckTag.dcGhost and d.row.points[1][2] == sp.deckTag.dcGhost and d.row.points[1][3] == "RIGHT",
+               "the row starts where the name ends (an invisible copy of the name, no width)")
+            -- tank armor: tank boxes only
+            CU.DB().on.armor = true
+            local keepRole = NS.RD.Role
+            NS.RD.Role = function() return "damage" end
+            DC.Paint(sp, true)
+            ok(not sp.dc.rowSlots.armor, "tank armor: not on a damage dealer's box")
+            NS.RD.Role = function() return "tank" end
+            DC.Paint(sp, true)
+            ok(sp.dc.rowSlots.armor and sp.dc.rowSlots.armor.filter == "HELPFUL" and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[16177]
+               and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[14893], "a tank: Ancestral Fortitude / Inspiration from anyone (HELPFUL, not only yours)")
+            NS.RD.Role = keepRole
+            -- mind control: the client's answer drives it
+            CU.DB().on.mc = true
+            local keepUCA = _G.UnitCanAttack
+            _G.UnitCanAttack = function() return true end
+            DC.Paint(sp, true)
+            ok(sp.dcMC and sp.dcMC:GetAlpha() == 1 and sp.dcMC.text:GetText() == "MIND CONTROL", "a friend you can attack: MIND CONTROL")
+            _G.UnitCanAttack = function() return false end
+            DC.Paint(sp, true)
+            ok(sp.dcMC:GetAlpha() == 0, "back to normal: gone")
+            _G.UnitCanAttack = keepUCA
+            NS.FA.Cures = keepCures
+            for k, v in pairs(keepOn) do CU.DB().on[k] = v end
+            sp.dc = keepDC
+            if sp.dcMC then sp.dcMC:SetAlpha(0) end
+        else
+            ok(false, "a deck box for the debuff cues test")
+        end
+    end
     -- THE DEBUFF BOOK (Arn, 24 Nov: "if the helpers didn't pick up a [debuff], it can learn on the fly")
     do
         local DK = NS.DK
@@ -17840,7 +17909,9 @@ do
     end
     CU.sel = "oath"
     CU.Toggle() CU.Toggle()
-    ok(CU.sel ~= "oath" and not c.order[6]:IsShown() and c.order[5]:IsShown(), "the card: five rows (heal past the line is everyone's), a cue you cannot act on never chosen")
+    local nShown = #CU.Shown()
+    ok(CU.sel ~= "oath" and c.order[nShown]:IsShown() and not (c.order[nShown + 1] and c.order[nShown + 1]:IsShown()) and nShown < #CU.LIST,
+       "the card: one row per cue you can act on (" .. nShown .. "), a cue you cannot act on never chosen")
     _G.UnitClass = function() return "Paladin", "PALADIN", 2 end
     seen = {}
     for _, k in ipairs(CU.Shown()) do seen[k] = true end

@@ -160,8 +160,9 @@ function HP.Init(sp, p)
         if not h then return end
         local e = h.e
         local CU = NS.CU
-        local look = CU and CU.Look and CU.Look("past") or "icon"
-        if look ~= "icon" and button.GetRegions then
+        -- the debuff's icon lives in the row after the name now (DebuffCues.lua, Arn: "put the icons next to the name")
+        local look = "word"
+        if button.GetRegions then
             for _, r in ipairs({ button:GetRegions() }) do if r.Hide then pcall(r.Hide, r) end end
         end
         -- nothing to click on the bar (Arn's rule): the client's button only shows

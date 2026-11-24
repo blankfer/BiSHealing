@@ -120,6 +120,7 @@ function DK.Learn(a)
     if act ~= row.act or pct ~= row.pct then
         row.act, row.pct = act, pct
         if act == "past" and NS.HP and NS.HP.Reset then NS.HP.Reset() end      -- a new line: the boxes build it next time
+        if act == "past" and NS.DC and NS.DC.Reset then NS.DC.Reset() end      -- (and its icon and word)
     end
     if fresh then DK.news = (DK.news or 0) + 1 end
     return row, fresh
