@@ -1053,6 +1053,13 @@ function CU.Card()
     c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 30)
     c.code:SetJustifyH("LEFT")
     c.code:SetAlpha(0.45)
+    -- DRAGGED WHERE YOU WANT IT, and it opens there again (Arn, 24 Nov: "I gotta keep dragging to the left"); nothing
+    -- secure on it, and the drag still ends at the pull and when it closes (the family rule)
+    c:SetMovable(true)
+    c:RegisterForDrag("LeftButton")
+    c:SetScript("OnDragStart", function(self) self:StartMoving() self.moving = true end)
+    c:SetScript("OnDragStop", function() CU.EndDrag() end)
+    c:SetScript("OnHide", function() CU.EndDrag() end)
     c:Hide()
     if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingCues") end
     CU.card = c
@@ -1131,13 +1138,44 @@ function CU.Try()
     return CU.Say(CU.sel, "Tin", true)
 end
 
---- Open (or close) the card - beside the switches panel when it is open.
+--- The drag's end: let go, and keep the spot (by the screen, never by the panel) for the next opening.
+function CU.EndDrag()
+    local c = CU.card
+    if not (c and c.moving) then return end
+    c.moving = nil
+    c:StopMovingOrSizing()
+    local pt, _, rel, x, y = c:GetPoint(1)
+    if type(pt) == "string" and type(x) == "number" and type(y) == "number" then
+        local r = CU.DB() and (NS.DB().radar)
+        if r then r.cuesPos = { pt, rel or pt, x, y } end
+    end
+end
+
+--- Which side of the switches panel the card opens on: TOWARD THE SCREEN'S MIDDLE (Arn, 24 Nov: "it opens at the right
+--- and I already have my deck at the right") - a panel in the right half of the screen opens it on its left.
+function CU.SideOf(p)
+    local ok, x = pcall(p.GetCenter, p)
+    local okU, ux = pcall(UIParent.GetCenter, UIParent)
+    if not (ok and okU and type(x) == "number" and type(ux) == "number") then return "right" end
+    local ps = (p.GetEffectiveScale and p:GetEffectiveScale()) or 1
+    local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    return (x * ps > ux * us) and "left" or "right"
+end
+
+--- Open (or close) the card: where you last dragged it; else beside the switches panel, on its side toward the
+--- screen's middle; else the middle.
 function CU.Toggle()
     local c = CU.Card()
     if c:IsShown() then c:Hide() return false end
     c:ClearAllPoints()
     local p = NS.RD and NS.RD.swPanel
-    if p and p:IsShown() then c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) else c:SetPoint("CENTER", UIParent, "CENTER", 0, 60) end
+    local pos = (NS.DB().radar or {}).cuesPos
+    if type(pos) == "table" and type(pos[1]) == "string" and type(pos[3]) == "number" then
+        c:SetPoint(pos[1], UIParent, pos[2] or pos[1], pos[3], pos[4] or 0)
+    elseif p and p:IsShown() then
+        if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
+        else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
+    else c:SetPoint("CENTER", UIParent, "CENTER", 0, 60) end
     c:Show()
     CU.Paint()
     return true
@@ -1236,8 +1274,10 @@ end
 CU.events = CreateFrame("Frame")
 CU.events:RegisterEvent("PLAYER_LOGIN")
 CU.events:RegisterEvent("PLAYER_REGEN_ENABLED")
+CU.events:RegisterEvent("PLAYER_REGEN_DISABLED")
 CU.events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_LOGIN" then CU.Stamp()
+    elseif event == "PLAYER_REGEN_DISABLED" then CU.EndDrag()                 -- (a drag ends at the pull)
     elseif event == "PLAYER_REGEN_ENABLED" and CU.pending then CU.Apply() end
 end)
 CU.Wrap()

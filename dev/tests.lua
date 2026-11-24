@@ -17685,6 +17685,42 @@ do
        "a shaman's card: Riptide and the group cues, no Oath / Vigil / Swiftmend")
     CU.DB().order = { "hell", "tap", "crit", "oath", "vigil", "rip", "swift" }
     ok(CU.Move("rip", -1) and CU.Order()[3] == "rip", "the arrow steps over the paladin's cues (never seems to do nothing)", table.concat(CU.Order(), ","))
+    -- WHERE IT OPENS (Arn, 24 Nov: "it opens at the right and I already have my deck at the right"): toward the middle
+    do
+        local p = NS.RD.swPanel
+        if p then
+            local keepShown, keepPC, keepUC = p.IsShown, p.GetCenter, UIParent.GetCenter
+            local r = NS.DB().radar
+            local keepPos = r.cuesPos
+            r.cuesPos = nil
+            p.IsShown = function() return true end
+            UIParent.GetCenter = function() return 960, 540 end
+            if c:IsShown() then c:Hide() end
+            p.GetCenter = function() return 1500, 600 end
+            CU.Toggle()
+            local cp = c.points[1]
+            ok(cp and cp[1] == "TOPRIGHT" and cp[2] == p and cp[3] == "TOPLEFT", "a panel on the right: the card opens on its LEFT (the deck's side stays clear)")
+            CU.Toggle()
+            p.GetCenter = function() return 400, 600 end
+            CU.Toggle()
+            cp = c.points[1]
+            ok(cp and cp[1] == "TOPLEFT" and cp[2] == p and cp[3] == "TOPRIGHT", "a panel on the left: on its right, as before")
+            -- dragged: it opens there next time, and the drag ends at the pull
+            c.__scripts.OnDragStart(c)
+            ok(c.moving, "it drags")
+            c:ClearAllPoints() c:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
+            CU.events.__scripts.OnEvent(CU.events, "PLAYER_REGEN_DISABLED")
+            ok(not c.moving and r.cuesPos and r.cuesPos[1] == "TOPLEFT" and r.cuesPos[3] == 120, "the pull ends the drag; the spot kept")
+            CU.Toggle() CU.Toggle()
+            cp = c.points[1]
+            ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[4] == 120, "opened again where you left it")
+            CU.Toggle()
+            r.cuesPos = keepPos
+            p.IsShown, p.GetCenter, UIParent.GetCenter = keepShown, keepPC, keepUC
+        else
+            ok(false, "the switches panel exists for the card's side test")
+        end
+    end
     CU.sel = "oath"
     CU.Toggle() CU.Toggle()
     ok(CU.sel ~= "oath" and not c.order[5]:IsShown() and c.order[4]:IsShown(), "the card: four rows, a cue you cannot act on never chosen")
