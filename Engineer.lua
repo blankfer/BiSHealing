@@ -861,7 +861,7 @@ function EN.ManaHost(rail)
     end
     local E = EN.GAUGE
     h:ClearAllPoints()
-    h:SetPoint("RIGHT", rail, "RIGHT", -E.right, 0)
+    h:SetPoint("RIGHT", rail, "RIGHT", -E.right - (EN.jmpW or 0), 0)
     h:SetSize(E.mana, E.h - 4)
     h:Show()
     return h
@@ -1266,13 +1266,102 @@ end
   readout box riding the fill, no chevron - the regen % small at the right end with the five second rule's dashes under
   it. Every number is still painted by the radar's own functions (RD.PaintFuel); this only moves pieces, out of a fight
   (the view switch). Back on the radar everything goes home (RD.SizeGauge). ]]
-EN.GAUGE = { h = 20, pad = 6, right = 44, font = 8, mana = 30 }   -- mana: the party mana block's width (EN.ManaHost)
+EN.GAUGE = { h = 20, pad = 6, right = 44, font = 8, mana = 30, jmp = 46 }   -- mana: the party mana block's width (EN.ManaHost); jmp: JMP's
+EN.jmpW = 0                                                        -- the room JMP takes at the strip's right end now
 
 --- How far the strip reaches over the console's top (the clamp keeps it on the screen); 0 when it is not there.
 function EN.GaugeTop()
     local RD = NS.RD
     if not (EN.rail and EN.rail:IsShown()) then return 0 end
     return EN.GAUGE.h + ((RD and RD.RAIL_GAP) or 2)
+end
+
+--[[ JMP (24 Nov 2026, Arn picked B off https://claude.ai/artifact/JF6RHHUBM5YTDrTRvWSz8o): a number box at the strip's very
+  end, after the regen % - the caps word JMP, then this fight's average Chain Heal jumps (Radar.lua RD.JmpAvg), gold at
+  2.5 and up, amber from 1.5, red under. A dash until the first Chain Heal of the fight. Shamans only, its own switch
+  (off until switched on), and only while the strip itself is on. Word and number side by side: the strip is 20 px tall,
+  too short for a word over a number. The hover tells the split. ]]
+EN.JMP_GOLD, EN.JMP_AMBER = 2.5, 1.5
+function EN.JmpOn()
+    local RD, CU = NS.RD, NS.CU
+    if not (RD and RD.Deck and RD.Deck() and RD.Sw and RD.Sw("jmp") and RD.Sw("fuel")) then return false end
+    local cls = CU and CU.MyClass and CU.MyClass()
+    return cls == "SHAMAN" or (CU and CU.showAll) or false
+end
+function EN.JmpHost(rail)
+    local h = EN.jmpHost
+    if not (rail and EN.JmpOn()) then
+        if h then h:Hide() end
+        return nil
+    end
+    local RD = NS.RD
+    if not h then
+        h = CreateFrame("Frame", nil, rail)
+        local dim = RD.DIM or { 0.22, 1.00, 0.53, 0.4 }
+        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+            local t = h:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(dim[1], dim[2], dim[3], dim[4] or 1)
+            if side == "TOP" or side == "BOTTOM" then
+                t:SetPoint(side .. "LEFT", h, side .. "LEFT") t:SetPoint(side .. "RIGHT", h, side .. "RIGHT") t:SetHeight(1)
+            else
+                t:SetPoint("TOP" .. side, h, "TOP" .. side) t:SetPoint("BOTTOM" .. side, h, "BOTTOM" .. side) t:SetWidth(1)
+            end
+        end
+        local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+        h.word = h:CreateFontString(nil, "OVERLAY")
+        h.word:SetFont(font, 7, "")
+        h.word:SetTextColor(0.62, 0.58, 0.72, 1)
+        h.word:SetPoint("LEFT", h, "LEFT", 3, 0)
+        h.word:SetText("JMP")
+        h.num = h:CreateFontString(nil, "OVERLAY")
+        h.num:SetFont(font, 10, "OUTLINE")
+        h.num:SetPoint("RIGHT", h, "RIGHT", -3, 0)
+        h:EnableMouse(true)
+        h:SetScript("OnEnter", function(self) EN.JmpTip(self) end)
+        h:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        EN.jmpHost = h
+    end
+    local E = EN.GAUGE
+    h:ClearAllPoints()
+    h:SetPoint("RIGHT", rail, "RIGHT", -2, 0)
+    h:SetSize(E.jmp, E.h - 4)
+    h:Show()
+    EN.JmpPaint()
+    return h
+end
+--- The number and its colour: called at each Chain Heal and at the pull (RD.JmpAdd / RD.JmpReset). Words only on change.
+function EN.JmpPaint()
+    local h = EN.jmpHost
+    local RD = NS.RD
+    if not (h and RD and RD.JmpAvg) then return nil end
+    local avg = RD.JmpAvg()
+    local text, col = "-", { 0.62, 0.58, 0.72 }
+    if avg then
+        text = ("%.1f"):format(avg)
+        local C = RD.BOUNCE_COL or {}
+        col = (avg >= EN.JMP_GOLD and C[3]) or (avg >= EN.JMP_AMBER and C[2]) or C[1] or col
+    end
+    if h.shown ~= text then
+        h.shown = text
+        h.num:SetText(text)
+        h.num:SetTextColor(col[1], col[2], col[3], 1)
+    end
+    return text
+end
+function EN.JmpTip(owner)
+    local RD = NS.RD
+    if not (GameTooltip and RD and RD.jmp) then return end
+    local j = RD.jmp
+    GameTooltip:SetOwner(owner, "ANCHOR_BOTTOMLEFT")
+    GameTooltip:AddLine("Chain Heal jumps, this fight")
+    if j.casts < 1 then
+        GameTooltip:AddLine("No Chain Heal yet. It starts again at each pull.", 0.8, 0.8, 0.8, true)
+    else
+        GameTooltip:AddLine(("%d Chain Heals: %d hit 3, %d hit 2, %d hit 1. %d crits."):format(
+            j.casts, j.by[3], j.by[2], j.by[1], j.crits), 1, 1, 1, true)
+        GameTooltip:AddLine("Gold at 2.5 and up, amber from 1.5. Under that, one target: a Healing Wave costs less.", 0.8, 0.8, 0.8, true)
+    end
+    GameTooltip:Show()
 end
 
 --- Into the console (true) or back to the radar: the tape moves, its extras hide or come back. Out of a fight.
@@ -1285,6 +1374,7 @@ function EN.Gauge(con)
     if con and RD.Deck and RD.Deck() and RD.Sw and not RD.Sw("fuel") then   -- the fuel strip switched off
         if EN.rail then EN.rail:Hide() end
         if EN.manaHost then EN.manaHost:Hide() end
+        if EN.jmpHost then EN.jmpHost:Hide() end
         EN.ManaPaint()                                       -- no block: the Mana Tide glow off too
         g:Hide()
         for _, x in ipairs({ g.regen, g.fsr, g.chev, g.hud, g.readout }) do if x then x:Hide() end end
@@ -1307,8 +1397,9 @@ function EN.Gauge(con)
         r:SetHeight(E.h)
         r:Show()
         local fw = f:GetWidth()
+        EN.jmpW = EN.JmpHost(r) and (E.jmp + 4) or 0                -- JMP at the very end, after the regen readout
         local manaW = EN.ManaHost(r) and (E.mana + 4) or 0          -- party mana's block before the regen readout
-        local w = (type(fw) == "number" and fw or 200) - E.pad - E.right - manaW
+        local w = (type(fw) == "number" and fw or 200) - E.pad - E.right - manaW - EN.jmpW
         g:ClearAllPoints()
         g:SetPoint("LEFT", r, "LEFT", E.pad, 0)
         RD.ShapeTape(w)
@@ -1320,7 +1411,7 @@ function EN.Gauge(con)
         if g.regen then
             if g.regen.SetFont then g.regen:SetFont(font, E.font, "") end
             g.regen:ClearAllPoints()
-            g.regen:SetPoint("CENTER", r, "RIGHT", -E.right / 2, 3)
+            g.regen:SetPoint("CENTER", r, "RIGHT", -E.right / 2 - EN.jmpW, 3)
             g.regen:Show()
         end
         if g.fsr then g.fsr:Show() end                       -- it hangs under the regen %, wherever that goes

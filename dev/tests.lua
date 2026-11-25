@@ -16399,6 +16399,59 @@ do
                     RD.SetSw("bounce", false)
                     ok(RD.BounceSent(CHID) == false, "the path switched off: nothing listens")
                     RD.SetSw("bounce", true)
+                    -- CHAIN HEAL JUMPS (Arn picked B: "JMP 2.6" on the Mana vs boss strip, live, no /reload)
+                    do
+                        local EN, CU = NS.EN, NS.CU
+                        local keepCls, wasC, wasF = CU.MyClass, STATE.inCombat, RD.inFight
+                        CU.MyClass = function() return "SHAMAN" end
+                        ok(RD.Sw("jmp") == false, "JMP starts off (a player who touches nothing keeps today's strip)")
+                        EN.Gauge(true)
+                        ok(not (EN.jmpHost and EN.jmpHost:IsShown()) and EN.jmpW == 0, "off: no box, no room taken")
+                        RD.SetSw("jmp", true)
+                        EN.Gauge(true)
+                        local h = EN.jmpHost
+                        ok(h and h:IsShown() and EN.jmpW == EN.GAUGE.jmp + 4, "on: the box at the strip's end")
+                        ok(h and h.word:GetText() == "JMP" and h.num:GetText() == "-", "JMP and a dash before the first Chain Heal")
+                        local rp = RD.gauge.regen.points and RD.gauge.regen.points[#RD.gauge.regen.points]
+                        local rx = rp and rp[4]
+                        ok(type(rx) == "number" and rx < -EN.GAUGE.right / 2 - EN.GAUGE.jmp, "the regen % moves left to make room", rx)
+                        STATE.inCombat, RD.inFight = true, true
+                        RD.JmpReset()
+                        cast({ { a.unit }, { b.unit }, { c.unit, "HEAL", "CRITICAL" } }, a)
+                        cast({ { a.unit }, { b.unit } }, a)
+                        ok(RD.jmp.casts == 2 and RD.jmp.hits == 5 and RD.jmp.crits == 1 and RD.jmp.by[3] == 1 and RD.jmp.by[2] == 1,
+                           "two Chain Heals in a fight: 3 + 2 boxes, one crit")
+                        ok(h.num:GetText() == "2.5" and math.abs(h.num.__color[2] - RD.BOUNCE_COL[3][2]) < 0.01, "2.5: gold", h.num:GetText())
+                        cast({ { b.unit } }, b)
+                        cast({ { c.unit } }, c)
+                        ok(h.num:GetText() == "1.8" and math.abs(h.num.__color[2] - RD.BOUNCE_COL[2][2]) < 0.01, "1.75 shows 1.8: amber", h.num:GetText())
+                        EN.JmpTip(h)
+                        -- the bolt switched off, JMP still counts
+                        RD.SetSw("bounce", false)
+                        RD.bounceFx:Hide()
+                        local n0 = RD.jmp.casts
+                        cast({ { a.unit }, { b.unit }, { c.unit } }, a)
+                        ok(RD.jmp.casts == n0 + 1 and not RD.bounceFx:IsShown(), "the path off, JMP on: counted, no bolt")
+                        RD.SetSw("bounce", true)
+                        -- the pull starts it again; a Chain Heal out of a fight is not counted
+                        fire(RD.events, "PLAYER_REGEN_DISABLED")
+                        ok(RD.jmp.casts == 0 and h.num:GetText() == "-", "a new pull: back to a dash")
+                        STATE.inCombat, RD.inFight = false, nil
+                        cast({ { a.unit } }, a)
+                        ok(RD.jmp.casts == 0, "topping up after the fight: not counted")
+                        -- lean: one Chain Heal's count and paint
+                        local Cost = dofile("../_bisdev/dev/cost.lua")
+                        local nJ = Cost.Count(function() RD.JmpAdd(3, 0) end)
+                        ok(nJ <= 6, "one Chain Heal's JMP: a handful of client calls - " .. nJ)
+                        -- not a shaman: no box
+                        CU.MyClass = function() return "PRIEST" end
+                        EN.Gauge(true)
+                        ok(not EN.jmpHost:IsShown() and EN.jmpW == 0, "a priest: no JMP")
+                        CU.MyClass = keepCls
+                        RD.SetSw("jmp", false)
+                        EN.Gauge(true)
+                        STATE.inCombat, RD.inFight = wasC, wasF
+                    end
                 else
                     ok(false, "the deck needs three group boxes for the path tests", #boxes)
                 end
