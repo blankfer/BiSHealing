@@ -17754,10 +17754,14 @@ do
             DC.Paint(sp, true)
             local d = sp.dc
             ok(d and d.row and d.words and d.row.unit == sp.unit, "switched on: the icon row and the word on the box's unit")
-            local half = d and d.words.slots["BiSDCwreduce50"]
+            -- a fresh key a slot (DC.MakeSlot, Revelation's road): find each by its name + the counter
+            local function wslot(name)
+                for k, v in pairs((d and d.words and d.words.slots) or {}) do if k:match("^" .. name .. "%d+$") then return v end end
+            end
+            local half = wslot("BiSDCwreduce50")
             ok(half and half.opts.candidateFilters.includeSpellIDs[16856] and half.filter == "HARMFUL", "-50%: Mortal Strike's word slot")
-            ok(d and d.words.slots["BiSDCwcure"] and d.words.slots["BiSDCwnocure"], "CURE and NO CURE word slots for a magic dispeller")
-            local wc, wn = d.words.slots["BiSDCwcure"].dcWord, d.words.slots["BiSDCwnocure"].dcWord
+            ok(d and wslot("BiSDCwcure") and wslot("BiSDCwnocure"), "CURE and NO CURE word slots for a magic dispeller")
+            local wc, wn = wslot("BiSDCwcure").dcWord, wslot("BiSDCwnocure").dcWord
             local wr = half and half.dcWord
             ok(wc and wn and wr and wn:GetFrameLevel() > wc:GetFrameLevel() and wc:GetFrameLevel() > wr:GetFrameLevel(),
                "ONE word wins: NO CURE over CURE over -50% (each on a plate, the top one covers the rest)")
@@ -17785,6 +17789,25 @@ do
             local hit = false
             for i = 2, #st do if st[i]:find(tostring(sp.unit) .. ":", 1, true) then hit = true end end
             ok(type(st) == "table" and hit, "/bish dc: a line per box that built cues", st[2])
+            -- ONE SLOT, NEVER TWO ON TOP (Arn's /bish dc, 24 Nov: "flow refused: nil, buttons handed 55" = a 10-button group per
+            -- kind that answered nothing + a slot on top of it). A client whose AddAuraSlot answers nothing but hands its button
+            -- over: made, and no group after it; one whose AddAuraGroup answers nothing: never asked by the row.
+            do
+                local fake = CreateFrame("Frame")
+                local asked = { slot = 0, group = 0 }
+                fake.AddAuraSlot = function(self, key, filter, opts) asked.slot = asked.slot + 1 opts.initializeFrame(CreateFrame("Button")) end
+                fake.AddAuraGroup = function() asked.group = asked.group + 1 end
+                local dd = {}
+                local got, road = DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", { initializeFrame = function() end }, dd, "armor")
+                ok(got == true and road == "slot, no answer" and asked.slot == 1 and asked.group == 0 and dd.handedBy.armor == 1,
+                   "a slot that answers nothing but hands a button over is made - no group on top of it", road)
+                local k1, k2
+                fake.AddAuraSlot = function(self, key) if not k1 then k1 = key else k2 = key end return {} end
+                DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil) DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil)
+                ok(k1 and k2 and k1 ~= k2, "a fresh key every slot (a key the client knows may be the refusal)", tostring(k1) .. " " .. tostring(k2))
+            end
+            ok(type(d.roads) == "table" and #d.roads == #d.kinds and not tostring(d.how):find("flow", 1, true),
+               "the row: one slot road per kind, no flow group", table.concat(d.roads or {}, "; "))
             -- tank armor: on every box (Arn: "we can display those buffs on everyone")
             CU.DB().on.armor = true
             local keepRole = NS.RD.Role

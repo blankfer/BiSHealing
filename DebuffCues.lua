@@ -7,10 +7,10 @@
   mortal strike" - and the bar never says two words: "will it say [Chain Heal] and [Cure]" - no, ONE, the most urgent.
 
   TWO CONTAINERS PER BOX, both drawn by the client only while a matching aura is on them (nothing here reads one):
-    THE ICON ROW  right after the name (anchored to an invisible copy of the name with no width, so it starts where the
-                  name ENDS even when the name is a secret): one aura GROUP per kind in a flow row the client packs left
-                  to right (SetFlowLayout*, AddAuraGroup with `layout` - read off ForeverAuras, GPL, learn only), the
-                  debuffs' own icons. A client without groups: one slot per kind at a fixed step (gaps when absent).
+    THE ICON ROW  right after the name (DC.PlaceRow: the name's width measured out of a fight, on the box's own frame -
+                  never anchored to the name, which made the row secret): one slot per kind at a fixed step (gaps when
+                  absent), the auras' own icons. The flow row (AddAuraGroup with `layout`) is gone (24 Nov): on Forever
+                  it answered nil yet was made, and a second slot went on top of it.
     THE WORD      across the middle of the bar: one slot per kind, each word on a plate at its own frame level by
                   urgency - the client shows whichever are up, and the highest one's plate covers the rest (and Chain
                   Heal's payoff word, which sits under them all). Order: MIND CONTROL, NO HEAL, NO CURE, CURE, HEAL PAST,
@@ -180,6 +180,37 @@ function DC.Word(parent, sp, text, col, rank)
 end
 
 --- One box's containers, for its unit and the kinds on now (made again when the kinds change, out of a fight).
+--- One aura slot, made once (Reveal.lua's road, 22 Nov 2026): a FRESH key every time (a key the client already knows may be
+--- the refusal), AddAuraSlot first; no answer but a button handed over = made; only a slot that handed nothing over tries
+--- AddAuraGroup. Never a second slot on top of one the client took. Counts the buttons per kind in `d.handedBy`.
+--- Returns the slot (or true) and the road taken: "slot" / "slot, no answer" / "group" / "refused: ...".
+function DC.MakeSlot(c, key, filter, opts, d, kind)
+    DC.made = (DC.made or 0) + 1
+    local count, init = 0, opts.initializeFrame
+    opts.initializeFrame = function(b, ...)
+        count = count + 1
+        if d then
+            d.handed = (d.handed or 0) + 1
+            d.handedBy = d.handedBy or {}
+            d.handedBy[kind or key] = (d.handedBy[kind or key] or 0) + 1
+        end
+        if init then return init(b, ...) end
+    end
+    if c.AddAuraSlot then
+        local fine, got = pcall(c.AddAuraSlot, c, key .. DC.made, filter, opts)
+        if fine and got then return got, "slot" end
+        if fine and count > 0 then return true, "slot, no answer" end
+        if count > 0 then return nil, "refused: " .. tostring(got) end      -- it handed buttons over and then said no
+    end
+    if c.AddAuraGroup then
+        opts.maxFrameCount = opts.maxFrameCount or 1
+        local fine, got = pcall(c.AddAuraGroup, c, key .. "G" .. DC.made, filter, opts)
+        if fine and (got or count > 0) then return got or true, "group" end
+        return nil, "refused: " .. tostring(got)
+    end
+    return nil, "no method"
+end
+
 function DC.Arm(sp)
     local FA = NS.FA
     if not (FA and FA.Available and FA.Available() and FA.AddSlot and sp.heal and sp.unit) then return false end
@@ -230,38 +261,23 @@ function DC.Arm(sp)
         d.row = row
         d.where = DC.PlaceRow(sp, row)
         row:SetUnit(sp.unit)
-        local flow = row.SetFlowLayoutAxis and AnchorUtil and AnchorUtil.FlowLayoutAxis and row.AddAuraGroup
-        if flow then
-            pcall(row.SetFlowLayoutAxis, row, AnchorUtil.FlowLayoutAxis.Horizontal)
-            pcall(row.SetFlowLayoutAnchorPoint, row, "LEFT")
-            if row.SetFlowLayoutGrowthDirection and AnchorUtil.FlowDirection then
-                pcall(row.SetFlowLayoutGrowthDirection, row, AnchorUtil.FlowDirection.Right, AnchorUtil.FlowDirection.Down)
-            end
-        end
-        d.rowSlots = {}
+        -- ONE SLOT PER KIND, NEVER TWO ON TOP (24 Nov 2026, Arn's /bish dc after a cast: "flow refused: nil ... buttons handed
+        -- 55" and still no Ancestral Fortitude): the flow group answered nothing but WAS made (it handed its buttons over), and
+        -- a fixed slot went on top of it under the same key - Revelation's lesson of 22 Nov (Reveal.lua). Now the fixed road
+        -- only (DC.MakeSlot: a fresh key, a slot that handed a button over counts as made, no second one on top).
+        d.rowSlots, d.roads = {}, {}
         for i, key in ipairs(kinds) do
             local filter = (key == "armor") and "HELPFUL" or "HARMFUL"
-            local init = function(button) quiet(button) d.handed = (d.handed or 0) + 1 end
-            local slot
-            if flow then
-                local okG, g = pcall(row.AddAuraGroup, row, "BiSDC" .. key, filter, {
-                    maxFrameCount = 3, candidateFilters = { includeSpellIDs = DC.Ids(key) },
-                    layout = { elementWidth = px, elementHeight = px, elementSpacing = DC.GAP, lineSpacing = DC.GAP, layoutIndex = i },
-                    initializeFrame = init,
-                })
-                slot = okG and g or nil
-                d.how = d.how or (slot and "flow" or ("flow refused: " .. tostring(g)))
-            end
-            if not slot then
-                slot = FA.AddSlot(row, "BiSDC" .. key, filter, {
-                    candidateFilters = { includeSpellIDs = DC.Ids(key) },
-                    initializeFrame = FA.Placed(init, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
-                })
-            end
-            if slot and not flow then d.how = "fixed" end
+            local init = function(button) quiet(button) end
+            local slot, road = DC.MakeSlot(row, "BiSDC" .. key, filter, {
+                candidateFilters = { includeSpellIDs = DC.Ids(key) },
+                initializeFrame = FA.Placed(init, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
+            }, d, key)
+            d.roads[#d.roads + 1] = key .. " " .. road
             d.rowSlots[key] = slot
             if not slot then DC.refused = true end
         end
+        d.how = "fixed"
         if row.SetEnabled then pcall(row.SetEnabled, row, true) end
         if row.UpdateAllAuras then pcall(row.UpdateAllAuras, row) end
         d.row = row
@@ -274,7 +290,7 @@ function DC.Arm(sp)
         words:SetUnit(sp.unit)
         d.wordSlots = {}
         local function slotFor(key, text, col, rank, ids)
-            local s = FA.AddSlot(words, "BiSDCw" .. key, "HARMFUL", {
+            local s = DC.MakeSlot(words, "BiSDCw" .. key, "HARMFUL", {
                 candidateFilters = { includeSpellIDs = ids },
                 initializeFrame = FA.Placed(function(button)
                     quiet(button)
@@ -283,7 +299,7 @@ function DC.Arm(sp)
                     end
                     pcall(function() button.dcWord = DC.Word(button, sp, text, col, rank) end)
                 end, 1, "CENTER", sp.heal, 0, 0),
-            })
+            }, nil, key)
             d.wordSlots[key] = s
         end
         local want = {}
@@ -343,13 +359,53 @@ function DC.Status()
             local okL, lv = pcall(function() return r and r:GetFrameLevel() end)
             local n = 0
             for _ in pairs(d.rowSlots or {}) do n = n + 1 end
-            lines[#lines + 1] = ("  %s: [%s] %s, %d slot(s), row shown %s seen %s w %s lvl %s, buttons handed %d, at %s"):format(
-                tostring(sp.unit), tostring(d.sig), tostring(d.how or "-"), n, tostring(okS and shown), tostring(okV and vis),
-                tostring(okW and (type(w) == "number" and math.floor(w) or w)), tostring(okL and lv), d.handed or 0, tostring(d.where))
+            local by = {}
+            for _, k in ipairs(d.kinds or {}) do by[#by + 1] = k .. " " .. ((d.handedBy or {})[k] or 0) end
+            lines[#lines + 1] = ("  %s: %d slot(s) (%s), row shown %s seen %s w %s lvl %s, handed %s, at %s"):format(
+                tostring(sp.unit), n, table.concat(d.roads or {}, "; "), tostring(okS and shown), tostring(okV and vis),
+                tostring(okW and (type(w) == "number" and math.floor(w) or w)), tostring(okL and lv), table.concat(by, " "),
+                tostring(d.where))
         end
     end
     if #lines == 1 then lines[2] = "  no box has built any yet (tick a cue, then let the deck repaint)" end
     return lines
+end
+
+--- `/bish dc any`: THE PROBE (24 Nov 2026) - on your own box, two big buttons the client draws: LEFT = any buff on you (no
+--- filter at all), RIGHT = Ancestral Fortitude by its id. Left shows, right does not = the id filter is the trouble; neither
+--- shows = a container on the box does not draw. Again = off. Out of a fight only.
+function DC.AnyProbe()
+    local FA = NS.FA
+    if InCombatLockdown and InCombatLockdown() then return { "dc probe: out of a fight only" } end
+    if DC.probe then
+        if DC.probe.SetEnabled then pcall(DC.probe.SetEnabled, DC.probe, false) end
+        pcall(DC.probe.Hide, DC.probe)
+        DC.probe = nil
+        return { "dc probe: off" }
+    end
+    local sp
+    for _, s in ipairs((NS.RD and NS.RD.spokes) or {}) do if s.unit == "player" and s.heal then sp = s break end end
+    if not sp then return { "dc probe: your own box is not on the deck" } end
+    if not (FA and FA.Available and FA.Available()) then return { "dc probe: no aura containers on this client" } end
+    local okC, c = pcall(CreateFrame, "AuraContainer", nil, sp.deckTag or sp.heal, "CustomAuraContainerTemplate")
+    if not (okC and c) then return { "dc probe: container refused: " .. tostring(c) } end
+    c:SetSize(52, 24)
+    c:SetPoint("LEFT", sp.heal, "LEFT", 2, 0)
+    local lvl = (sp.deckTag or sp.heal):GetFrameLevel()
+    if type(lvl) == "number" and c.SetFrameLevel then c:SetFrameLevel(lvl + 8) end
+    c:SetUnit("player")
+    local d = {}
+    local _, any = DC.MakeSlot(c, "BiSDCprobeAny", "HELPFUL", {
+        initializeFrame = FA.Placed(quiet, 24, "LEFT", c, 0, 0) }, d, "any buff")
+    local _, af = DC.MakeSlot(c, "BiSDCprobeAF", "HELPFUL", {
+        candidateFilters = { includeSpellIDs = { [16177] = true } },
+        initializeFrame = FA.Placed(quiet, 24, "LEFT", c, 28, 0) }, d, "fortitude")
+    if c.SetEnabled then pcall(c.SetEnabled, c, true) end
+    if c.UpdateAllAuras then pcall(c.UpdateAllAuras, c) end
+    DC.probe = c
+    local h = d.handedBy or {}
+    return { ("dc probe: on your box's left - left = any buff (%s, %d handed), right = Fortitude by id (%s, %d handed)")
+        :format(tostring(any), h["any buff"] or 0, tostring(af), h["fortitude"] or 0) }
 end
 
 --- With every repaint of a deck box.
