@@ -13749,12 +13749,49 @@ do
     fire(RD.events, "PLAYER_REGEN_ENABLED")
     ok(not RD.pending and RD.scope:GetAlpha() == 1, "the fight ends: the queued re-arm runs, the scope is back")
 
+    -- THE DECK FOLLOWS THE MOUSE ITSELF (Arn, 25 Nov, 3440 x 1440 at UI scale 0.53: the deck "jumped all the way over
+    -- there" at the grab - StartMoving misread its CENTER anchor). Driven from the real drag event: no StartMoving, the
+    -- corner stays put at the grab, then moves exactly as far as the cursor; let go = saved TOPLEFT on UIParent.
+    do
+    local dragKeep = { cursor = _G.GetCursorPosition, sm = f.StartMoving, left = f.GetLeft, top = f.GetTop }
+    local moved = false
+    f.StartMoving = function() moved = true end
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", nil, "CENTER", 599, 12)         -- Arn's saved anchor, relative to nothing
+    local DL, DT = 1500, 800                             -- its top-left on the screen, in pixels
+    function f:GetLeft() return DL / self:GetEffectiveScale() end
+    function f:GetTop() return DT / self:GetEffectiveScale() end
+    local dcx, dcy = 1700, 790
+    _G.GetCursorPosition = function() return dcx, dcy end
+    f.__scripts.OnDragStart(f)
+    local k0 = f:GetEffectiveScale()
+    local p0 = f.points[1]
+    ok(not moved and f.dragging and p0 and p0[1] == "TOPLEFT" and p0[2] == UIParent and p0[3] == "BOTTOMLEFT"
+       and math.abs(p0[4] - DL / k0) < 1e-6 and math.abs(p0[5] - DT / k0) < 1e-6,
+       "grabbed: no StartMoving, the corner exactly where it was - no jump")
+    dcx, dcy = 1650, 900
+    RD.mover.__scripts.OnUpdate(RD.mover)
+    local p1 = f.points[1]
+    ok(math.abs(p1[4] - (DL - 50) / k0) < 1e-6 and math.abs(p1[5] - (DT + 110) / k0) < 1e-6,
+       "dragged: the deck moves exactly as far as the mouse")
+    f.__scripts.OnDragStop(f)
+    ok(not f.dragging and not RD.mover.__scripts.OnUpdate and d.radar.pos[1] == "TOPLEFT"
+       and math.abs(d.radar.pos[3] - (DL - 50) / k0) < 1e-6, "let go: nothing ticking, the spot saved by its corner")
+    if RD.topGrip then
+        RD.topGrip.__scripts.OnDragStart(RD.topGrip)
+        ok(f.dragging and not moved, "the top strip's grab band drags it the same way")
+        RD.topGrip.__scripts.OnDragStop(RD.topGrip)
+    end
+
     -- the drag ends before a fight takes the mouse (BiS Tools' boss window, the same night)
     f.__scripts.OnDragStart(f)
     ok(f.dragging, "dragging the radar")
     STATE.inCombat = true
     fire(RD.events, "PLAYER_REGEN_DISABLED")
     ok(not f.dragging and type(d.radar.pos) == "table", "a pull mid-drag: the drag ends and the spot is kept")
+    ok(not RD.mover.__scripts.OnUpdate, "and nothing keeps ticking")
+    f.StartMoving, f.GetLeft, f.GetTop, _G.GetCursorPosition = dragKeep.sm, dragKeep.left, dragKeep.top, dragKeep.cursor
+    end
     STATE.inCombat = false
     fire(RD.events, "PLAYER_REGEN_ENABLED")
 

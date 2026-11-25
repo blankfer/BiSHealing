@@ -591,9 +591,42 @@ end
 
 -- ------------------------------------------------------------------ the frame
 
+--[[ THE DECK FOLLOWS THE MOUSE ITSELF (25 Nov 2026, Arn on a 3440 x 1440 screen at UI scale 0.53: "when i click on the drag
+  element ... my mouse is in the middle and the window jumped all the way over there"). The client's StartMoving read the
+  deck's saved anchor (CENTER, relative to nothing) and threw it across the screen at the first pixel of the drag. Now the
+  grab notes the cursor and the deck's top-left corner in screen pixels, and an OnUpdate - only while the button is held -
+  puts the corner exactly as far from there as the cursor has gone (the corner grip's way, RD.ScaleAt, which never jumped).
+  The spot is saved TOPLEFT on UIParent's BOTTOMLEFT. ]]
+RD.mover = nil
+function RD.MoveTo(f, z, cx, cy)
+    local k = f:GetEffectiveScale()
+    if type(k) ~= "number" or k <= 0 then return false end
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", (z.left + cx - z.sx) / k, (z.top + cy - z.sy) / k)
+    return true
+end
+function RD.StartDrag(f)
+    if not f or combat() or f.dragging then return false end
+    local k, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
+    if not (type(k) == "number" and type(l) == "number" and type(t) == "number") then return false end
+    local sx, sy = GetCursorPosition()
+    if type(sx) ~= "number" or type(sy) ~= "number" then return false end
+    local z = { left = l * k, top = t * k, sx = sx, sy = sy }
+    f.dragging = z
+    RD.MoveTo(f, z, sx, sy)                             -- the anchor made plain first: no jump at the grab
+    RD.mover = RD.mover or CreateFrame("Frame")
+    RD.mover:SetScript("OnUpdate", function()
+        if not f.dragging or combat() then return RD.EndDrag(f) end
+        local cx, cy = GetCursorPosition()
+        RD.MoveTo(f, f.dragging, cx, cy)
+    end)
+    return true
+end
+
 local function endDrag(f)
     if not (f and f.dragging) then return end
     f.dragging = nil
+    if RD.mover then RD.mover:SetScript("OnUpdate", nil) end
     pcall(f.StopMovingOrSizing, f)
     local ok, p, _, rp, x, y = pcall(f.GetPoint, f)
     p, rp, x, y = plain(p), plain(rp), plain(x), plain(y)
@@ -4549,11 +4582,7 @@ function RD.Build()
     f:SetAttribute("unit", RD.EMPTY_UNIT)
     f:RegisterForDrag("LeftButton")
     -- dragged by the scope, out of a fight only; the drag ENDS before a fight takes the mouse (BiS Tools' lesson, 8 Nov)
-    f:SetScript("OnDragStart", function(self)
-        if combat() then return end
-        self:StartMoving()
-        self.dragging = true
-    end)
+    f:SetScript("OnDragStart", function(self) RD.StartDrag(self) end)   -- (never StartMoving: it jumped, 25 Nov)
     f:SetScript("OnDragStop", endDrag)
     f:SetScript("OnHide", endDrag)
     buildScope(f)
