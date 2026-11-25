@@ -5849,8 +5849,11 @@ function RD.CueMark(sp)
     local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
     if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     -- IN THE MIDDLE OF THE HEALTH BAR, not of the whole box (17 Nov, Arn's second shot: the icon row under the bar pulled
-    -- it low) - the bar is the pip, sp.heal
-    local bar = sp.heal or sp.deckPlate
+    -- it low) - the bar is the pip, sp.heal; since the name header (24 Nov, Arn's shot: "Chain Heal" rode up under the
+    -- strip) the health bar under the header, the deck box's own bar (Engineer.lua's e.bar)
+    local EN = NS.EN
+    local e = sp.en or (EN and EN.Box and sp.heal and EN.Box(sp))
+    local bar = (e and e.bar) or sp.heal or sp.deckPlate
     local h = bar.GetHeight and bar:GetHeight()
     local px = math.min(C.px, math.max(10, (type(h) == "number" and h > 0 and h or C.px + 6) - 6))
     m:SetSize(px, px)
