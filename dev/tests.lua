@@ -15781,9 +15781,61 @@ do
                 local all = true
                 for _, k in ipairs(RD.TOOL_KEYS) do
                     local b = RD[k]
-                    if b and not (b.GetPoint and b:GetPoint()) then all = false end
+                    if b and not b.absent and not (b.GetPoint and b:GetPoint()) then all = false end
                 end
                 ok(all, "every tool is placed even before the game shows it (the /reload case)")
+                RD.Arm()
+            end
+            -- ON-USE TRINKETS (Arn, Enamored Water Spirit: "when i take off it goes away and when i equip something it shows it")
+            do
+                local keepWorn, keepGis, keepCd = STATE.worn, C_Item.GetItemSpell, _G.GetInventoryItemCooldown
+                local USE = { [20503] = "Enamored Water Spirit", [19950] = "Zandalarian Hero Charm" }
+                C_Item.GetItemSpell = function(id) if USE[id] then return USE[id], 24854 end return nil end
+                local cds = {}
+                _G.GetInventoryItemCooldown = function(unit, slot) local c = cds[slot] if c then return c[1], c[2], 1 end return 0, 0, 1 end
+                local function x(b) local p = b.points and b.points[#b.points] return p and p[4] end
+                -- a passive trinket in 13, nothing in 14: no buttons, no gap
+                STATE.worn = { [13] = 11111 }
+                RD.Arm()
+                ok(RD.trink1.absent and RD.trink2.absent and not RD.trink1:IsShown() and not RD.trink2:IsShown(),
+                   "a trinket with no Use:, or none: no button")
+                local railX = RD.rations and x(RD.rations)
+                -- the water spirit put on (out of a fight): the event lays the deck out again, a button after the drink
+                STATE.worn = { [13] = 20503 }
+                fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 13, false)
+                local t = RD.trink1
+                ok(not t.absent and t:IsShown() and t.macro == "/use 13" and t:GetAttribute("*macrotext1") == "/use 13",
+                   "an on-use trinket put on: its button, clicking uses slot 13")
+                ok(t.tip and t.tip[1] ~= nil and t.tip[2]:find("Use: Enamored Water Spirit", 1, true), "the hover says what it does", t.tip and t.tip[2])
+                ok(t.food and t.food:IsShown() ~= false, "its own icon")
+                ok(x(t) and x(RD.fuel) and x(t) > x(RD.fuel), "after the drink, outside the mana box")
+                ok(RD.rations and x(RD.rations) ~= railX, "the rest of the row moved over to make room")
+                -- cooling: the swipe and a faded icon; ready again: full
+                cds[13] = { 100, 600 }
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "used: faded while it cools")
+                cds[13] = nil
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1, "ready: full")
+                -- a second on-use trinket in 14
+                STATE.worn = { [13] = 20503, [14] = 19950 }
+                fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 14, false)
+                ok(RD.trink2:IsShown() and RD.trink2.macro == "/use 14", "both trinkets: both buttons")
+                -- taken off in a fight: it waits for the end (secure buttons), then goes
+                local wasC = STATE.inCombat
+                STATE.inCombat = true
+                STATE.worn = { [14] = 19950 }
+                fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 13, true)
+                ok(RD.pending and RD.trink1.macro == "/use 13", "in a fight: nothing changes yet, marked for after")
+                STATE.inCombat = wasC
+                RD.Arm()
+                ok(RD.trink1.absent and not RD.trink1:IsShown() and RD.trink1:GetAttribute("*macrotext1") == nil,
+                   "after the fight: the button gone, its click cleared")
+                -- other slots never relay out the deck
+                local n0 = RD.trink2.points and #RD.trink2.points or 0
+                fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 1, false)
+                ok((RD.trink2.points and #RD.trink2.points or 0) == n0, "a helmet swap: the deck left alone")
+                STATE.worn, C_Item.GetItemSpell, _G.GetInventoryItemCooldown = keepWorn, keepGis, keepCd
                 RD.Arm()
             end
             -- the sliders (Arn: "maybe we also put the sliders there for width and height")

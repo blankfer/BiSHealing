@@ -2268,7 +2268,8 @@ local function at(fr, x, y)
 end
 
 -- the tools row: every tool from both rails, centred across `W`, at `y`
-local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.rations, RD.chaff, RD.res } end
+local CON_TOOLS = function() return { RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.trink1, RD.trink2, RD.rations, RD.chaff, RD.res } end
+RD.TRINKET_SLOTS = { trink1 = 13, trink2 = 14 }
 -- THE DECK'S TOOLS: NO SQUARE ROUND EACH, ONE BLUE BOX ROUND THE MANA (Arn, 15 Nov: "im not liking the blue outline, lets
 -- just go with dim and very bright when needed if we are going to outline we outline the box mana stuff blue"): the
 -- icons alone, dim or bright; Mana Tide, the potion, Mana Spring and the drink inside one blue outline.
@@ -2307,7 +2308,8 @@ end
 --- the gap under it.
 -- Mana Tide in the MIDDLE of the mana four (Arn, 16 Nov: "move it to the middle of the mana i confused it for my call totems a
 -- couple times cause they were both far left")
-RD.TOOL_KEYS = { "shield", "potion", "tide", "reserve", "fuel", "rations", "chaff", "res" }
+-- the on-use trinkets after the drink, outside the blue mana box (24 Nov 2026); only placed while equipped (`absent`)
+RD.TOOL_KEYS = { "shield", "potion", "tide", "reserve", "fuel", "trink1", "trink2", "rations", "chaff", "res" }
 RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
 function RD.DeckTools(W, top)
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
@@ -2318,7 +2320,9 @@ function RD.DeckTools(W, top)
     local all, mana, rest = {}, {}, {}
     for _, k in ipairs(RD.TOOL_KEYS) do
         local b = RD[k]
-        if b then
+        if b and b.absent then b:Hide() end          -- a trinket slot with nothing to use: no button, no gap
+        if b and not b.absent then
+            if b.trinket and not b:IsShown() then b:Show() end
             all[#all + 1] = b
             if RD.MANA_KEYS[k] then mana[#mana + 1] = b else rest[#rest + 1] = b end
         end
@@ -4550,6 +4554,16 @@ function RD.Build()
     RD.fuel = buildSystem(f, "Fuel", "TOPLEFT", X, -8 - 4 * step, rail)
     -- RATIONS, last in the column (Arn, 8 Nov: "move the rations next to the drink too")
     RD.rations = buildSystem(f, "Rations", "TOPLEFT", X, -8 - 5 * step, rail)
+    -- THE ON-USE TRINKETS (RD.ArmTrinkets): one button per trinket slot, shown on the deck only while that slot holds a
+    -- trinket with a Use: (hidden, never placed, otherwise)
+    for key, slot in pairs(RD.TRINKET_SLOTS) do
+        local b = buildSystem(f, "Trinket" .. (slot - 12), "TOPLEFT", X, -8 - (slot - 7) * step, rail)
+        b.kind, b.slot, b.absent, b.trinket = "trinket", slot, true, true
+        b.cd = RD.Sweep(b.face, true)                -- the item's own cooldown over its icon (never the GCD loop)
+        b:EnableMouse(false)
+        b:Hide()
+        RD[key] = b
+    end
     RD.COLUMN = { RD.shield, RD.tide, RD.potion, RD.reserve, RD.fuel, RD.rations }
     RD.tide.kind, RD.potion.kind, RD.reserve.kind, RD.fuel.kind = "tide", "potion", "reserve", "drink"
     RD.fuel.restOnly = true                          -- a drink is out of a fight only
@@ -6553,6 +6567,78 @@ local function armTool(b, macro, words, title, what)
     toolTip(b, title, what)
 end
 
+--[[ ON-USE TRINKETS ON THE DECK (24 Nov 2026, Arn, holding Enamored Water Spirit - "Use: Summons a Mana Spring Totem":
+  "any way we can smartly add this to the deck so when i take off it goes away and when i equip something it shows it").
+  Each trinket slot (13, 14) gets a tools-row button while it holds a trinket the game gives a Use: spell
+  (C_Item.GetItemSpell); a passive trinket, or none, = no button and no gap (RD.DeckTools skips `absent`). The click is
+  `/use 13` - the slot, so a swap needs no new macro text beyond the arm. Swapped out of a fight (PLAYER_EQUIPMENT_CHANGED
+  -> RD.Arm, the deck laid out again; in a fight it waits for the end, as the roster does). The icon is the trinket's own;
+  its cooldown is the client's swipe over it (SPELL_UPDATE_COOLDOWN), faded while cooling when the numbers are plain. ]]
+function RD.TrinketUse(slot)
+    if not GetInventoryItemID then return nil end
+    local ok, id = pcall(GetInventoryItemID, "player", slot)
+    id = ok and plain(id) or nil
+    if type(id) ~= "number" then return nil end
+    local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+    if not getSpell then return nil end
+    local okS, use = pcall(getSpell, id)
+    use = okS and plain(use) or nil
+    if type(use) ~= "string" or use == "" then return nil end
+    return id, use
+end
+function RD.ArmTrinkets()
+    if combat() then return false end
+    local nameOf = (C_Item and C_Item.GetItemNameByID) or GetItemInfo
+    for key, slot in pairs(RD.TRINKET_SLOTS) do
+        local b = RD[key]
+        if b then
+            local id, use = RD.TrinketUse(slot)
+            local macro = id and ("/use " .. slot) or nil
+            b:SetAttribute("*type1", macro and "macro" or nil)
+            b:SetAttribute("*macrotext1", macro)
+            b:EnableMouse(macro and true or false)
+            b.macro, b.item, b.absent = macro, id, not id
+            if id then
+                local okN, nm = false, nil
+                if nameOf then okN, nm = pcall(nameOf, id) end
+                nm = okN and plain(nm) or nil
+                b.tip = { type(nm) == "string" and nm or ("Trinket " .. (slot - 12)),
+                          "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." }
+                -- the worn slot's own icon (always known for what you wear), else the item's
+                local okT, tex = false, nil
+                if GetInventoryItemTexture then okT, tex = pcall(GetInventoryItemTexture, "player", slot) end
+                if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, id) end
+                b.face:SetAlpha(1)
+            else
+                b.tip = nil
+                b.face:SetAlpha(0)
+                b:Hide()
+            end
+        end
+    end
+    RD.PaintTrinkets()
+    return true
+end
+--- The trinkets' cooldowns: the client's swipe over the icon (handed whatever it answers), and the icon faded while it
+--- cools when the answer is plain. Called on SPELL_UPDATE_COOLDOWN and at the arm.
+function RD.PaintTrinkets()
+    local get = GetInventoryItemCooldown
+    local n = 0
+    for key, slot in pairs(RD.TRINKET_SLOTS) do
+        local b = RD[key]
+        if b and not b.absent and get then
+            local ok, start, dur = pcall(get, "player", slot)
+            if ok and b.cd and b.cd.SetCooldown then pcall(b.cd.SetCooldown, b.cd, start, dur) end
+            local s, d
+            if ok then s = plain(start) d = plain(dur) end
+            local cooling = type(s) == "number" and type(d) == "number" and s > 0 and d > 2
+            if b.food then b.food:SetVertexColor(1, 1, 1, cooling and RD.ICON_FADED or 1) end
+            n = n + 1
+        end
+    end
+    return n
+end
+
 --- THE REGEN TOOLS, out of a fight (Arn: "they are always there and we use ingame calculations out of fight"): Mana Tide
 --- if you know it, the best mana potion, the best drink - each learns its amount and gets its click.
 function RD.ArmTools()
@@ -6587,6 +6673,7 @@ function RD.ArmTools()
     end
     RD.ArmChaff()
     RD.ArmTotems()
+    RD.ArmTrinkets()
     RD.SeedCooldowns()
     RD.PaintKnobs()
     return true
@@ -8147,7 +8234,7 @@ for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENAB
                      "PLAYER_ROLES_ASSIGNED", "SPELL_UPDATE_COOLDOWN", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "UNIT_MAXPOWER",
                      "PLAYER_LEVEL_UP", "UNIT_PET", "INCOMING_RESURRECT_CHANGED", "UNIT_CONNECTION",
                      "PLAYER_TOTEM_UPDATE", "PLAYER_ENTERING_WORLD", "ADDON_RESTRICTION_STATE_CHANGED",
-                     "PLAYER_ALIVE", "PLAYER_UNGHOST" }) do
+                     "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_EQUIPMENT_CHANGED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 -- your own casts only (the reserve tank's clock): the client filters to you, so a raid's casts never reach us
@@ -8272,6 +8359,12 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         RD.KickCooldown()
         RD.Sweeps()
+        RD.PaintTrinkets()
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        -- a trinket on or off: its button comes or goes, the tools row laid out again (after the fight, in one)
+        if a1 == 13 or a1 == 14 then
+            if combat() then RD.pending = true elseif RD.Deck() then RD.Arm() else RD.ArmTrinkets() end
+        end
     elseif event == "UNIT_TARGET" then
         if a1 == "target" then RD.PaintCross() RD.PaintDeckBox() RD.RipMarks() end   -- your target picked someone else: the amber mark moves, the cues follow
     elseif event == "PLAYER_TARGET_CHANGED" then
