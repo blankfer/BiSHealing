@@ -1764,6 +1764,9 @@ RD.SW = {
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
     { key = "bounce", group = "SHAMAN",    name = "Chain Heal path",          tip = "After your Chain Heal, a bolt across the boxes it landed on: gold for 3, amber for 2, a red flash for 1. A star on each crit." },
     { key = "bsound", group = "SHAMAN",    name = "Chain Heal sounds",        tip = "A fanfare when all 3 bounces crit, a buzzer when it healed only one (mana wasted)." },
+    -- 24 Nov 2026 (Arn picked B off https://claude.ai/artifact/JF6RHHUBM5YTDrTRvWSz8o - "no i dont want reload"): live only
+    { key = "jmp",    group = "SHAMAN",    name = "Chain Heal jumps",         off = true,
+      tip = "JMP at the right end of the Mana vs boss strip: how many people your Chain Heals hit this fight, on average, out of 3. Gold at 2.5 and up, amber from 1.5, red under (one target - cast a Healing Wave there). Starts again at each pull." },
     { key = "rip",    group = "SHAMAN",    name = "Riptide + synergy bar",    tip = "A Riptide mark on whoever has yours, and the synergy bar on top: how many of YOUR Chain Heals (your cast time and lag) still land before it runs out; the Riptide icon lights when the next one would be too late." },
     { key = "oath",   group = "PALADIN",   name = "Oath of Light cue",        tip = "Holy Light in the middle of the box of whoever carries your Oath of Light: your heals land harder there." },
     { key = "vigil",  group = "PALADIN",   name = "Light's Vigil + synergy",  tip = "Holy Shock in the middle of the box of whoever carries your Light's Vigil (that Holy Shock skips its cooldown and splashes their party), and the synergy bar on top counting its 30 s down." },
@@ -6263,7 +6266,32 @@ RD.BOUNCE_BUZZ = (SOUNDKIT and SOUNDKIT.IG_QUEST_FAILED) or 847
 RD.BOUNCE_SEGS = 6
 RD.bnc = { ring = {} }
 RD.bounceAlias = {}
-function RD.BounceOn() return RD.Deck() and RD.Sw("bounce") end
+function RD.BounceOn() return RD.Deck() and (RD.Sw("bounce") or RD.Sw("jmp")) end
+
+--[[ CHAIN HEAL JUMPS (24 Nov 2026, Arn picked B: "JMP 2.6" at the strip's right end, live, no /reload). The path's own
+  judge already counts the boxes each Chain Heal landed on (only the plain who, never an amount); this keeps the count for
+  the fight - casts, boxes hit, crits, and how many hit 1 / 2 / 3 - from the pull (PLAYER_REGEN_DISABLED) on. Engineer.lua
+  paints the box (EN.JmpPaint). One addition per Chain Heal: nothing per frame. ]]
+RD.jmp = { casts = 0, hits = 0, crits = 0, by = { 0, 0, 0 } }
+function RD.JmpReset()
+    RD.jmp = { casts = 0, hits = 0, crits = 0, by = { 0, 0, 0 } }
+    if NS.EN and NS.EN.JmpPaint then NS.EN.JmpPaint() end
+end
+function RD.JmpAdd(n, crits)
+    if type(n) ~= "number" or n < 1 then return false end
+    local j = RD.jmp
+    n = math.min(3, n)
+    j.casts, j.hits, j.crits = j.casts + 1, j.hits + n, j.crits + (crits or 0)
+    j.by[n] = j.by[n] + 1
+    if NS.EN and NS.EN.JmpPaint then NS.EN.JmpPaint() end
+    return true
+end
+--- The fight's average (nil before the first Chain Heal).
+function RD.JmpAvg()
+    local j = RD.jmp
+    if j.casts < 1 then return nil end
+    return j.hits / j.casts
+end
 local function groupToken(u)
     if type(u) ~= "string" or (NS.Secret and NS.Secret(u)) then return false end
     return u == "player" or u:find("^party%d$") ~= nil or u:find("^raid%d+$") ~= nil
@@ -6356,7 +6384,8 @@ function RD.BounceJudge()
     local crits = 0
     for _, sp in ipairs(path) do if crit[sp] then crits = crits + 1 end end
     b.last = { n = #path, crits = crits, at = at }
-    if #path > 0 then                                 -- a fight feature's first deploy: a slip never breaks your casts
+    if RD.Sw("jmp") and (RD.inFight or combat()) then RD.JmpAdd(#path, crits) end   -- the fight's count (JMP)
+    if #path > 0 and RD.Sw("bounce") then             -- a fight feature's first deploy: a slip never breaks your casts
         local okD, err = pcall(RD.BounceDraw, path, crit)
         if not okD then RD.bounceErr = err end
     end
@@ -8176,6 +8205,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         RD.EndGrip()                       -- and a resize by the corner grip, the same way
         RD.ResOff()                        -- a res is out of a fight only: dark, and no click left armed
         RD.inFight = true                  -- the lockdown starts just after this event: the paints ask this too
+        RD.JmpReset()                      -- a new fight, a new Chain Heal count (JMP)
         if RD.TotemsUp() then RD.totemsFought = true end   -- the totems standing go through this fight (BRING after)
         RD.totemsBrought = false
         if RD.Active() then RD.PaintQuiet() RD.PickFuel() RD.PaintFuel() end
