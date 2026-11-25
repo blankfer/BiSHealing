@@ -191,13 +191,26 @@ function DC.Word(parent, sp, text, col, rank)
     bw = (type(bw) == "number" and bw > 0) and bw or 80
     local plate = w:CreateTexture(nil, "ARTWORK")
     plate:SetColorTexture(DC.PLATE[1], DC.PLATE[2], DC.PLATE[3], DC.PLATE[4])
-    plate:SetSize(math.max(30, math.min(120, bw - 8)), DC.SIZE + 5)        -- one width for every word: the top one covers all
+    -- a thin bar (a party's): a smaller word on a plate no taller than the bar (Radar.lua's RD.WordSize, 24 Nov)
+    local RD = NS.RD
+    local size = (RD and RD.WordSize) and RD.WordSize(bar, DC.SIZE, 1) or DC.SIZE
+    local bh = bar.GetHeight and bar:GetHeight()
+    local ph = DC.SIZE + 5
+    if type(bh) == "number" and bh > 0 then ph = math.min(ph, math.max(size + 2, bh)) end
+    plate:SetSize(math.max(30, math.min(120, bw - 8)), ph)        -- one width for every word: the top one covers all
     plate:SetPoint("CENTER", bar, "CENTER", 0, 0)
     local fs = w:CreateFontString(nil, "OVERLAY")
-    if fs.SetFont then fs:SetFont(DC.FONT, DC.SIZE, "OUTLINE") end
+    if fs.SetFont then fs:SetFont(DC.FONT, size, "OUTLINE") end
     fs:SetPoint("CENTER", bar, "CENTER", 0, 0)
     fs:SetTextColor(col[1], col[2], col[3], 1)
     fs:SetText(text)
+    -- a long word on a narrow box (Arn's shot, 24 Nov 17:58: "MIND CONTROL" ran past Chucky's bar): smaller till it fits
+    local pw = math.max(30, math.min(120, bw - 8)) - 4
+    for s = size - 1, 7, -1 do
+        local okW, sw = pcall(fs.GetStringWidth, fs)
+        if not (okW and type(sw) == "number" and sw > pw) then break end
+        if fs.SetFont then fs:SetFont(DC.FONT, s, "OUTLINE") end
+    end
     w.plate, w.text = plate, fs
     return w
 end

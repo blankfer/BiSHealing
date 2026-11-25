@@ -17504,6 +17504,13 @@ do
     CU.SetLook("rip", "word")
     RD.CueShow(sp, true)
     ok(sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "as the word: the word, no icon")
+    do  -- the word fits the bar (Arn, 24 Nov: a party's thin bars - "maybe make the font smaller")
+        local tall, thin = CreateFrame("Frame"), CreateFrame("Frame")
+        tall:SetSize(80, 30) thin:SetSize(80, 11)
+        ok(RD.WordSize(tall) == RD.CUE_WORD.size, "a tall bar: the word at its full size", RD.WordSize(tall))
+        ok(RD.WordSize(thin) < RD.CUE_WORD.size and RD.WordSize(thin) >= 7, "a thin bar: a smaller word, never under 7", RD.WordSize(thin))
+        ok(RD.WordSize(nil) == RD.CUE_WORD.size, "no bar to measure: the full size")
+    end
     CU.SetLook(sp.cue.ck, "model:198692")
     RD.CueShow(sp, true)
     ok(sp.cue.face and sp.cue.face.sq:IsShown() and sp.cue.face.model.__drawn == 198692 and not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(),

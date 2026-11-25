@@ -5871,11 +5871,20 @@ function RD.CueMark(sp)
     back:SetPoint("TOPLEFT", word, "TOPLEFT", -W.padX, W.padY)
     back:SetPoint("BOTTOMRIGHT", word, "BOTTOMRIGHT", W.padX, -W.padY)
     back:Hide() word:Hide()
-    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back }
+    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back, bar = bar }
     sp.ripHold = hold
     return sp.cue
 end
 RD.CUE_FACE = 22
+--- THE WORD FITS THE BAR (24 Nov 2026, Arn, a party's thin bars: "maybe make the font smaller" - the 10-point word with
+--- its dark box stood taller than the bar and ate into the name header): the font is the bar's height less the box's
+--- edges, never above `max`, never below 7. Measured each time it shows (the box height slider changes the bar).
+function RD.WordSize(bar, max, pad)
+    max = max or RD.CUE_WORD.size
+    local okH, h = pcall(function() return bar and bar.GetHeight and bar:GetHeight() end)
+    if not (okH and type(h) == "number" and h > 0) then return max end
+    return math.max(7, math.min(max, math.floor(h - 2 * (pad or RD.CUE_WORD.padY) - 2)))
+end
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
@@ -5890,7 +5899,19 @@ function RD.CueShow(sp, on)
         if q.ck then q.face.key = q.ck end
         NS.CU.FaceShow(q.face, model ~= nil)
     end
-    if on and not icon and not model then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    if on and not icon and not model then
+        local W = RD.CUE_WORD
+        local size = RD.WordSize(q.bar, W.size, W.padY)
+        if q.size ~= size then
+            q.size = size
+            pcall(q.word.SetFont, q.word, W.font, size, "OUTLINE")
+            local pad = (size < W.size) and 0 or W.padY                 -- (a thin bar: the box hugs the word)
+            q.back:ClearAllPoints()
+            q.back:SetPoint("TOPLEFT", q.word, "TOPLEFT", -W.padX, pad)
+            q.back:SetPoint("BOTTOMRIGHT", q.word, "BOTTOMRIGHT", W.padX, -pad)
+        end
+        q.word:Show() q.back:Show()
+    else q.word:Hide() q.back:Hide() end
     if icon then q.icon:Show() q.edge:Show() else q.icon:Hide() q.edge:Hide() end
 end
 

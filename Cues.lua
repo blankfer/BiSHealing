@@ -1255,13 +1255,15 @@ function CU.Host(p)
 end
 
 --- The window's size for the DECK tab: the family's 1.43:1, grown until the switches fit its columns.
+CU.DECK_FOOT = 30
 function CU.FitDeck(c, p)
     local RD = NS.RD
     local colW = RD.SW_W or 210
     for H = CU.CARD_H, 900, 14 do
         local W = math.max(CU.CARD_W, math.ceil(H * 1.43))
         local maxCols = math.floor((W - 8) / (colW + 8))
-        local _, fits = RD.FlowSwitches(p, colW, -(H - 24 - 18), maxCols)
+        -- (30 kept at the foot: the faint code runs to two lines and sat on "Kick buttons" - Arn's shot, 24 Nov 18:12)
+        local _, fits = RD.FlowSwitches(p, colW, -(H - 24 - CU.DECK_FOOT), maxCols)
         if fits then c:SetSize(W, H) return W, H end
     end
     c:SetSize(CU.CARD_W, CU.CARD_H)
