@@ -6810,7 +6810,8 @@ do
             ok(cell2.__attrs["*macrotext1"] == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
                .. FM.TrinketSeq(13) .. "\n" .. FM.TrinketSeq(14) .. "\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
                "one press: the guard, both trinkets (once a fight), the booster, the heal", cell2.__attrs["*macrotext1"])
-            ok(FM.TrinketSeq(14):find("^/castsequence reset=combat 14, null"), "a trinket is a cast sequence that rests on null (Arn, 24 Nov)", FM.TrinketSeq(14))
+            ok(FM.TrinketSeq(14):find("^/castsequence %[combat%] reset=combat 14, null"),
+               "a trinket is a cast sequence that rests on null, in a fight only (Arn, 24 Nov)", FM.TrinketSeq(14))
             -- A COOLING TRINKET STOPS A FOREVER MACRO (Arn measured, 24 Nov): while it cools, no line at all
             do
                 local keepCd = _G.GetInventoryItemCooldown

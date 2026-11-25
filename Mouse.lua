@@ -830,7 +830,8 @@ function FM.TrinketReady(slot)
 end
 --- The line that uses `slot` once a fight - the same text for every bind and the deck's button.
 function FM.TrinketSeq(slot)
-    return "/castsequence reset=combat " .. slot .. ", null" .. string.rep(", null", (FM.trinkVar[slot] or 0) % 4)
+    -- [combat]: never out of a fight (Arn, 24 Nov: "it did it when i was out of combat when i was healing")
+    return "/castsequence [combat] reset=combat " .. slot .. ", null" .. string.rep(", null", (FM.trinkVar[slot] or 0) % 4)
 end
 --- The bind's line for one trinket slot, or nil while it cannot be used (cooling, passive, none).
 function FM.UseLine(slot)
