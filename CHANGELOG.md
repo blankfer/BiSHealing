@@ -1,5 +1,15 @@
 # BiS Healing
 
+## 1.10.0
+
+- **Debuff cues on the deck:** a debuff that matters shows as one word across that person's bar: HEAL PAST, DON'T HEAL, DISPEL or DON'T DISPEL, only what your class can act on. Icons for the rest sit after the name. Tank armor procs show on every box, from any healer. Heal past the line (off to start) marks how far to heal through a debuff like Grievous Garrote.
+- **One window for the deck:** DECK, CUES and DEBUFFS are tabs in one window. It opens where you left it, toward the middle of the screen.
+- **On-use trinkets on the deck:** a trinket with a Use: gets its own button in the tools row while you wear it, and goes when you take it off. A mana trinket sits in the blue mana box and lights up like the potion as your mana drops.
+- **Trinkets on your binds no longer block the heal.** A ticked trinket is used once a fight, on the first press, and only in a fight. While it cools, it is left out of the bind. A trinket that comes back mid-fight: click it on the deck.
+- **JMP (shamans, off to start):** the live average of how many people each Chain Heal hit this fight, at the end of the Mana vs boss strip.
+- **Easier to read:** cue words shrink to fit thin bars and narrow boxes. The strip at the top is now called Mana vs boss. Spell cues can show the spell's own 3D art.
+- **Fixed:** the Hellfire voice speaks again. The deck's RES button casts on the right box. A heal cue makes room for a Mana Tide tag.
+
 ## 1.9.1
 
 - **Double-click the deck's bottom-right corner** to put it back at 100% and its own width (out of a fight).
