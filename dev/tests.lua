@@ -17495,6 +17495,19 @@ do
     _G.PlaySound = keepPS
     ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "off" and CU.Voice("hell") == "name", "BACK TO DEFAULT: the fireball and the voice")
     ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
+    do  -- the spells' own 3D art (23 Nov): many models, two chips, each its own camera
+        local models, cats, seenCat = 0, 0, {}
+        for _, o in ipairs(CU.LOOKS) do
+            if o.id:match("^model:%d+$") then models = models + 1 end
+            if not seenCat[o.cat] then seenCat[o.cat], cats = true, cats + 1 end
+        end
+        ok(models >= 9 and cats == 2, "the look list: 9 models or more, chips Icon and 3D only (one line on the card)")
+        ok(CU.CamOf(166214) == 1 and CU.CamOf(198692) == CU.MODEL_CAM, "a missile at the client's distance, the fireball at the square's")
+        local keepLook = CU.Look("hell")
+        ok(CU.SetLook("hell", "model:166214") ~= nil and CU.Look("hell") == "model:166214", "Frostbolt can be picked")
+        ok(CU.ModelOf("hell") == 166214, "and it is the model the face wears")
+        CU.SetLook("hell", keepLook)
+    end
     -- the middle cue's look
     local sp = { cue = { hold = CreateFrame("Frame"), word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
                          icon = CreateFrame("Frame"):CreateTexture(), edge = CreateFrame("Frame"):CreateTexture(), ck = "rip", tex = 136037 } }
@@ -17560,7 +17573,8 @@ do
     ok(CU.Order()[3] == "hell", "the down arrow moves Hellfire down")
     c.look.q:SetText("fire")
     c.look.q:GetScript("OnTextChanged")(c.look.q)
-    ok(c.look.rows[1].id == "model:198692" and not c.look.rows[2]:IsShown(), "search: 'fire' finds the Fireball only")
+    ok(c.look.rows[1].id == "model:198692" and c.look.rows[2].id == "model:166129" and not c.look.rows[3]:IsShown(),
+        "search: 'fire' finds the Fireball and the Fire bolt only")
     c.look.q:SetText("")
     c.look.q:GetScript("OnTextChanged")(c.look.q)
     c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])
