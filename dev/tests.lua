@@ -208,10 +208,17 @@ local function newFrame(kind, name, parent)
     function f:UnregisterEvent(e) if self.__events then self.__events[e] = nil end end
     function f:SetAttribute(k, v) self.__attrs[k] = v end
     function f:GetAttribute(k) return self.__attrs[k] end
-    function f:Show() self.__shown = true end
+    -- (23 Nov 2026: OnShow / OnHide run, as the client's do - a tag hidden by its own timer put the cue back only in the client)
+    function f:Show()
+        local was = self.__shown
+        self.__shown = true
+        if not was and self.__scripts and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+    end
     function f:Hide()
         if self.__shown and self.__moving then STATE.strandedDrag = (STATE.strandedDrag or 0) + 1 end
+        local was = self.__shown
         self.__shown = false
+        if was and self.__scripts and self.__scripts.OnHide then self.__scripts.OnHide(self) end
     end
     function f:IsShown() return self.__shown end
     function f:SetShown(v) self.__shown = v and true or false end
@@ -1923,6 +1930,19 @@ do
     ok(FG.StatusWord("party1") == "DEAD", "a claim nobody followed up goes after " .. FZ.HOLD .. " s")
     -- what it ignores
     ok(not FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust", "PARTY", "Arn"), "your own claim (you know)")
+    -- FOREVER WHOLE NAMES (23 Nov 2026): the sender and the corpse come whole, UnitName gives the first name only
+    do
+        local realGUN = _G.GetUnitName
+        local WHOLE = { player = "Arn Healz", party1 = "Kumlust Stormhoof", party2 = "Chain Totem" }
+        _G.GetUnitName = function(u) return WHOLE[u] end
+        FZ.claims = {}
+        ok(not FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust Stormhoof", "PARTY", "Arn Healz"),
+           "Forever: your own claim under your whole name is still yours")
+        ok(FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust Stormhoof", "PARTY", "Chain Totem")
+           and FZ.ClaimOn("party1") == "Chain Totem", "Forever: a whole-name corpse is matched to its box")
+        FZ.claims = {}
+        _G.GetUnitName = realGUN
+    end
     ok(not FZ.OnMessage("BiSInn", "5|RCLAIM|Kumlust", "PARTY", "Chain"), "another protocol's message")
     ok(not FZ.OnMessage("DBM-Core", "4|RCLAIM|Kumlust", "PARTY", "Chain"), "another addon's message")
     ok(not FZ.OnMessage("BiSInn", secret(), "PARTY", "Chain")
@@ -12235,8 +12255,10 @@ do
         ok(RD.defRail:IsShown(), "the right rail shows while you know a res")
         who = "party1"
         ok(RD.ArmRes() == "party1" and b.face:GetAlpha() == 1, "someone dead: it lights")
-        ok(b:GetAttribute("*type1") == "macro" and b:GetAttribute("*macrotext1") == "/cast [@party1,help] Ancestral Spirit",
-           "the click: the res on that friend, released or not", b:GetAttribute("*macrotext1"))
+        ok(b:GetAttribute("*type1") == "spell" and b:GetAttribute("*spell1") == "Ancestral Spirit"
+           and b:GetAttribute("unit") == "party1" and b:GetAttribute("*macrotext1") == nil,
+           "the click: the res on that friend, the box's own road (spell on the unit, no [help])", b:GetAttribute("*type1"))
+        ok(b.macro == "/cast [@party1] Ancestral Spirit", "its words for status", b.macro)
         ok(b.tip and b.tip[1] == "RES: Legaian Stormhoof", "the name under the mouse only (no words on the scope)", b.tip and b.tip[1])
         ok(b.word.__res == "", "in range: no word")
         inRange = false
@@ -12257,7 +12279,8 @@ do
         RD.overRes = nil
         inRange = true
         fire(RD.events, "PLAYER_REGEN_DISABLED")
-        ok(b.face:GetAlpha() == 0 and b:GetAttribute("*macrotext1") == nil and b.word.__res == "",
+        ok(b.face:GetAlpha() == 0 and b:GetAttribute("*type1") == nil and b:GetAttribute("*spell1") == nil
+           and b:GetAttribute("unit") == nil and b.word.__res == "",
            "a fight: dark, no click left armed")
         fire(RD.events, "PLAYER_REGEN_ENABLED")
         ok(RD.resDirty == true, "the fight's end: asked again at the next tick")
@@ -15859,6 +15882,25 @@ do
                 ok(mine and mine.tideTag:IsShown() and mine.tideTag.text.__text == "MANA TIDE 12", "your own drop: MANA TIDE 12 on your box",
                    mine and mine.tideTag and tostring(mine.tideTag.text.__text))
                 ok(RD.TideHeard("Nobody-Here", 12) == nil, "a name not in the group: nothing")
+                -- THE CUE MAKES ROOM (Arn's shot, 23 Nov: "MANA TIDE" ran into "Chain Heal" - "1")
+                do
+                    local q = RD.CueMark(mine)
+                    mine.tideTag:Hide()
+                    RD.CueSpot(mine)
+                    ok(q.spot == "middle", "no tag: the cue in the middle of the bar")
+                    RD.TideTag(mine, 12)
+                    ok(q.spot == "under" or q.spot == "right", "a tag on the line under the name: the cue moves off that line", tostring(q.spot))
+                    local bar = mine.heal
+                    local hKeep = bar.GetHeight
+                    bar.GetHeight = function() return 60 end RD.CueSpot(mine)
+                    ok(q.spot == "under", "a tall bar: under the tag's line")
+                    bar.GetHeight = function() return 24 end RD.CueSpot(mine)
+                    ok(q.spot == "right", "a short bar: at its right end")
+                    bar.GetHeight = hKeep
+                    mine.tideTag:Hide()
+                    ok(q.spot == "middle", "the tag gone: the middle again", tostring(q.spot))
+                    RD.TideTag(mine, 12)
+                end
                 -- the party's chat (Arn: "i want the cool down to put it in the chat when i click it")
                 local keepSCM, keepIG, keepIR = _G.SendChatMessage, _G.IsInGroup, _G.IsInRaid
                 local said = {}
@@ -17495,6 +17537,19 @@ do
     _G.PlaySound = keepPS
     ok(CU.Default("hell") and CU.Look("hell") == "model:198692" and CU.Sound("hell") == "off" and CU.Voice("hell") == "name", "BACK TO DEFAULT: the fireball and the voice")
     ok(CU.Named("Hellfire", "Tin") == "Hellfire, Tin", "TRY's words: the spell and the name")
+    do  -- the spells' own 3D art (23 Nov): many models, two chips, each its own camera
+        local models, cats, seenCat = 0, 0, {}
+        for _, o in ipairs(CU.LOOKS) do
+            if o.id:match("^model:%d+$") then models = models + 1 end
+            if not seenCat[o.cat] then seenCat[o.cat], cats = true, cats + 1 end
+        end
+        ok(models >= 9 and cats == 2, "the look list: 9 models or more, chips Icon and 3D only (one line on the card)")
+        ok(CU.CamOf(166214) == 1 and CU.CamOf(198692) == CU.MODEL_CAM, "a missile at the client's distance, the fireball at the square's")
+        local keepLook = CU.Look("hell")
+        ok(CU.SetLook("hell", "model:166214") ~= nil and CU.Look("hell") == "model:166214", "Frostbolt can be picked")
+        ok(CU.ModelOf("hell") == 166214, "and it is the model the face wears")
+        CU.SetLook("hell", keepLook)
+    end
     -- the middle cue's look
     local sp = { cue = { hold = CreateFrame("Frame"), word = CreateFrame("Frame"):CreateFontString(), back = CreateFrame("Frame"):CreateTexture(),
                          icon = CreateFrame("Frame"):CreateTexture(), edge = CreateFrame("Frame"):CreateTexture(), ck = "rip", tex = 136037 } }
@@ -17598,7 +17653,8 @@ do
     ok(CU.Order()[3] == "hell", "the down arrow moves Hellfire down")
     c.look.q:SetText("fire")
     c.look.q:GetScript("OnTextChanged")(c.look.q)
-    ok(c.look.rows[1].id == "model:198692" and not c.look.rows[2]:IsShown(), "search: 'fire' finds the Fireball only")
+    ok(c.look.rows[1].id == "model:198692" and c.look.rows[2].id == "model:166129" and not c.look.rows[3]:IsShown(),
+        "search: 'fire' finds the Fireball and the Fire bolt only")
     c.look.q:SetText("")
     c.look.q:GetScript("OnTextChanged")(c.look.q)
     c.sound.chips[2]:GetScript("OnClick")(c.sound.chips[2])

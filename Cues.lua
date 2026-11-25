@@ -102,11 +102,31 @@ function CU.Shown()
     return out
 end
 -- the looks: only what is known to draw (the model census proves each one first)
+-- THE SPELLS' OWN 3D ART (Arn, 23 Nov: "for the cue card it only showed the fireball, i thought i was going to be able to
+-- see all sorts of 3d models"): the missiles BiS Shell's SURVIVOR flies on Forever since 0.8.0, by file number (a name
+-- never loads on Forever) - G.MISSILES there, the first of each school, the one it asks first. `cam` = this model's
+-- camera distance in a square (nil = CU.MODEL_CAM); SURVIVOR draws its missiles at the client's own distance, 1.
+-- Two chips only (Icon / 3D): the picker is 138 px wide, and the school is in each name (the search finds it).
 CU.LOOKS = {
     { id = "icon", name = "Spell icon", cat = "Icon" },
     { id = "word", name = "Payoff word", cat = "Icon" },
-    { id = "model:198692", name = "Fireball", cat = "Fire" },
+    { id = "model:198692", name = "Fireball", cat = "3D" },
+    { id = "model:166129", name = "Fire bolt", cat = "3D", cam = 1 },        -- spells/fireball_missile_low.m2
+    { id = "model:166214", name = "Frostbolt", cat = "3D", cam = 1 },        -- spells/frostbolt.m2
+    { id = "model:166815", name = "Shadow Bolt", cat = "3D", cam = 1 },      -- spells/shadowbolt_missile.m2
+    { id = "model:166331", name = "Holy light", cat = "3D", cam = 1 },       -- spells/holy_missile_low.m2
+    { id = "model:167213", name = "Wrath (nature)", cat = "3D", cam = 1 },   -- spells/wrath_missile.m2
+    { id = "model:166497", name = "Lightning Bolt", cat = "3D", cam = 1 },   -- spells/lightningbolt_missile.m2
+    { id = "model:165570", name = "Arcane Missiles", cat = "3D", cam = 1 },  -- spells/arcane_missile_lvl1.m2
+    { id = "model:165592", name = "Arcane Shot", cat = "3D", cam = 1 },      -- spells/arcaneshot_missile.m2
 }
+--- This model file's camera distance in a square.
+function CU.CamOf(file)
+    for _, o in ipairs(CU.LOOKS) do
+        if o.cam and o.id == "model:" .. tostring(file) then return o.cam end
+    end
+    return CU.MODEL_CAM
+end
 -- SOUND AND VOICE ARE TWO PICKS (Arn, 21 Nov: "yes make sound and voice separate" - one pick meant Lightning crack took the
 -- name's place)
 CU.VOICES = {
@@ -227,7 +247,7 @@ end
 local function modelCam(m)
     if m.bisCamSet then return end
     m.bisCamSet = true
-    CU.Touch(m, "SetCamDistanceScale", CU.MODEL_CAM)
+    CU.Touch(m, "SetCamDistanceScale", CU.CamOf(m.bisWant))
 end
 local function modelLoad(m)
     if not m.bisWant or m.bisUp == m.bisWant then return end

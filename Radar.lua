@@ -3037,6 +3037,7 @@ function RD.DeckLayout(T, order)
         if plate.mateHold then plate.mateHold:SetFrameLevel(sp.heal:GetFrameLevel() + 6) end
         if room and not room.extras and sp.tideTag then sp.tideTag:Hide() end   -- no room for MANA TIDE: it goes first
         RD.TideTagWidth(sp)
+        RD.CueSpot(sp)                                            -- (a new size: the cue's room again)
         local icy = y0 + r.y + r.h - ih / 2                       -- the icon row's middle, at the box's foot
         sp.heal:SetSize(pw, ph)
         at(sp.heal, left + 1 + pw / 2, y0 + r.y + 1 + ph / 2)
@@ -5620,6 +5621,7 @@ function RD.TideTag(sp, secs, word)
             if left <= 0 then self:Hide() return end
             if left ~= self.shown then self.shown = left self.text:SetText(self.word .. " " .. left) end
         end)
+        t:SetScript("OnHide", function() RD.CueSpot(sp) end)   -- (the cue back in the middle)
         sp.tideTag = t
     end
     RD.TideTagWidth(sp)
@@ -5629,6 +5631,7 @@ function RD.TideTag(sp, secs, word)
     t.untilAt, t.shown, t.acc = GetTime() + secs, math.ceil(secs), 0
     t.text:SetText(t.word .. " " .. math.ceil(secs))
     t:Show()
+    RD.CueSpot(sp)                                            -- (the cue makes room for it)
     return t
 end
 --[[ MANA TIDE IN THE PARTY'S CHAT (16 Nov 2026, Arn: "i want the cool down to put it in the chat when i click it" - the
@@ -5885,9 +5888,38 @@ function RD.WordSize(bar, max, pad)
     if not (okH and type(h) == "number" and h > 0) then return max end
     return math.max(7, math.min(max, math.floor(h - 2 * (pad or RD.CUE_WORD.padY) - 2)))
 end
+--[[ THE CUE MAKES ROOM FOR A TAG (23 Nov 2026, Arn's shot: "MANA TIDE" ran into the box's "Chain Heal" - "1"): while a tag
+  shows on the line under the name, the cue (its word, its icon) goes UNDER that line when the bar is tall enough, else to the
+  bar's right end; back to the middle when the tag goes. A plain frame (RD.CueMark's hold): moved in a fight too. ]]
+function RD.CueSpot(sp)
+    local q = sp and sp.cue
+    if not q then return end
+    local bar = sp.heal or sp.deckPlate
+    local t = sp.tideTag
+    q.word:ClearAllPoints()
+    q.icon:ClearAllPoints()
+    if t and t:IsShown() then
+        local h = bar.GetHeight and bar:GetHeight()
+        local below = -(RD.DECK_TAG.y - RD.DECK_TAG.size - 3) + 11 + 2    -- the tag line's foot, down from the box's top
+        if type(h) == "number" and h >= below + RD.CUE_WORD.size + 4 then
+            q.word:SetPoint("TOP", bar, "TOP", 0, -below)
+            q.icon:SetPoint("TOP", bar, "TOP", 0, -below)
+            q.spot = "under"
+        else
+            q.word:SetPoint("RIGHT", bar, "RIGHT", -RD.CUE_WORD.padX - 1, 0)
+            q.icon:SetPoint("RIGHT", bar, "RIGHT", -2, 0)
+            q.spot = "right"
+        end
+    else
+        q.word:SetPoint("CENTER", bar, "CENTER", 0, 0)
+        q.icon:SetPoint("CENTER", bar, "CENTER", 0, 0)
+        q.spot = "middle"
+    end
+end
 function RD.CueShow(sp, on)
     local q = sp.cue
     if not q then return end
+    RD.CueSpot(sp)
     -- BiS Cues (21 Nov 2026): the cue card's LOOK - "icon" shows the spell's icon in the middle, else the word
     local icon = on and q.ck and q.tex and NS.CU and NS.CU.Look(q.ck) == "icon"
     local model = on and q.ck and NS.CU and NS.CU.ModelOf(q.ck) or nil        -- (a model: its own dark square, CU.Face)
@@ -6886,10 +6918,16 @@ function RD.ArmRes()
         b.ringIcon = true
         RD.SpellIcon(b, res)                          -- your res spell's own icon, the button's full size
     end
-    local macro = unit and ("/cast [@" .. unit .. ",help] " .. res) or nil
+    -- THE BOX'S OWN ROAD (23 Nov 2026, Arn: "i can click the frame and res the person but the button that is suppose to
+    -- choose the best person is not workin"): the res is the button's spell, cast on its unit - exactly what a dead box
+    -- does (Mouse.lua FM.ApplyTo, type = spell on the box's unit), which works live. The old macro carried [help], which
+    -- the box never asked. b.macro stays as words only, for change and for /bish status.
+    local macro = unit and ("/cast [@" .. unit .. "] " .. res) or nil
     if macro ~= b.macro then
-        b:SetAttribute("*type1", macro and "macro" or nil)
-        b:SetAttribute("*macrotext1", macro)
+        b:SetAttribute("*macrotext1", nil)
+        b:SetAttribute("*type1", macro and "spell" or nil)
+        b:SetAttribute("*spell1", macro and res or nil)
+        b:SetAttribute("unit", unit)
         b.macro = macro
     end
     if unit ~= b.unit then b.losUntil = nil end
@@ -6931,6 +6969,8 @@ function RD.ResOff()
     if not combat() then
         b:SetAttribute("*type1", nil)
         b:SetAttribute("*macrotext1", nil)
+        b:SetAttribute("*spell1", nil)
+        b:SetAttribute("unit", nil)
         b:EnableMouse(false)
         b.macro, b.unit = nil, nil
     end
