@@ -1,7 +1,12 @@
-# BiS Healing — CurseForge page text (1.9.0)
+# BiS Healing — CurseForge page text (1.10.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.9.0 text (25 Nov, 1.10.0): "The deck" gains the debuff cues (HEAL PAST / DON'T HEAL / DISPEL /
+DON'T DISPEL, tank armor procs, heal past the line), on-use trinkets in the tools row (a mana trinket in the blue
+box), JMP on the shaman line, and one window with DECK / CUES / DEBUFFS tabs; "BiS Cues" opens from the CUES tab;
+the mouse section's trinket line says once a fight, first press, only in a fight.
 
 Changed since the 1.7.0 text (22 Nov, 1.9.0): "The deck" - the heal cue is a word now; a warlock burning himself (Hellfire,
 Life Tap), Revelation's CRIT, raids (group tags, the sort, groups as columns, boxes that drop the extras first), the
@@ -101,7 +106,7 @@ Forty names on the screen and one of them is about to die. You do not want a spe
 - **Your heals, ready to drag.** A row of your trained healing spells sits in the window, each at your highest rank — drag one onto a button.
 - **Ranks are kept.** Drop Rank 4 and you get Rank 4, not the biggest one you know — the same bar for a third of the mana. Click the little number on a slot to step through your ranks.
 - **Nature's Swiftness first, in one press.** Drop Nature's Swiftness onto a button that already holds a heal: that button pops it, then casts the heal on whoever you clicked. The slot shows half of each icon. On cooldown you simply get the normal heal; drop the heal again to take it off. Inner Focus (priest) and Divine Favor (paladin) work the same way.
-- **Trinkets first, in one press.** Each tab (no modifier, Shift, Ctrl, Alt) has two ticks: **trinket 1** and **trinket 2**. Tick them and every button on that tab uses those trinkets, then the heal. Or drag a trinket you wear onto one heal's button. It stacks with Nature's Swiftness. A trinket with nothing to use, or on cooldown, is skipped.
+- **Trinkets first, in one press.** Each tab (no modifier, Shift, Ctrl, Alt) has two ticks: **trinket 1** and **trinket 2**. Tick them and the first press of a fight uses those trinkets, then the heal; every press after that just heals. Never out of a fight. Or drag a trinket you wear onto one heal's button. It stacks with Nature's Swiftness. A trinket with nothing to use, or on cooldown, is left out of the bind, so it never blocks the heal. One that comes back mid-fight: click it on the deck.
 - **Macros, too.** Drag a macro from your macro window (Esc > Macros) onto any button, heal side or hostile side. Write `[@mouseover]` in the macro to aim it at the cell you click.
 - **Anything not bound targets the unit.** Leave a button empty and clicking a name selects them, like Blizzard's own frames.
 - **Right-click a slot** to clear it.
@@ -161,6 +166,8 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **The top row:** **LOS**, **RNG** and **OVH** light when a heal fails or would be wasted; a box shows when **you** are stunned, silenced or locked out, with a countdown.
 - **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
 - **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
+- **On-use trinkets:** a trinket with a Use: gets its own button while you wear it. A mana trinket sits in the blue mana box and lights up like the potion as your mana drops.
+- **Debuff cues:** a debuff that matters shows as one word across that person's bar - **HEAL PAST**, **DON'T HEAL**, **DISPEL** or **DON'T DISPEL** - and only what your class can act on. Icons for the rest sit after the name. Tank armor procs show on every box. A **heal past** line (off to start) marks how far to heal through a debuff like Grievous Garrote.
 - **Mana Tide, quietly:** one click drops it; click again to ping the totem so your group knows where to stand. Nothing goes in chat. Other BiS Healing users see a tag under your name.
 - **Heal cues:** the middle of a person's bar says heal them now, with this - **Chain Heal** on whoever has your Riptide, **Holy Light** on a paladin's Oath of Light, **Holy Shock** on Light's Vigil, **Swiftmend** on a druid's Rejuvenation or Regrowth while it's ready. On every box that person is in.
 - **A warlock hurting himself:** Hellfire shows as a fire under his name with the game's own countdown, and his box flashes; Life Tap shows a **TAP** tag.
@@ -169,16 +176,16 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **DEAD, OFFLINE, AFK** across the bar, in dark red, grey and white.
 - **Raids:** a **G1, G2...** tag in each box's corner, sort by tanks, group, class or health, groups as rows or columns - and when the boxes get small, the extras go first and the health bar stays.
 - **In a battleground:** a gold **MVP** square on the box of your side's best healer and best killer (with BiS Tools).
-- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL (hold **Shift** over CALL to see every Call with its totems, and click one to make CALL drop that one), and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit.
+- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL (hold **Shift** over CALL to see every Call with its totems, and click one to make CALL drop that one), and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit. **JMP** (off to start) keeps the fight's average of how many people each Chain Heal hit.
 - **The black box** along the bottom.
-- **Switches:** the SWITCHES button opens BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET. Narrow it down to party-frame size and it stacks instead of overlapping.
+- **One window, three tabs:** the SWITCHES button opens **DECK** (BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET), **CUES** and **DEBUFFS**. It opens where you left it. Narrow it down to party-frame size and it stacks instead of overlapping.
 - **Move it** by its top strip; **resize** by dragging the bottom-right corner (Shift-drag for width). Out of a fight.
 
 Pick **the deck** in the options' look row. It and classic are the two looks.
 
 ## BiS Cues: your cues, your way
 
-The **BiS CUES** button under the deck's switches opens one card for every cue - Hellfire, Life Tap, Revelation and the heal cues:
+The deck window's **CUES** tab is one card for every cue - Hellfire, Life Tap, Revelation and the heal cues:
 
 - **Its look:** a word, the spell's icon, or a turning 3D model.
 - **Its sound and its voice:** a game sound, the spell or the person's name spoken, or nothing.
