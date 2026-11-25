@@ -1742,6 +1742,8 @@ RD.SW = {
     { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
     { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
     { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
+    { key = "head",   group = "LOOK",      name = "Name header",              tip = "The name and the buff / debuff icons in a dark strip at the top of each box, off the health bar (a short raid box keeps its whole height for the bar)." },
+    { key = "bb",     group = "LOOK",      name = "Black box",                tip = "The red light and the keypad under the window." },
     -- RAID GROUPS (21 Nov 2026, BiS Cues sheet 6, Arn picked B + its own switch). OFF until switched on (`off`, see RD.Sw),
     -- and left alone by the presets and RESET's "everything on" - they change where boxes stand, not what a box shows.
     -- The sort switch (one setting that cycles) has its own row under these (RD.SORTS).
@@ -1771,14 +1773,13 @@ RD.SW = {
     { key = "hellvoice", group = "YOUR GROUP", name = "Hellfire voice",       tip = "Your PC's voice says \"Hellfire\" when a warlock's box catches fire. At most once every 12 s a warlock." },
     { key = "tap",    group = "YOUR GROUP", name = "Life Tap tag",            tip = "TAP in amber under a warlock's name for 3 s after he trades health for mana. Only when the game shows his cast (often not in a fight)." },
     { key = "crit",   group = "EXTRAS",    name = "Revelation CRIT",          tip = "The Revelation weapon enchant's proc: a gold CRIT on the synergy bar while your next spell will crit. The game draws it, even in a fight." },
-    { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
-    full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
+    full = { names = true, head = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
              oath = true, vigil = true, swift = true, hell = true, hellvoice = true, tap = true, crit = true },
     bare = {},
-    lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
+    lean = { names = true, head = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
 RD.SW_ORDER = { "bare", "lean", "full" }
 RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
@@ -3778,6 +3779,49 @@ function RD.SwForMe(s)
     local mine = CU and CU.MyClass and CU.MyClass()
     return mine == nil or mine == cls
 end
+--- A switch row in the DECK list: yours (RD.SwForMe) and not a cue - a cue lives on the CUES / DEBUFFS tabs only (Arn,
+--- 24 Nov, sketch B: "One window, three tabs"; the seven rows that were both a switch and a cue). Cues.lua sets RD.SwOwned.
+function RD.SwInList(s)
+    return RD.SwForMe(s) and not (RD.SwOwned and RD.SwOwned(s.key))
+end
+
+--- THE DECK TAB'S COLUMNS (24 Nov 2026): the panel lives inside BiS Cues' window now (Cues.lua, CU.Host), so its rows flow
+--- into columns `colW` wide from the top of the panel down to `bottom` (a negative y): the presets and the two sliders top
+--- the first column, then the heads and rows in their order (a head never ends a column), RESET last. Answers the number
+--- of columns used and whether it all fit in `maxCols`.
+function RD.FlowSwitches(p, colW, bottom, maxCols)
+    if not (p and p.flow) then return 0, false end
+    colW = colW or RD.SW_W
+    local gap = 8
+    local pw = math.floor((colW - 16 - 8) / 3)
+    for k, name in ipairs(RD.SW_ORDER) do
+        local b = p.presets and p.presets[name]
+        if b then b:ClearAllPoints() b:SetSize(pw, 18) b:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + (k - 1) * (pw + 4), -4) end
+    end
+    local sy = -28
+    for _, key in ipairs({ "width", "height" }) do
+        local sl = p.sliders and p.sliders[key]
+        if sl then sl:ClearAllPoints() sl:SetPoint("TOPLEFT", p, "TOPLEFT", 64, sy - 4) sy = sy - 18 end
+    end
+    local col, x, y = 1, 0, sy - 4
+    local items = {}
+    for _, it in ipairs(p.flow) do items[#items + 1] = it end
+    if p.reset then items[#items + 1] = { el = p.reset, h = 24, reset = true } end
+    for i, it in ipairs(items) do
+        local need = it.h + ((it.head and items[i + 1]) and items[i + 1].h or 0)   -- a head takes its first row along
+        if y - need < bottom and y < -8 then
+            col = col + 1
+            x, y = (col - 1) * (colW + gap), -4
+        end
+        it.el:ClearAllPoints()
+        if it.head then it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 8, y - 3)
+        elseif it.reset then it.el:SetSize(colW - 16, 18) it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 8, y - 6)
+        else it.el:SetSize(colW - 8, RD.SW_ROW_H) it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 4, y) end
+        y = y - it.h
+    end
+    return col, col <= (maxCols or col)
+end
+
 function RD.BuildSwitches()
     if RD.swPanel then return RD.swPanel end
     local c = RD.PHOS
@@ -3812,6 +3856,7 @@ function RD.BuildSwitches()
     close.hl:SetAllPoints(close)
     close.hl:SetColorTexture(c[1], c[2], c[3], 0.22)
     close:SetScript("OnClick", function() p:Hide() end)
+    p.closeB = close
     -- the three presets
     p.presets = {}
     local pw = math.floor((RD.SW_W - 16 - 8) / 3)
@@ -3900,7 +3945,8 @@ function RD.BuildSwitches()
     p.rows = {}
     local y, group = -88, nil
     local list = {}
-    for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then list[#list + 1] = s end end
+    for _, s in ipairs(RD.SW) do if RD.SwInList(s) then list[#list + 1] = s end end
+    p.flow = {}                                                -- heads, rows and the sort row in order (RD.FlowSwitches)
     for _, s in ipairs(list) do
         if s.group ~= group then
             group = s.group
@@ -3909,6 +3955,7 @@ function RD.BuildSwitches()
             h:SetTextColor(1, 0.7, 0.28, 1)
             h:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 3)
             h:SetText(group)
+            p.flow[#p.flow + 1] = { el = h, h = 14, head = true }
             y = y - 14
         end
         local row = CreateFrame("Button", nil, p)
@@ -3949,8 +3996,12 @@ function RD.BuildSwitches()
         end)
         row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
         p.rows[#p.rows + 1] = row
+        p.flow[#p.flow + 1] = { el = row, h = RD.SW_ROW_H }
         y = y - RD.SW_ROW_H
-        if s.key == "cols" then y = RD.BuildSortRow(p, y, font) end     -- the sort: one row that cycles (sheet 6)
+        if s.key == "cols" then
+            y = RD.BuildSortRow(p, y, font)                            -- the sort: one row that cycles (sheet 6)
+            p.flow[#p.flow + 1] = { el = p.sortRow, h = RD.SW_ROW_H }
+        end
     end
     local reset = CreateFrame("Button", nil, p)
     reset:SetSize(RD.SW_W - 16, 18)

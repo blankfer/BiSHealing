@@ -140,7 +140,8 @@ function DC.PlaceRow(sp, row)
         local okB, bw = pcall(t.text.GetWidth, t.text)
         if okS and type(sw) == "number" and not secret(sw) then
             if okB and type(bw) == "number" and not secret(bw) and bw > 0 then sw = math.min(sw, bw) end
-            row:SetPoint("TOPLEFT", t, "TOPLEFT", (tag.x or 4) + sw + 3, (tag.y or -3) + 1)
+            local y = (sp.dc and sp.dc.inHead) and -2 or ((tag.y or -3) + 1)
+            row:SetPoint("TOPLEFT", t, "TOPLEFT", (tag.x or 4) + sw + 3, y)
             return "name"
         end
     end
@@ -181,7 +182,7 @@ end
 
 --- The word on its plate, over the bar, at its rank (made inside the client's button: it comes and goes with the aura).
 function DC.Word(parent, sp, text, col, rank)
-    local bar = sp.heal
+    local bar = DC.Bar(sp)
     local w = CreateFrame("Frame", nil, parent)
     w:SetAllPoints(bar)
     local hl = bar.GetFrameLevel and bar:GetFrameLevel()
@@ -233,6 +234,29 @@ function DC.MakeSlot(c, key, filter, opts, d, kind)
     return nil, "no method"
 end
 
+--- The health bar under the name header (Engineer.lua's e.bar), else the pip.
+function DC.Bar(sp)
+    return (sp.en and sp.en.bar) or sp.heal
+end
+
+--- THE ICONS' SIZE: in the name header (Arn's pick, 24 Nov - sketch A) they fit the strip; without it the deck's own size.
+function DC.Px(sp)
+    local EN = NS.EN
+    if EN and EN.HeadOn and EN.HeadOn(sp) then return EN.HEAD_H - 2, true end
+    local px, RD = 14, NS.RD
+    if RD and RD.IconPx then
+        local okP, v = pcall(RD.IconPx, sp.heal.GetWidth and sp.heal:GetWidth() or 60)
+        if okP and type(v) == "number" then px = math.max(10, math.min(18, v - 4)) end
+    end
+    return px, false
+end
+
+--- PACKED, NOT SPACED (24 Nov 2026): the client's flow row puts only the icons that are up side by side from the left
+--- (EllesmereUI's road: one AddAuraGroup per kind, `layout.layoutIndex` = its order; AddAuraGroup answers nothing). The
+--- buttons come bare, so DC.Dress hands each its texture. `/bish dc fixed` goes back to one fixed spot per kind.
+DC.FLOW = true
+function DC.Flow() return DC.FLOW and not (NS.DB and NS.DB().dcFixed) end
+
 function DC.Arm(sp)
     local FA = NS.FA
     if not (FA and FA.Available and FA.Available() and FA.AddSlot and sp.heal and sp.unit) then return false end
@@ -249,7 +273,8 @@ function DC.Arm(sp)
     end
     local inFight = InCombatLockdown and InCombatLockdown()
     local kinds = DC.Kinds()
-    local sig = table.concat(kinds, ",")
+    local px, inHead = DC.Px(sp)
+    local sig = table.concat(kinds, ",") .. "|" .. px .. (DC.Flow() and "f" or "x")
     if d and d.sig == sig then
         if d.unit ~= sp.unit then
             for _, c in ipairs({ d.row, d.words }) do if c then pcall(c.SetUnit, c, sp.unit) end end
@@ -266,11 +291,9 @@ function DC.Arm(sp)
     if #kinds == 0 then return true end
     local ghost = DC.Ghost(sp)
     local RD = NS.RD
-    local px = 14
-    if RD and RD.IconPx then
-        local okP, v = pcall(RD.IconPx, sp.heal.GetWidth and sp.heal:GetWidth() or 60)
-        if okP and type(v) == "number" then px = math.max(10, math.min(18, v - 4)) end
-    end
+    d.px, d.inHead = px, inHead
+    -- a row longer than the box is cut at the box's edge, never drawn over the next box
+    if sp.deckTag and sp.deckTag.SetClipsChildren then pcall(sp.deckTag.SetClipsChildren, sp.deckTag, true) end
     -- THE ICON ROW
     local okR, row = pcall(CreateFrame, "AuraContainer", nil, sp.deckTag or sp.heal, "CustomAuraContainerTemplate")
     if okR and row then
@@ -283,22 +306,49 @@ function DC.Arm(sp)
         d.row = row
         d.where = DC.PlaceRow(sp, row)
         row:SetUnit(sp.unit)
+        -- PACKED BY THE CLIENT'S FLOW since 24 Nov evening (DC.Flow - its first try failed only because the buttons were
+        -- bare); the fixed road below stays as `/bish dc fixed` and as the fallback for a kind the flow refused.
         -- ONE SLOT PER KIND, NEVER TWO ON TOP (24 Nov 2026, Arn's /bish dc after a cast: "flow refused: nil ... buttons handed
         -- 55" and still no Ancestral Fortitude): the flow group answered nothing but WAS made (it handed its buttons over), and
         -- a fixed slot went on top of it under the same key - Revelation's lesson of 22 Nov (Reveal.lua). Now the fixed road
         -- only (DC.MakeSlot: a fresh key, a slot that handed a button over counts as made, no second one on top).
         d.rowSlots, d.roads = {}, {}
+        local flow = DC.Flow() and row.AddAuraGroup and row.SetFlowLayoutAxis and AnchorUtil and AnchorUtil.FlowLayoutAxis
+        if flow then
+            pcall(row.SetFlowLayoutAxis, row, AnchorUtil.FlowLayoutAxis.Horizontal)
+            if row.SetFlowLayoutAnchorPoint then pcall(row.SetFlowLayoutAnchorPoint, row, "TOPLEFT") end
+            if row.SetFlowLayoutGrowthDirection and AnchorUtil.FlowDirection then
+                pcall(row.SetFlowLayoutGrowthDirection, row, AnchorUtil.FlowDirection.Right, AnchorUtil.FlowDirection.Down)
+            end
+        end
         for i, key in ipairs(kinds) do
             local filter = (key == "armor") and "HELPFUL" or "HARMFUL"
-            local slot, road = DC.MakeSlot(row, "BiSDC" .. key, filter, {
+            local slot, road
+            if flow then
+                DC.made = (DC.made or 0) + 1
+                local k = key
+                local okG, err = pcall(row.AddAuraGroup, row, "BiSDCf" .. key .. DC.made, filter, {
+                    maxFrameCount = 2, candidateFilters = { includeSpellIDs = DC.Ids(key) },
+                    layout = { elementWidth = px, elementHeight = px, elementSpacing = DC.GAP, lineSpacing = DC.GAP, layoutIndex = i },
+                    initializeFrame = function(b)
+                        d.handed = (d.handed or 0) + 1
+                        d.handedBy = d.handedBy or {}
+                        d.handedBy[k] = (d.handedBy[k] or 0) + 1
+                        pcall(b.SetSize, b, px, px)
+                        DC.Dress(b)
+                    end,
+                })
+                if okG then slot, road = true, "flow" else road = "flow refused: " .. tostring(err) end
+            end
+            if not slot then slot, road = DC.MakeSlot(row, "BiSDC" .. key, filter, {
                 candidateFilters = { includeSpellIDs = DC.Ids(key) },
                 initializeFrame = FA.Placed(DC.Dress, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
-            }, d, key)
-            d.roads[#d.roads + 1] = key .. " " .. road
+            }, d, key) end
+            d.roads[#d.roads + 1] = key .. " " .. tostring(road)
             d.rowSlots[key] = slot
             if not slot then DC.refused = true end
         end
-        d.how = "fixed"
+        d.how = flow and "flow" or "fixed"
         if row.SetEnabled then pcall(row.SetEnabled, row, true) end
         if row.UpdateAllAuras then pcall(row.UpdateAllAuras, row) end
         d.row = row
@@ -307,7 +357,7 @@ function DC.Arm(sp)
     local okW, words = pcall(CreateFrame, "AuraContainer", nil, sp.deckPlate or sp.heal, "CustomAuraContainerTemplate")
     if okW and words then
         words:SetSize(1, 1)
-        words:SetPoint("CENTER", sp.heal, "CENTER", 0, 0)
+        words:SetPoint("CENTER", DC.Bar(sp), "CENTER", 0, 0)
         words:SetUnit(sp.unit)
         d.wordSlots = {}
         local function slotFor(key, text, col, rank, ids)
@@ -319,7 +369,7 @@ function DC.Arm(sp)
                         for _, r in ipairs({ button:GetRegions() }) do if r.Hide then pcall(r.Hide, r) end end
                     end
                     pcall(function() button.dcWord = DC.Word(button, sp, text, col, rank) end)
-                end, 1, "CENTER", sp.heal, 0, 0),
+                end, 1, "CENTER", DC.Bar(sp), 0, 0),
             }, nil, key)
             d.wordSlots[key] = s
         end

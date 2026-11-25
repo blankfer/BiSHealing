@@ -12376,7 +12376,7 @@ do
             -- engineer?"): the grid's band - from the box's right edge leftwards by the incoming, masked to their health
             local op = e.over.points[1]
             local oft = e.over:GetStatusBarTexture()
-            ok(op and op[1] == "TOPRIGHT" and op[2] == e.box and op[3] == "TOPRIGHT" and e.over:GetReverseFill()
+            ok(op and op[1] == "TOPRIGHT" and (op[2] == e.box or op[2] == e.bar) and op[3] == "TOPRIGHT" and e.over:GetReverseFill()
                and e.over:GetValue() == INC2 and select(2, e.over:GetMinMaxValues()) ~= nil,
                "an overheal band: the incoming again, filling leftwards from the box's right edge, on their max", tostring(op and op[2]))
             local masked = false
@@ -15762,7 +15762,7 @@ do
             RD.frame:SetScript("OnDragStart", keepDS)
             ok(started == 1, "a drag on the band moves the window (the window's own drag)")
             -- the panel
-            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class)")
+            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwInList(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class, cues on their own tabs)")
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
             ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
             ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
@@ -17539,12 +17539,43 @@ do
     SlashCmdList.BISHEALING("import " .. s)
     ok(CU.On("hell") and CU.Order()[1] == "tap", "/bish import <string>: the capitals survive the slash command")
     -- the card
-    RD.BuildSwitches()
-    ok(RD.swPanel and RD.swPanel.cues, "the switches panel has a BiS CUES button")
-    RD.swPanel:Show()
-    RD.swPanel.cues:GetScript("OnClick")(RD.swPanel.cues)
+    -- ONE WINDOW, THREE TABS (Arn, 24 Nov, sketch B): the switches button opens it on DECK, the switches inside it
+    RD.ToggleSwitches()
     local c = CU.card
-    ok(c and c:IsShown() and c.points[1][2] == RD.swPanel, "it opens the card beside the switches panel")
+    ok(c and c:IsShown() and CU.tab == "deck" and RD.swPanel.hosted and RD.swPanel:GetParent() == c and RD.swPanel:IsShown()
+       and not c.page:IsShown(), "the switches button: the one window on its DECK tab, the switches inside it")
+    do
+        local owned = {}
+        for _, row in ipairs(RD.swPanel.rows) do owned[row.key] = true end
+        ok(not owned.hell and not owned.hellvoice and not owned.tap and not owned.crit and not owned.rip and owned.bb,
+           "no cue in the switch list (Hellfire, its voice, Life Tap, Revelation, Riptide on the cue tabs); Black box stays")
+        local W, H = c:GetWidth(), c:GetHeight()
+        ok(math.abs(W / H - 1.43) < 0.03 or W == CU.CARD_W, "the DECK tab keeps the family's 1.43:1 (or the card's own width)", W .. "x" .. H)
+        local inside = true
+        local cl, ct = 0, 0
+        for _, row in ipairs(RD.swPanel.rows) do
+            local pt = row.points and row.points[1]
+            if pt and (pt[4] < 0 or pt[4] + row:GetWidth() > W or -pt[5] + 18 > H - 24) then inside = false end
+        end
+        ok(inside, "every switch row inside the window, in columns")
+    end
+    CU.SetTab("debuffs")
+    do
+        local onlyDeb = true
+        for _, row in ipairs(c.order) do if row:IsShown() and row.key and CU.BY[row.key].cat ~= "DEBUFFS" then onlyDeb = false end end
+        ok(c.page:IsShown() and not RD.swPanel:IsShown() and onlyDeb and CU.BY[CU.sel].cat == "DEBUFFS",
+           "DEBUFFS: the debuff cues only, the switches put away")
+    end
+    CU.SetTab("cues")
+    do
+        local noDeb = true
+        for _, row in ipairs(c.order) do if row:IsShown() and row.key and CU.BY[row.key].cat == "DEBUFFS" then noDeb = false end end
+        ok(noDeb and CU.BY[CU.sel].cat ~= "DEBUFFS", "CUES: every cue but the debuffs")
+    end
+    ok(RD.ToggleSwitches() == true and CU.tab == "deck" and c:IsShown(), "the switches button with CUES open: flips to DECK, stays open")
+    ok(RD.ToggleSwitches() == false and not c:IsShown() and not RD.swPanel:IsShown(), "again: the window closes, DECK with it")
+    CU.Toggle()
+    ok(c:IsShown() and CU.tab == "cues", "/bish cues: the window on CUES")
     do   -- the family's colours (Arn, 21 Nov: "bis>cues has this blue tint to it")
         local P = RD.PLATE
         ok(c.bg.__color[1] == P[1] and c.bg.__color[2] == P[2] and c.bg.__color[3] == P[3], "the card stands on the deck's own black, as the switches panel does")
@@ -17806,6 +17837,26 @@ do
                 DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil) DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil)
                 ok(k1 and k2 and k1 ~= k2, "a fresh key every slot (a key the client knows may be the refusal)", tostring(k1) .. " " .. tostring(k2))
             end
+            do  -- THE NAME HEADER INSIDE THE BOX (Arn's pick, 24 Nov - sketch A)
+                local EN = NS.EN
+                local pip = CreateFrame("Button", nil, UIParent)
+                pip:SetSize(120, 44)
+                local fake = { heal = pip, unit = "party1" }
+                local e = EN.Box(fake)
+                ok(EN.Head(fake) == EN.HEAD_H and e.head:IsShown() and e.bar.points[1][2] == e.box and e.bar.points[1][5] == -EN.HEAD_H,
+                   "a tall box: the dark header on top, the bar starts under it")
+                ok(e.over.points[1][2] == e.bar, "the overheal hangs from the bar's top, not the header's")
+                local px, inHead = DC.Px(fake)
+                ok(inHead and px == EN.HEAD_H - 2, "the icons fit the header strip", px)
+                pip:SetSize(120, 24)
+                ok(EN.Head(fake) == 0 and not e.head:IsShown() and e.bar.points[1][5] == 0, "a short box: no header, the bar keeps the whole height")
+                pip:SetSize(120, 44)
+                local keepH = NS.RD.Sw("head")
+                NS.RD.SetSw("head", false)
+                ok(EN.Head(fake) == 0 and not e.head:IsShown(), "the Name header switch off: no header")
+                NS.RD.SetSw("head", keepH)
+                ok(DC.Bar(fake) == e.bar, "the words sit on the bar under the header")
+            end
             do  -- THE CLIENT'S BUTTON COMES BARE (Arn's shot, 24 Nov): it draws the aura only into a texture handed to SetIcon
                 local b = CreateFrame("Button")
                 local reg
@@ -17916,93 +17967,40 @@ do
             for k, v in pairs(keepBook) do book[k] = v end
         end
     end
-    -- THE SWITCHES OPEN THE CARD (Arn, 24 Nov: "too many clicks to reach the cues window")
+    -- WHERE THE ONE WINDOW OPENS (Arn, 24 Nov, sketch B: where the switches were - the deck's right edge)
     do
-        local p = NS.RD.swPanel
-        if p then
-            local keepPC, keepUC = p.GetCenter, UIParent.GetCenter
-            UIParent.GetCenter = function() return 960, 540 end
-            p.GetCenter = function() return 1500, 600 end
-            p:Hide()
-            if c:IsShown() then c:Hide() end
-            p:Show()
-            if p.__scripts.OnShow then p.__scripts.OnShow(p) end          -- (the kit's Show fires no OnShow; the client's does)
-            local cp = c.points[1]
-            ok(c:IsShown() and cp and cp[1] == "TOPRIGHT" and cp[2] == p, "the switches open: the cues card opens beside them, on the far side from the deck")
-            p:Hide()
-            if p.__scripts.OnHide then p.__scripts.OnHide(p) end
-            ok(not c:IsShown(), "the switches close: the card goes with them")
-            p.GetCenter, UIParent.GetCenter = keepPC, keepUC
-        else
-            ok(false, "the switches panel for the pairing test")
-        end
-    end
-    -- WHERE IT OPENS (Arn, 24 Nov: "it opens at the right and I already have my deck at the right"): toward the middle
-    do
-        local p = NS.RD.swPanel
-        if p then
-            local keepShown, keepPC, keepUC = p.IsShown, p.GetCenter, UIParent.GetCenter
-            local r = NS.DB().radar
-            local keepPos = r.cuesPos
-            r.cuesPos = nil
-            local keepFrame = NS.RD.frame
-            NS.RD.frame = nil                                   -- (no deck first: the card goes by the panel)
-            p.IsShown = function() return true end
-            UIParent.GetCenter = function() return 960, 540 end
-            if c:IsShown() then c:Hide() end
-            p.GetCenter = function() return 1500, 600 end
-            CU.Toggle()
-            local cp = c.points[1]
-            ok(cp and cp[1] == "TOPRIGHT" and cp[2] == p and cp[3] == "TOPLEFT", "a panel on the right: the card opens on its LEFT (the deck's side stays clear)")
-            CU.Toggle()
-            p.GetCenter = function() return 400, 600 end
-            CU.Toggle()
-            cp = c.points[1]
-            ok(cp and cp[1] == "TOPLEFT" and cp[2] == p and cp[3] == "TOPRIGHT", "a panel on the left: on its right, as before")
-            -- Arn, 24 Nov ("i want it like this"): the deck showing, the card against the deck's LEFT, the switches on its right
-            CU.Toggle()
-            local deck = CreateFrame("Frame", nil, UIParent)
-            deck:SetSize(400, 300)
-            deck.IsShown = function() return true end
-            deck.GetLeft = function() return 1000 end
-            NS.RD.frame = deck
-            CU.Toggle()
-            cp = c.points[1]
-            ok(cp and cp[1] == "TOPRIGHT" and cp[2] == deck and cp[3] == "TOPLEFT", "the deck showing: the card against its left edge, tops level")
-            CU.Toggle()
-            ok(CU.OpenBeside(p) and c.points[1][2] == deck, "the switches opening put it there too")
-            c:Hide()
-            deck.GetLeft = function() return 100 end
-            p.GetCenter = function() return 600, 600 end
-            CU.Toggle()
-            cp = c.points[1]
-            ok(cp and cp[2] == p, "no room left of the deck: back beside the panel")
-            CU.Toggle()
-            deck.IsShown = function() return false end
-            deck.GetLeft = function() return 1000 end
-            CU.Toggle()
-            ok(c.points[1][2] == p, "the deck hidden: beside the panel")
-            CU.Toggle()
-            NS.RD.frame = keepFrame
-            -- dragged: it opens there next time, and the drag ends at the pull
-            c.__scripts.OnDragStart(c)
-            ok(c.moving, "it drags")
-            c:ClearAllPoints() c:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
-            CU.events.__scripts.OnEvent(CU.events, "PLAYER_REGEN_DISABLED")
-            ok(not c.moving and r.cuesPos and r.cuesPos[1] == "TOPLEFT" and r.cuesPos[3] == 120, "the pull ends the drag; the spot kept")
-            CU.Toggle() CU.Toggle()
-            cp = c.points[1]
-            ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[4] == 120, "opened again where you left it")
-            CU.Toggle()
-            r.cuesPos = keepPos
-            p.IsShown, p.GetCenter, UIParent.GetCenter = keepShown, keepPC, keepUC
-        else
-            ok(false, "the switches panel exists for the card's side test")
-        end
+        local r = NS.DB().radar
+        local keepPos, keepFrame = r.deckWinPos, NS.RD.frame
+        r.deckWinPos = nil
+        CU.Close()
+        local deck = CreateFrame("Frame", nil, UIParent)
+        deck:SetSize(400, 300)
+        deck.IsShown = function() return true end
+        NS.RD.frame = deck
+        CU.Open("deck")
+        local cp = c.points[1]
+        ok(cp and cp[1] == "TOPLEFT" and cp[2] == deck and cp[3] == "TOPRIGHT", "the deck showing: the window against its right edge, tops level")
+        CU.Close()
+        deck.IsShown = function() return false end
+        CU.Open("cues")
+        ok(c.points[1][2] == UIParent and c.points[1][1] == "CENTER", "no deck: the middle")
+        -- dragged: it opens there next time, and the drag ends at the pull
+        c.__scripts.OnDragStart(c)
+        ok(c.moving, "it drags")
+        c:ClearAllPoints() c:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
+        CU.events.__scripts.OnEvent(CU.events, "PLAYER_REGEN_DISABLED")
+        ok(not c.moving and r.deckWinPos and r.deckWinPos[1] == "TOPLEFT" and r.deckWinPos[3] == 120, "the pull ends the drag; the spot kept")
+        CU.Close()
+        deck.IsShown = function() return true end
+        CU.Open("deck")
+        cp = c.points[1]
+        ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[4] == 120, "opened again where you left it (the deck or not)")
+        CU.Close()
+        r.deckWinPos, NS.RD.frame = keepPos, keepFrame
     end
     CU.sel = "oath"
-    CU.Toggle() CU.Toggle()
-    local nShown = #CU.Shown()
+    CU.Close() CU.Toggle()
+    local nShown = #CU.TabShown()
     ok(CU.sel ~= "oath" and c.order[nShown]:IsShown() and not (c.order[nShown + 1] and c.order[nShown + 1]:IsShown()) and nShown < #CU.LIST,
        "the card: one row per cue you can act on (" .. nShown .. "), a cue you cannot act on never chosen")
     _G.UnitClass = function() return "Paladin", "PALADIN", 2 end

@@ -1022,49 +1022,56 @@ function CU.Card()
     c.edges = edges(c, { ACC[1] * 0.6, ACC[2] * 0.6, ACC[3] * 0.6, 1 })
     c.title = text(c, 12, ACC)
     c.title:SetPoint("TOPLEFT", c, "TOPLEFT", 8, -7)
-    c.title:SetText("BiS>Cues")
+    c.title:SetText("BiS>Deck")
     c.note = text(c, 9, GOLD)
     c.note:SetPoint("LEFT", c.title, "RIGHT", 8, 0)
     c.close = button(c, 14, 14, "x", function() c:Hide() end)
     c.close:SetPoint("TOPRIGHT", c, "TOPRIGHT", -4, -4)
-    c.orderHead = text(c, 9, GOLD)
-    c.orderHead:SetPoint("TOPLEFT", c, "TOPLEFT", 10, -28)
+    -- THE ONE WINDOW (Arn, 24 Nov, sketch B: "One window, three tabs"): the cue card's own parts live on a page that the
+    -- CUES and DEBUFFS tabs show; the DECK tab shows the switches panel in its place (CU.Host). Anchored to the page = to
+    -- the card (the page covers it).
+    local pg = CreateFrame("Frame", nil, c)
+    pg:SetAllPoints(c)
+    c.page = pg
+    c.orderHead = text(pg, 9, GOLD)
+    c.orderHead:SetPoint("TOPLEFT", pg, "TOPLEFT", 10, -28)
     c.orderHead:SetText("THE CUES, IN ROW ORDER")
-    buildOrder(c)
+    buildOrder(pg)
+    c.order = pg.order
     -- the chosen cue
-    c.name = text(c, 12, INK)
-    c.name:SetPoint("TOPLEFT", c, "TOPLEFT", 168, -26)
-    c.preview = buildPreview(c, 168, -42)
-    c.try = button(c, 56, 18, "TRY", function() CU.Try() end)
-    c.try:SetPoint("TOPLEFT", c, "TOPLEFT", 326, -42)
-    c.def = button(c, 90, 18, "BACK TO DEFAULT", function() CU.Default(CU.sel) end)
-    c.def:SetPoint("TOPLEFT", c, "TOPLEFT", 326, -64)
+    c.name = text(pg, 12, INK)
+    c.name:SetPoint("TOPLEFT", pg, "TOPLEFT", 168, -26)
+    c.preview = buildPreview(pg, 168, -42)
+    c.try = button(pg, 56, 18, "TRY", function() CU.Try() end)
+    c.try:SetPoint("TOPLEFT", pg, "TOPLEFT", 326, -42)
+    c.def = button(pg, 90, 18, "BACK TO DEFAULT", function() CU.Default(CU.sel) end)
+    c.def:SetPoint("TOPLEFT", pg, "TOPLEFT", 326, -64)
     -- the voice: its own pick, over the two lists
-    c.voiceHead = text(c, 10, ACC)
-    c.voiceHead:SetPoint("TOPLEFT", c, "TOPLEFT", 168, -95)
+    c.voiceHead = text(pg, 10, ACC)
+    c.voiceHead:SetPoint("TOPLEFT", pg, "TOPLEFT", 168, -95)
     c.voiceHead:SetText("VOICE")
     c.voices = {}
     local vx = 208
     for i, o in ipairs(CU.VOICES) do
         local w = 14 + #o.name * 6
-        local b = button(c, w, 17, o.name, function()
+        local b = button(pg, w, 17, o.name, function()
             CU.SetVoice(CU.sel, o.id)
             local q = CU.BY[CU.sel]
             if q then CU.Speak(q, o.id, "Tin") end
         end)
-        b:SetPoint("TOPLEFT", c, "TOPLEFT", vx, -91)
+        b:SetPoint("TOPLEFT", pg, "TOPLEFT", vx, -91)
         b.id = o.id
         c.voices[i] = b
         vx = vx + w + 5
     end
-    c.look = picker(c, "look", 168, -116, 138)
-    c.sound = picker(c, "sound", 314, -116, 138)
+    c.look = picker(pg, "look", 168, -116, 138)
+    c.sound = picker(pg, "sound", 314, -116, 138)
     -- the string
-    c.export = button(c, 74, 18, "EXPORT", function() CU.ShowString("export") end)
-    c.export:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 8)
-    c.import = button(c, 74, 18, "IMPORT", function() CU.ShowString("import") end)
+    c.export = button(pg, 74, 18, "EXPORT", function() CU.ShowString("export") end)
+    c.export:SetPoint("BOTTOMLEFT", pg, "BOTTOMLEFT", 8, 8)
+    c.import = button(pg, 74, 18, "IMPORT", function() CU.ShowString("import") end)
     c.import:SetPoint("LEFT", c.export, "RIGHT", 6, 0)
-    c.hint = text(c, 9, DIM)
+    c.hint = text(pg, 9, DIM)
     c.hint:SetPoint("LEFT", c.import, "RIGHT", 8, 0)
     c.hint:SetText("Set it up in the browser: Explorer\\BiSCues.html in the addon's folder.")
     -- THE FAINT CODE (Arn, 21 Nov: "a faint code on the page so when i ss you can see back end info version number ect
@@ -1080,7 +1087,12 @@ function CU.Card()
     c:RegisterForDrag("LeftButton")
     c:SetScript("OnDragStart", function(self) self:StartMoving() self.moving = true end)
     c:SetScript("OnDragStop", function() CU.EndDrag() end)
-    c:SetScript("OnHide", function() CU.EndDrag() end)
+    c:SetScript("OnHide", function()
+        CU.EndDrag()
+        local p = NS.RD and NS.RD.swPanel
+        if p and p.hosted then p:Hide() end                    -- (the DECK tab goes with its window)
+    end)
+    CU.BuildTabs(c)
     c:Hide()
     if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "BiSHealingCues") end
     CU.card = c
@@ -1090,8 +1102,16 @@ end
 function CU.Paint()
     local c = CU.card
     if not c then return false end
-    local shown = CU.Shown()
-    if not CU.BY[CU.sel] or not CU.ForMe(CU.sel) then CU.sel = shown[1] or CU.LIST[1].key end
+    CU.PaintTabs()
+    if c.code then c.code:SetText(CU.Code()) end
+    if CU.tab == "deck" then
+        c.note:SetText(fight() and "after this fight" or "")
+        return true
+    end
+    local shown = CU.TabShown()
+    local inTab = false
+    for _, k in ipairs(shown) do if k == CU.sel then inTab = true end end
+    if not CU.BY[CU.sel] or not CU.ForMe(CU.sel) or not inTab then CU.sel = shown[1] or CU.LIST[1].key end
     for i, row in ipairs(c.order) do if i > #shown then row.key = nil row:Hide() else row:Show() end end
     for i, k in ipairs(shown) do
         local row = c.order[i]
@@ -1159,17 +1179,7 @@ function CU.Try()
     return CU.Say(CU.sel, "Tin", true)
 end
 
---- Open the card beside the switches panel (the panel opened): its side toward the screen's middle.
-function CU.OpenBeside(p)
-    local c = CU.Card()
-    CU.PlaceBeside(c, p)
-    c:Show()
-    c.withPanel = true
-    CU.Paint()
-    return true
-end
-
---- The drag's end: let go, and keep the spot (by the screen, never by the panel) for the next opening.
+--- The drag's end: let go, and keep the spot (by the screen) for the next opening.
 function CU.EndDrag()
     local c = CU.card
     if not (c and c.moving) then return end
@@ -1178,57 +1188,152 @@ function CU.EndDrag()
     local pt, _, rel, x, y = c:GetPoint(1)
     if type(pt) == "string" and type(x) == "number" and type(y) == "number" then
         local r = CU.DB() and (NS.DB().radar)
-        if r then r.cuesPos = { pt, rel or pt, x, y } end
+        if r then r.deckWinPos = { pt, rel or pt, x, y } end
     end
 end
 
---- WHERE THE CARD GOES WITH THE SWITCHES (Arn, 24 Nov, a shot of it: "i want it like this"): the deck in the middle, the
---- switches on its right (RD.ToggleSwitches puts them there), the card against the deck's LEFT edge, tops level. No deck
---- showing, or no room left of it on the screen: beside the panel, toward the screen's middle (CU.SideOf).
-function CU.PlaceBeside(c, p)
-    c:ClearAllPoints()
-    local f = NS.RD and NS.RD.frame
-    if f and f.IsShown and f:IsShown() then
-        local ok, left = pcall(f.GetLeft, f)
-        local fs = (f.GetEffectiveScale and f:GetEffectiveScale()) or 1
-        local cs = (c.GetEffectiveScale and c:GetEffectiveScale()) or 1
-        local cw = c.GetWidth and c:GetWidth()
-        if ok and type(left) == "number" and type(cw) == "number" and left * fs >= (cw + 6) * cs then
-            c:SetPoint("TOPRIGHT", f, "TOPLEFT", -6, 0)
-            return "deck"
-        end
+-- ----------------------------------------------------------------- the one window's tabs
+
+--[[ ONE WINDOW, THREE TABS (Arn, 24 Nov 2026, sketch B https://claude.ai/artifact/673B7uUYYd1rmWqHZMitvh: "One window, three
+  tabs ... for the switches and cues"). DECK = the switches panel, hosted here (CU.Host) in columns (RD.FlowSwitches);
+  CUES = every cue but the debuffs; DEBUFFS = the debuff cues. The seven rows that were a switch AND a cue live on the
+  cue tabs only (RD.SwOwned). The switches button opens it on DECK, /bish cues on CUES; it opens where you last dragged
+  it, else against the deck's right edge (where the switches opened), else the middle. ]]
+CU.TABS = { { id = "deck", name = "DECK" }, { id = "cues", name = "CUES" }, { id = "debuffs", name = "DEBUFFS" } }
+CU.tab = "cues"
+
+--- The cues on the open tab, in row order (your class only, as CU.Shown).
+function CU.TabShown(tab)
+    tab = tab or CU.tab
+    local out = {}
+    for _, k in ipairs(CU.Shown()) do
+        local deb = CU.BY[k].cat == "DEBUFFS"
+        if (tab == "debuffs") == deb then out[#out + 1] = k end
     end
-    if CU.SideOf(p) == "left" then c:SetPoint("TOPRIGHT", p, "TOPLEFT", -4, 0)
-    else c:SetPoint("TOPLEFT", p, "TOPRIGHT", 4, 0) end
-    return CU.SideOf(p)
+    return out
 end
 
---- Which side of the switches panel the card opens on: TOWARD THE SCREEN'S MIDDLE (Arn, 24 Nov: "it opens at the right
---- and I already have my deck at the right") - a panel in the right half of the screen opens it on its left.
-function CU.SideOf(p)
-    local ok, x = pcall(p.GetCenter, p)
-    local okU, ux = pcall(UIParent.GetCenter, UIParent)
-    if not (ok and okU and type(x) == "number" and type(ux) == "number") then return "right" end
-    local ps = (p.GetEffectiveScale and p:GetEffectiveScale()) or 1
-    local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-    return (x * ps > ux * us) and "left" or "right"
+function CU.BuildTabs(c)
+    c.tabs = {}
+    local x = 84
+    for i, t in ipairs(CU.TABS) do
+        local w = 18 + #t.name * 6
+        local b = button(c, w, 16, t.name, function() CU.SetTab(t.id) end)
+        b:SetPoint("TOPLEFT", c, "TOPLEFT", x, -4)
+        b.id = t.id
+        c.tabs[i] = b
+        x = x + w + 4
+    end
 end
 
---- Open (or close) the card: where you last dragged it; else beside the switches panel, on its side toward the
---- screen's middle; else the middle.
-function CU.Toggle()
+function CU.PaintTabs()
+    local c = CU.card
+    for _, b in ipairs((c and c.tabs) or {}) do
+        local on = b.id == CU.tab
+        b.text:SetTextColor(on and ACC[1] or DIM[1], on and ACC[2] or DIM[2], on and ACC[3] or DIM[3], 1)
+        for _, e in ipairs(b.edges or {}) do e:SetColorTexture(ACC[1] * (on and 1 or 0.3), ACC[2] * (on and 1 or 0.3), ACC[3] * (on and 1 or 0.3), 1) end
+    end
+end
+
+--- The switches panel moves into the window, once: its own frame, title, close and Esc go (the window has them).
+function CU.Host(p)
     local c = CU.Card()
-    if c:IsShown() then c:Hide() return false end
+    if not p or p.hosted then return p end
+    p.hosted = true
+    p:SetParent(c)
+    if p.SetScale then p:SetScale(1) end                       -- (the window carries the 1.2)
+    p:ClearAllPoints()
+    p:SetPoint("TOPLEFT", c, "TOPLEFT", 0, -24)
+    p:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
+    for _, r in ipairs({ p.bg, p.title, p.closeB, p.note }) do if r and r.Hide then r:Hide() end end
+    for _, e in ipairs(p.edges or {}) do if e.Hide then e:Hide() end end
+    if p.EnableMouse then p:EnableMouse(false) end            -- (a drag on its empty space moves the window)
+    if type(UISpecialFrames) == "table" then
+        for i = #UISpecialFrames, 1, -1 do if UISpecialFrames[i] == "BiSHealingSwitches" then table.remove(UISpecialFrames, i) end end
+    end
+    return p
+end
+
+--- The window's size for the DECK tab: the family's 1.43:1, grown until the switches fit its columns.
+function CU.FitDeck(c, p)
+    local RD = NS.RD
+    local colW = RD.SW_W or 210
+    for H = CU.CARD_H, 900, 14 do
+        local W = math.max(CU.CARD_W, math.ceil(H * 1.43))
+        local maxCols = math.floor((W - 8) / (colW + 8))
+        local _, fits = RD.FlowSwitches(p, colW, -(H - 24 - 18), maxCols)
+        if fits then c:SetSize(W, H) return W, H end
+    end
+    c:SetSize(CU.CARD_W, CU.CARD_H)
+    return CU.CARD_W, CU.CARD_H
+end
+
+function CU.SetTab(id)
+    local c = CU.Card()
+    local RD = NS.RD
+    CU.tab = id
+    if id == "deck" and RD and RD.BuildSwitches then
+        local p = CU.Host(RD.BuildSwitches())
+        c.page:Hide()
+        p:Show()
+        CU.FitDeck(c, p)
+        if RD.PaintSwitches then RD.PaintSwitches() end
+        c.code:ClearAllPoints()
+        c.code:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 5)
+        c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 5)
+    else
+        if RD and RD.swPanel and RD.swPanel.hosted then RD.swPanel:Hide() end
+        c:SetSize(CU.CARD_W, CU.CARD_H)
+        c.page:Show()
+        c.code:ClearAllPoints()
+        c.code:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 30)
+        c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 30)
+    end
+    CU.Paint()
+    return id
+end
+
+--- Where it opens: your last drag; else against the deck's right edge, tops level; else the middle.
+function CU.Place(c)
     c:ClearAllPoints()
-    local p = NS.RD and NS.RD.swPanel
-    local pos = (NS.DB().radar or {}).cuesPos
+    local pos = (NS.DB().radar or {}).deckWinPos
     if type(pos) == "table" and type(pos[1]) == "string" and type(pos[3]) == "number" then
         c:SetPoint(pos[1], UIParent, pos[2] or pos[1], pos[3], pos[4] or 0)
-    elseif p and p:IsShown() then CU.PlaceBeside(c, p)
-    else c:SetPoint("CENTER", UIParent, "CENTER", 0, 60) end
-    c:Show()
-    CU.Paint()
+        return "drag"
+    end
+    local f = NS.RD and NS.RD.frame
+    if f and f.IsShown and f:IsShown() then
+        c:SetPoint("TOPLEFT", f, "TOPRIGHT", 6, 0)
+        return "deck"
+    end
+    c:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+    return "middle"
+end
+
+--- Close the window and its DECK tab with it.
+function CU.Close()
+    local c = CU.card
+    if c then c:Hide() end
+    local p = NS.RD and NS.RD.swPanel
+    if p and p.hosted then p:Hide() end
+    return false
+end
+
+--- Open on a tab; that tab already open = close the window (the switches button and /bish cues stay toggles).
+function CU.Open(tab)
+    local c = CU.Card()
+    tab = tab or CU.tab
+    if c:IsShown() and CU.tab == tab then return CU.Close() end
+    if not c:IsShown() then CU.Place(c) c:Show() end
+    CU.SetTab(tab)
     return true
+end
+
+--- /bish cues: open on the cue tab (or DEBUFFS, if that was last), or close.
+function CU.Toggle()
+    local c = CU.Card()
+    if c:IsShown() then return CU.Close() end
+    return CU.Open(CU.tab == "debuffs" and "debuffs" or "cues")
 end
 
 --- The string's window: EXPORT shows it ready to copy, IMPORT takes a paste.
@@ -1292,40 +1397,13 @@ function CU.ShowString(mode)
     return w
 end
 
--- the switches panel gets a BiS CUES button under it (a hook, so the panel's own builder stays as it is)
+-- THE SWITCHES BUTTON OPENS THE ONE WINDOW ON ITS DECK TAB (24 Nov 2026, sketch B); a cue row leaves the switch list
 function CU.HookPanel()
     local RD = NS.RD
-    if not RD or CU.panelHooked or not RD.BuildSwitches then return false end
+    if not RD or CU.panelHooked or not RD.ToggleSwitches then return false end
     CU.panelHooked = true
-    local build = RD.BuildSwitches
-    RD.BuildSwitches = function(...)
-        local had = RD.swPanel
-        local p = build(...)
-        -- THE SWITCHES OPEN THE CARD TOO (Arn, 24 Nov: "too many clicks to reach the cues window, when I open the switches it
-        -- should also open the cues on the other side"): beside the panel, on its side toward the screen's middle; it goes
-        -- when the panel goes
-        if p and not p.cuesPaired and p.HookScript then
-            p.cuesPaired = true
-            p:HookScript("OnShow", function(self) CU.OpenBeside(self) end)
-            p:HookScript("OnHide", function() if CU.card and CU.card.withPanel then CU.card:Hide() end end)
-            if p:IsShown() then CU.OpenBeside(p) end
-        end
-        if p and not had and not p.cues then
-            local h = p:GetHeight()
-            p:SetHeight((type(h) == "number" and h or 0) + 24)
-            p.cues = button(p, (RD.SW_W or 210) - 16, 18, "BiS>Cues...", function() CU.Toggle() end)
-            p.cues:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 8)
-            p.cues:SetScript("OnEnter", function(self)
-                if not GameTooltip then return end
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine("BiS>Cues")
-                GameTooltip:AddLine("Pick how each cue looks and sounds, and the order of the cue row.", 1, 1, 1, true)
-                GameTooltip:Show()
-            end)
-            p.cues:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-        end
-        return p
-    end
+    RD.SwOwned = function(key) return key == "hellvoice" or CU.BY[key] ~= nil end
+    RD.ToggleSwitches = function() return CU.Open("deck") end
     return true
 end
 

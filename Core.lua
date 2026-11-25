@@ -2339,6 +2339,11 @@ SlashCmdList.BISHEALING = function(input)
     elseif msg == "debuffs" then
         -- THE DEBUFF BOOK (DebuffBook.lua, 24 Nov 2026): what it learned on the fly, newest first
         if NS.DK then for _, l in ipairs(NS.DK.Report(12)) do Print(l) end else Print("debuff book: not loaded") end
+    elseif msg == "dc fixed" then
+        -- the icon row: packed by the client's flow (default) or one fixed spot per kind - a way back if the flow misdraws
+        NS.DB().dcFixed = not NS.DB().dcFixed or nil
+        if NS.DC then NS.DC.Reset() end
+        Print("debuff cues icon row: " .. (NS.DB().dcFixed and "fixed spots" or "packed (the client's flow)") .. " - from the next repaint")
     elseif msg == "dc any" then
         if NS.DC then for _, l in ipairs(NS.DC.AnyProbe()) do Print(l) end end
     elseif msg == "dc" then
