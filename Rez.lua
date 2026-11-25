@@ -41,8 +41,9 @@ function FZ.OnMessage(prefix, msg, channel, sender)
     if proto ~= FZ.PROTO then return false end
     local who, dead = FZ.Short(sender), FZ.Short(corpse)
     if not (who and dead) then return false end
-    local me = UnitName and FZ.Short((UnitName("player")))
-    if who == me then return false end        -- your own res: you know, and RezComm sent it
+    -- your own res: you know, and RezComm sent it. FOREVER WHOLE NAMES (23 Nov 2026): the sender is "Name Surname", UnitName
+    -- the first name only - asked both ways, or your own echo reads as another healer's claim
+    if FZ.IsMe(who) then return false end
     if cmd == "RCLAIM" then
         FZ.claims[dead] = { by = who, at = now() }
         return true
@@ -53,13 +54,36 @@ function FZ.OnMessage(prefix, msg, channel, sender)
     return false
 end
 
+--- A unit's names, whole first ("Name Surname" via GetUnitName on Forever), then UnitName's.
+function FZ.Names(unit)
+    local out = {}
+    if GetUnitName then
+        local ok, n = pcall(GetUnitName, unit, false)
+        n = ok and FZ.Short(n)
+        if n then out[#out + 1] = n end
+    end
+    if UnitName then
+        local ok, n = pcall(UnitName, unit)
+        n = ok and FZ.Short(n)
+        if n and n ~= out[1] then out[#out + 1] = n end
+    end
+    return out
+end
+
+--- Is this sender you? Whole name or first name.
+function FZ.IsMe(who)
+    for _, n in ipairs(FZ.Names("player")) do if n == who then return true end end
+    return false
+end
+
 --- Who is ressing the person in this unit, or nil. Called only for a cell already showing DEAD,
 --- and returns at once when nobody is claiming anything - the paint stays as cheap as it was.
 function FZ.ClaimOn(unit)
-    if not next(FZ.claims) or not UnitName then return nil end
-    local ok, name = pcall(UnitName, unit)
-    local dead = ok and FZ.Short(name)
-    local c = dead and FZ.claims[dead]
+    if not next(FZ.claims) then return nil end
+    local dead, c
+    for _, n in ipairs(FZ.Names(unit)) do
+        if FZ.claims[n] then dead, c = n, FZ.claims[n] break end
+    end
     if not c then return nil end
     if now() - c.at > FZ.HOLD then FZ.claims[dead] = nil return nil end
     return c.by

@@ -1930,6 +1930,19 @@ do
     ok(FG.StatusWord("party1") == "DEAD", "a claim nobody followed up goes after " .. FZ.HOLD .. " s")
     -- what it ignores
     ok(not FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust", "PARTY", "Arn"), "your own claim (you know)")
+    -- FOREVER WHOLE NAMES (23 Nov 2026): the sender and the corpse come whole, UnitName gives the first name only
+    do
+        local realGUN = _G.GetUnitName
+        local WHOLE = { player = "Arn Healz", party1 = "Kumlust Stormhoof", party2 = "Chain Totem" }
+        _G.GetUnitName = function(u) return WHOLE[u] end
+        FZ.claims = {}
+        ok(not FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust Stormhoof", "PARTY", "Arn Healz"),
+           "Forever: your own claim under your whole name is still yours")
+        ok(FZ.OnMessage("BiSInn", "4|RCLAIM|Kumlust Stormhoof", "PARTY", "Chain Totem")
+           and FZ.ClaimOn("party1") == "Chain Totem", "Forever: a whole-name corpse is matched to its box")
+        FZ.claims = {}
+        _G.GetUnitName = realGUN
+    end
     ok(not FZ.OnMessage("BiSInn", "5|RCLAIM|Kumlust", "PARTY", "Chain"), "another protocol's message")
     ok(not FZ.OnMessage("DBM-Core", "4|RCLAIM|Kumlust", "PARTY", "Chain"), "another addon's message")
     ok(not FZ.OnMessage("BiSInn", secret(), "PARTY", "Chain")
@@ -12242,8 +12255,10 @@ do
         ok(RD.defRail:IsShown(), "the right rail shows while you know a res")
         who = "party1"
         ok(RD.ArmRes() == "party1" and b.face:GetAlpha() == 1, "someone dead: it lights")
-        ok(b:GetAttribute("*type1") == "macro" and b:GetAttribute("*macrotext1") == "/cast [@party1,help] Ancestral Spirit",
-           "the click: the res on that friend, released or not", b:GetAttribute("*macrotext1"))
+        ok(b:GetAttribute("*type1") == "spell" and b:GetAttribute("*spell1") == "Ancestral Spirit"
+           and b:GetAttribute("unit") == "party1" and b:GetAttribute("*macrotext1") == nil,
+           "the click: the res on that friend, the box's own road (spell on the unit, no [help])", b:GetAttribute("*type1"))
+        ok(b.macro == "/cast [@party1] Ancestral Spirit", "its words for status", b.macro)
         ok(b.tip and b.tip[1] == "RES: Legaian Stormhoof", "the name under the mouse only (no words on the scope)", b.tip and b.tip[1])
         ok(b.word.__res == "", "in range: no word")
         inRange = false
@@ -12264,7 +12279,8 @@ do
         RD.overRes = nil
         inRange = true
         fire(RD.events, "PLAYER_REGEN_DISABLED")
-        ok(b.face:GetAlpha() == 0 and b:GetAttribute("*macrotext1") == nil and b.word.__res == "",
+        ok(b.face:GetAlpha() == 0 and b:GetAttribute("*type1") == nil and b:GetAttribute("*spell1") == nil
+           and b:GetAttribute("unit") == nil and b.word.__res == "",
            "a fight: dark, no click left armed")
         fire(RD.events, "PLAYER_REGEN_ENABLED")
         ok(RD.resDirty == true, "the fight's end: asked again at the next tick")
