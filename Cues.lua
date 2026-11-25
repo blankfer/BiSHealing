@@ -64,7 +64,7 @@ CU.LIST = {
       tip = "Direct heals do nothing on them right now (Veil of Darkness): NO HEAL across their bar." },
     { key = "mc",     name = "Mind controlled", cat = "DEBUFFS", kind = "line", word = "MIND CONTROL", look = "word", sound = "off", say = "Mind control",
       tip = "A friend the game now lets you attack: MIND CONTROL across their bar. Not on the target boxes or pets." },
-    { key = "armor",  name = "Tank armor",     cat = "DEBUFFS", kind = "line", word = "AF", look = "icon", sound = "off", say = "Armor",
+    { key = "armor",  name = "Tank armor",     cat = "DEBUFFS", kind = "line", spell = 16177, word = "AF", look = "icon", sound = "off", say = "Armor",
       tip = "Ancestral Fortitude / Inspiration, whoever's crit gave it: the icon after the name - on everyone (the tanks are who it is for)." },
 }
 CU.BY = {}
@@ -956,7 +956,8 @@ function CU.PaintPreview()
     end
     local model = CU.ModelOf(key)
     CU.Wear(pv.model, model)
-    if tex then pcall(pv.icon.SetTexture, pv.icon, tex) end
+    -- no spell of its own = the question mark, never the last cue's icon (Arn, 24 Nov: "tank armor shows hellfire spell?")
+    pcall(pv.icon.SetTexture, pv.icon, tex or 134400)
     if look == "icon" then pv.icon:Show() else pv.icon:Hide() end   -- (a model stands on its own dark square)
     if model or look == "icon" then pv.sq:Show() pv.sqBg:Show() else pv.sq:Hide() end
     if look == "word" then

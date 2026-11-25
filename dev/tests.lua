@@ -17806,6 +17806,13 @@ do
                 DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil) DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil)
                 ok(k1 and k2 and k1 ~= k2, "a fresh key every slot (a key the client knows may be the refusal)", tostring(k1) .. " " .. tostring(k2))
             end
+            do  -- THE CLIENT'S BUTTON COMES BARE (Arn's shot, 24 Nov): it draws the aura only into a texture handed to SetIcon
+                local b = CreateFrame("Button")
+                local reg
+                b.SetIcon = function(self, t) reg = t end
+                ok(DC.Dress(b) and reg and reg == b.dcIcon, "each icon button hands the client a texture through SetIcon (bare = nothing drawn)")
+                DC.iconRefused = nil
+            end
             ok(type(d.roads) == "table" and #d.roads == #d.kinds and not tostring(d.how):find("flow", 1, true),
                "the row: one slot road per kind, no flow group", table.concat(d.roads or {}, "; "))
             -- tank armor: on every box (Arn: "we can display those buffs on everyone")

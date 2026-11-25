@@ -157,6 +157,28 @@ local function quiet(button)
     if button.EnableMouse then pcall(button.EnableMouse, button, false) end
 end
 
+--- THE AURA'S OWN ICON (24 Nov 2026, Arn's shot: one slot per kind, a button handed over each, and nothing on the box - not
+--- even the probe's any-buff slot). The client's button comes BARE: it draws the aura's art only into a texture the addon
+--- made and registered with button:SetIcon inside initializeFrame (EllesmereUI's AuraKit notes, learn only: "the engine
+--- only ever sets its texture"). So each icon slot gets a dark edge and a texture handed to SetIcon; after the creation
+--- window the button is the client's again. Returns true when the client took the texture.
+function DC.Dress(button)
+    quiet(button)
+    local ok = pcall(function()
+        local edge = button:CreateTexture(nil, "BACKGROUND")
+        edge:SetAllPoints(button)
+        edge:SetColorTexture(0, 0, 0, 0.85)
+        local tex = button:CreateTexture(nil, "ARTWORK")
+        tex:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        tex:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        button:SetIcon(tex)
+        button.dcIcon = tex
+    end)
+    if not ok then DC.iconRefused = true end
+    return ok
+end
+
 --- The word on its plate, over the bar, at its rank (made inside the client's button: it comes and goes with the aura).
 function DC.Word(parent, sp, text, col, rank)
     local bar = sp.heal
@@ -268,10 +290,9 @@ function DC.Arm(sp)
         d.rowSlots, d.roads = {}, {}
         for i, key in ipairs(kinds) do
             local filter = (key == "armor") and "HELPFUL" or "HARMFUL"
-            local init = function(button) quiet(button) end
             local slot, road = DC.MakeSlot(row, "BiSDC" .. key, filter, {
                 candidateFilters = { includeSpellIDs = DC.Ids(key) },
-                initializeFrame = FA.Placed(init, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
+                initializeFrame = FA.Placed(DC.Dress, px, "LEFT", row, (i - 1) * (px + DC.GAP), 0),
             }, d, key)
             d.roads[#d.roads + 1] = key .. " " .. road
             d.rowSlots[key] = slot
@@ -347,7 +368,8 @@ end
 
 --- `/bish dc`: what each box built for the cues - for a screenshot when an icon does not show.
 function DC.Status()
-    local lines = { ("debuff cues: on = %s; refused = %s"):format(table.concat(DC.Kinds(), ","), tostring(DC.refused or false)) }
+    local lines = { ("debuff cues: on = %s; refused = %s; icon %s"):format(table.concat(DC.Kinds(), ","), tostring(DC.refused or false),
+        DC.iconRefused and "REFUSED" or "taken") }
     for _, sp in ipairs((NS.RD and NS.RD.spokes) or {}) do
         local d = sp.dc
         if sp.unit and d then
@@ -396,10 +418,10 @@ function DC.AnyProbe()
     c:SetUnit("player")
     local d = {}
     local _, any = DC.MakeSlot(c, "BiSDCprobeAny", "HELPFUL", {
-        initializeFrame = FA.Placed(quiet, 24, "LEFT", c, 0, 0) }, d, "any buff")
+        initializeFrame = FA.Placed(DC.Dress, 24, "LEFT", c, 0, 0) }, d, "any buff")
     local _, af = DC.MakeSlot(c, "BiSDCprobeAF", "HELPFUL", {
         candidateFilters = { includeSpellIDs = { [16177] = true } },
-        initializeFrame = FA.Placed(quiet, 24, "LEFT", c, 28, 0) }, d, "fortitude")
+        initializeFrame = FA.Placed(DC.Dress, 24, "LEFT", c, 28, 0) }, d, "fortitude")
     if c.SetEnabled then pcall(c.SetEnabled, c, true) end
     if c.UpdateAllAuras then pcall(c.UpdateAllAuras, c) end
     DC.probe = c
