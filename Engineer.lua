@@ -302,22 +302,66 @@ function EN.Box(sp)
     if mask and tick.AddMaskTexture then tick:AddMaskTexture(mask) end
     local overHover = band(EN.OVER_HOVER, overFill, "TOPLEFT")
     overHover:Hide()
+    -- THE NAME HEADER (24 Nov 2026): a dark strip over the bar's top, EN.Head lays it out
+    local head = box:CreateTexture(nil, "ARTWORK", nil, 7)
+    head:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+    head:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+    head:SetHeight(EN.HEAD_H)
+    head:SetColorTexture(EN.HEAD_BG[1], EN.HEAD_BG[2], EN.HEAD_BG[3], EN.HEAD_BG[4])
+    head:Hide()
+    e.head, e.headH = head, 0
     e.box, e.bar, e.inc, e.ghost = box, bar, inc, ghost
     e.cur, e.mask, e.over, e.overTick, e.overHover = cur, mask, over, tick, overHover
     sp.en = e
     return e
 end
 
+--[[ THE NAME HEADER INSIDE THE BOX (Arn, 24 Nov 2026, his pick of three - sketch A, https://claude.ai/artifact/RffcFzNcMFh7oMe3SxJ7me:
+  "putting the name of the person [in] the header so we can show all these buffs in a row ... these icons that dont need
+  to crowd the health bar can go in a little header next to the name"). The box's top EN.HEAD_H px are a dark strip that
+  holds the name and the debuff cues' icon row (DebuffCues.lua); the health bar, the heals on their way and the overheal
+  start under it. Hellfire, Chain Heal's word and CURE / -50% stay on the bar. Only while the box's bar is at least
+  EN.HEAD_MIN tall (a short raid box keeps its whole height for the bar) and the switch `head` is on. The whole box still
+  takes the heal click - nothing new is clickable. ]]
+EN.HEAD_H, EN.HEAD_MIN = 13, 30
+EN.HEAD_BG = { 0.02, 0.025, 0.035, 0.94 }
+function EN.HeadOn(sp)
+    local b = sp and sp.heal
+    local h = b and b.GetHeight and b:GetHeight()
+    local RD = NS.RD
+    return type(h) == "number" and h - 2 >= EN.HEAD_MIN and not (RD and RD.Sw and not RD.Sw("head")) or false
+end
+--- Lays the header out on a box (out of a fight or in - the box and its bars are plain frames). Answers its height.
+function EN.Head(sp)
+    local e = sp and sp.en
+    if not (e and e.bar and e.head) then return 0 end
+    local want = EN.HeadOn(sp) and EN.HEAD_H or 0
+    if e.headH == want and e.headLaid then return want end
+    e.headH, e.headLaid = want, true
+    e.bar:ClearAllPoints()
+    e.bar:SetPoint("TOPLEFT", e.box, "TOPLEFT", 0, -want)
+    e.bar:SetPoint("BOTTOMRIGHT", e.box, "BOTTOMRIGHT", 0, 0)
+    e.cur:ClearAllPoints()
+    e.cur:SetPoint("TOPLEFT", e.bar, "TOPLEFT", 0, 0)
+    local fill = e.bar.GetStatusBarTexture and e.bar:GetStatusBarTexture()
+    if fill then e.cur:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0) end
+    e.over:ClearAllPoints()
+    e.over:SetPoint("TOPRIGHT", e.bar, "TOPRIGHT", 0, 0)
+    if want > 0 then e.head:Show() else e.head:Hide() end
+    return want
+end
+
 --- A box's width, for the ghost to match (the pip is resized by the console's class).
 function EN.Size(sp)
     local e, b = sp.en, sp.heal
     if not (e and b and b.GetWidth) then return end
+    local hh = EN.Head(sp)
     local w = b:GetWidth()
     if type(w) == "number" and w > 2 then e.inc:SetWidth(w - 2) e.ghost:SetWidth(w - 2) end
     local h = b.GetHeight and b:GetHeight()
     if type(w) == "number" and w > 2 and type(h) == "number" and h > 2 then
-        e.over:SetSize(w - 2, h - 2)
-        e.overHover:SetSize(w - 2, h - 2)
+        e.over:SetSize(w - 2, h - 2 - hh)
+        e.overHover:SetSize(w - 2, h - 2 - hh)
     end
 end
 

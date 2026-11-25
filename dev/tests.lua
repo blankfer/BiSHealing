@@ -12399,7 +12399,7 @@ do
             -- engineer?"): the grid's band - from the box's right edge leftwards by the incoming, masked to their health
             local op = e.over.points[1]
             local oft = e.over:GetStatusBarTexture()
-            ok(op and op[1] == "TOPRIGHT" and op[2] == e.box and op[3] == "TOPRIGHT" and e.over:GetReverseFill()
+            ok(op and op[1] == "TOPRIGHT" and (op[2] == e.box or op[2] == e.bar) and op[3] == "TOPRIGHT" and e.over:GetReverseFill()
                and e.over:GetValue() == INC2 and select(2, e.over:GetMinMaxValues()) ~= nil,
                "an overheal band: the incoming again, filling leftwards from the box's right edge, on their max", tostring(op and op[2]))
             local masked = false
@@ -15785,7 +15785,7 @@ do
             RD.frame:SetScript("OnDragStart", keepDS)
             ok(started == 1, "a drag on the band moves the window (the window's own drag)")
             -- the panel
-            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class)")
+            ok(RD.ToggleSwitches() == true and RD.swPanel:IsShown() and #RD.swPanel.rows == (function() local n = 0 for _, s in ipairs(RD.SW) do if RD.SwInList(s) then n = n + 1 end end return n end)(), "the switches button opens the list, a row each (for your class, cues on their own tabs)")
             RD.swPanel.rows[1]:GetScript("OnClick")(RD.swPanel.rows[1])
             ok(not RD.Sw(RD.swPanel.rows[1].key), "a row clicked: its switch flips")
             ok(RD.ToggleSwitches() == false and not RD.swPanel:IsShown(), "click again: the list away")
@@ -17559,6 +17559,13 @@ do
     CU.SetLook("rip", "word")
     RD.CueShow(sp, true)
     ok(sp.cue.word:IsShown() and not sp.cue.icon:IsShown(), "as the word: the word, no icon")
+    do  -- the word fits the bar (Arn, 24 Nov: a party's thin bars - "maybe make the font smaller")
+        local tall, thin = CreateFrame("Frame"), CreateFrame("Frame")
+        tall:SetSize(80, 30) thin:SetSize(80, 11)
+        ok(RD.WordSize(tall) == RD.CUE_WORD.size, "a tall bar: the word at its full size", RD.WordSize(tall))
+        ok(RD.WordSize(thin) < RD.CUE_WORD.size and RD.WordSize(thin) >= 7, "a thin bar: a smaller word, never under 7", RD.WordSize(thin))
+        ok(RD.WordSize(nil) == RD.CUE_WORD.size, "no bar to measure: the full size")
+    end
     CU.SetLook(sp.cue.ck, "model:198692")
     RD.CueShow(sp, true)
     ok(sp.cue.face and sp.cue.face.sq:IsShown() and sp.cue.face.model.__drawn == 198692 and not sp.cue.word:IsShown() and not sp.cue.icon:IsShown(),
@@ -17594,12 +17601,43 @@ do
     SlashCmdList.BISHEALING("import " .. s)
     ok(CU.On("hell") and CU.Order()[1] == "tap", "/bish import <string>: the capitals survive the slash command")
     -- the card
-    RD.BuildSwitches()
-    ok(RD.swPanel and RD.swPanel.cues, "the switches panel has a BiS CUES button")
-    RD.swPanel:Show()
-    RD.swPanel.cues:GetScript("OnClick")(RD.swPanel.cues)
+    -- ONE WINDOW, THREE TABS (Arn, 24 Nov, sketch B): the switches button opens it on DECK, the switches inside it
+    RD.ToggleSwitches()
     local c = CU.card
-    ok(c and c:IsShown() and c.points[1][2] == RD.swPanel, "it opens the card beside the switches panel")
+    ok(c and c:IsShown() and CU.tab == "deck" and RD.swPanel.hosted and RD.swPanel:GetParent() == c and RD.swPanel:IsShown()
+       and not c.page:IsShown(), "the switches button: the one window on its DECK tab, the switches inside it")
+    do
+        local owned = {}
+        for _, row in ipairs(RD.swPanel.rows) do owned[row.key] = true end
+        ok(not owned.hell and not owned.hellvoice and not owned.tap and not owned.crit and not owned.rip and owned.bb,
+           "no cue in the switch list (Hellfire, its voice, Life Tap, Revelation, Riptide on the cue tabs); Black box stays")
+        local W, H = c:GetWidth(), c:GetHeight()
+        ok(math.abs(W / H - 1.43) < 0.03 or W == CU.CARD_W, "the DECK tab keeps the family's 1.43:1 (or the card's own width)", W .. "x" .. H)
+        local inside = true
+        local cl, ct = 0, 0
+        for _, row in ipairs(RD.swPanel.rows) do
+            local pt = row.points and row.points[1]
+            if pt and (pt[4] < 0 or pt[4] + row:GetWidth() > W or -pt[5] + 18 > H - 24) then inside = false end
+        end
+        ok(inside, "every switch row inside the window, in columns")
+    end
+    CU.SetTab("debuffs")
+    do
+        local onlyDeb = true
+        for _, row in ipairs(c.order) do if row:IsShown() and row.key and CU.BY[row.key].cat ~= "DEBUFFS" then onlyDeb = false end end
+        ok(c.page:IsShown() and not RD.swPanel:IsShown() and onlyDeb and CU.BY[CU.sel].cat == "DEBUFFS",
+           "DEBUFFS: the debuff cues only, the switches put away")
+    end
+    CU.SetTab("cues")
+    do
+        local noDeb = true
+        for _, row in ipairs(c.order) do if row:IsShown() and row.key and CU.BY[row.key].cat == "DEBUFFS" then noDeb = false end end
+        ok(noDeb and CU.BY[CU.sel].cat ~= "DEBUFFS", "CUES: every cue but the debuffs")
+    end
+    ok(RD.ToggleSwitches() == true and CU.tab == "deck" and c:IsShown(), "the switches button with CUES open: flips to DECK, stays open")
+    ok(RD.ToggleSwitches() == false and not c:IsShown() and not RD.swPanel:IsShown(), "again: the window closes, DECK with it")
+    CU.Toggle()
+    ok(c:IsShown() and CU.tab == "cues", "/bish cues: the window on CUES")
     do   -- the family's colours (Arn, 21 Nov: "bis>cues has this blue tint to it")
         local P = RD.PLATE
         ok(c.bg.__color[1] == P[1] and c.bg.__color[2] == P[2] and c.bg.__color[3] == P[3], "the card stands on the deck's own black, as the switches panel does")
@@ -17741,9 +17779,298 @@ do
        "a shaman's card: Riptide and the group cues, no Oath / Vigil / Swiftmend")
     CU.DB().order = { "hell", "tap", "crit", "oath", "vigil", "rip", "swift" }
     ok(CU.Move("rip", -1) and CU.Order()[3] == "rip", "the arrow steps over the paladin's cues (never seems to do nothing)", table.concat(CU.Order(), ","))
+    -- HEAL PAST THE LINE (Arn, 24 Nov: Grievous Garrote on a party member showed nothing; he picked sketch C)
+    do
+        local HP = NS.HP
+        ok(HP and CU.BY.past and CU.BY.past.kind == "line" and not CU.BY.past.class, "heal past the line: a cue row for every healer")
+        local keepOn = CU.DB().on.past
+        CU.DB().on.past = nil
+        ok(HP and not HP.On(), "off by default, as every cue")
+        local sp
+        for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit then sp = s break end end
+        ok(sp ~= nil, "a deck box to test on")
+        if HP and sp then
+            local keepHP = sp.hp
+            sp.hp = nil
+            HP.Paint(sp, true)
+            ok(not (sp.hp and sp.hp.container), "off: nothing built")
+            CU.DB().on.past = true
+            local keepW = sp.heal.GetWidth
+            sp.heal.GetWidth = function() return 102 end
+            HP.Paint(sp, true)
+            local h = sp.hp
+            local slot = h and h.container and h.container.slots["BiSHealPast" .. tostring(sp.i or "") .. "_90"]
+            ok(slot and slot.filter == "HARMFUL" and slot.opts.candidateFilters.includeSpellIDs[1271761]
+               and h.container.unit == sp.unit and h.container.enabled,
+               "on: one HARMFUL slot on the box's unit, Grievous Garrote's id - nothing read, the client draws it")
+            ok(h and math.abs(h.marks[0.9]:GetWidth() - 90) < 0.01, "the line at 90% of the bar", h and h.marks[0.9]:GetWidth())
+            ok(h and #h.lines[0.9] == 1 and #h.edges[0.9] == 4 and h.gap, "the client's button: the line, the gap and the four edges hang off it")
+            local lp = h.lines[0.9][1].points and h.lines[0.9][1].points[1]
+            ok(lp and lp[2] == h.marks[0.9] and lp[3] == "TOPRIGHT", "the line rides the 90% mark (it moves with the box's width)")
+            local gp = h.gap.points and h.gap.points[1]
+            ok(gp and gp[2] == h.e.bar:GetStatusBarTexture() and gp[3] == "TOPRIGHT", "the gap starts where their health ends")
+            ok(slot.clicks == false or slot.__mouse == false, "nothing to click on the bar")
+            sp.heal.GetWidth = function() return 202 end
+            NS.EN.Size(sp)
+            ok(math.abs(h.marks[0.9]:GetWidth() - 180) < 0.01, "a wider box: the line moves with it", h.marks[0.9]:GetWidth())
+            CU.DB().on.past = false
+            HP.Paint(sp, true)
+            ok(not h.container.enabled, "switched off in BiS Cues: the container stops")
+            ok(HP.Status():find("off", 1, true) and HP.Status():find("2 debuffs", 1, true), "/bish past says what it watches (Grievous Garrote + Spinning Glaive)", HP.Status())
+            sp.heal.GetWidth = keepW
+            sp.hp = keepHP
+        end
+        CU.DB().on.past = keepOn
+    end
+    -- WHAT TO DO ABOUT A DEBUFF (Arn, 24 Nov: "C across the bar, but put the icons next to the name")
+    do
+        local DC = NS.DC
+        ok(DC ~= nil and CU.BY.cure and CU.BY.nocure and CU.BY.reduce and CU.BY.noheal and CU.BY.mc and CU.BY.armor,
+           "six new BiS Cues rows: cure, don't cure, heals weaker, no heal, mind control, tank armor")
+        local sp
+        for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit == "party1" then sp = s break end end
+        if not sp then for _, s in ipairs(NS.RD.spokes or {}) do if s.heal and s.unit then sp = s break end end end
+        if DC and sp then
+            local keepOn = {}
+            for _, k in ipairs({ "cure", "nocure", "reduce", "noheal", "mc", "armor", "past" }) do keepOn[k] = CU.DB().on[k] CU.DB().on[k] = nil end
+            local keepDC = sp.dc
+            sp.dc = nil
+            DC.Paint(sp, true)
+            ok(not (sp.dc and (sp.dc.row or sp.dc.words)), "all off by default: nothing built on the box")
+            local keepCures = NS.FA.Cures
+            NS.FA.Cures = function() return { { name = "Cure Poison", types = { Poison = true } } } end
+            ok(DC.Ids("cure")[1323656] and not DC.Ids("cure")[1287756] and not DC.Ids("cure")[1271351],
+               "CURE only for your types: Poisoned Shot yes (poison), Fiery Talons no (magic), the Hyjal marks never")
+            ok(not next(DC.Ids("nocure")), "NO CURE: the marks are magic - a poison-only healer is never told")
+            NS.FA.Cures = function() return { { name = "Dispel Magic", types = { Magic = true } } } end
+            ok(DC.Ids("nocure")[1271351] and DC.Ids("nocure")[1271352], "a magic dispeller: NO CURE on Lunar / Umbral Mark")
+            CU.DB().on.reduce, CU.DB().on.cure, CU.DB().on.nocure = true, true, true
+            DC.Paint(sp, true)
+            local d = sp.dc
+            ok(d and d.row and d.words and d.row.unit == sp.unit, "switched on: the icon row and the word on the box's unit")
+            -- a fresh key a slot (DC.MakeSlot, Revelation's road): find each by its name + the counter
+            local function wslot(name)
+                for k, v in pairs((d and d.words and d.words.slots) or {}) do if k:match("^" .. name .. "%d+$") then return v end end
+            end
+            local half = wslot("BiSDCwreduce50")
+            ok(half and half.opts.candidateFilters.includeSpellIDs[16856] and half.filter == "HARMFUL", "-50%: Mortal Strike's word slot")
+            ok(d and wslot("BiSDCwcure") and wslot("BiSDCwnocure"), "CURE and NO CURE word slots for a magic dispeller")
+            local wc, wn = wslot("BiSDCwcure").dcWord, wslot("BiSDCwnocure").dcWord
+            local wr = half and half.dcWord
+            ok(wc and wn and wr and wn:GetFrameLevel() > wc:GetFrameLevel() and wc:GetFrameLevel() > wr:GetFrameLevel(),
+               "ONE word wins: NO CURE over CURE over -50% (each on a plate, the top one covers the rest)")
+            ok(wc and wc.text:GetText() == "CURE" and wr.text:GetText() == "-50%", "the words", wr and wr.text:GetText())
+            local cueHold = sp.cue and sp.cue.hold
+            ok(not cueHold or (wr:GetFrameLevel() > cueHold:GetFrameLevel()), "every debuff word over Chain Heal's payoff word")
+            local rs = d.rowSlots and (d.rowSlots.reduce)
+            ok(rs and rs.opts.candidateFilters.includeSpellIDs[16856], "Mortal Strike's icon in the row after the name")
+            local rp = d.row.points[1]
+            ok(rp and rp[2] ~= sp.deckTag.dcGhost and rp[2] ~= sp.deckTag.text and (d.where == "name" or d.where == "corner"),
+               "the row is never hung off the name (a secret name made it secret - Arn's /bish dc, 24 Nov)", d.where)
+            if d.where == "name" then
+                ok(rp[1] == "TOPLEFT" and rp[2] == sp.deckTag and rp[4] > (NS.RD.DECK_TAG.x or 4), "measured: just after the name, on the box's own frame")
+            end
+            -- a name we may not measure: the box's top-right corner
+            local keepSW = sp.deckTag.text.GetStringWidth
+            sp.deckTag.text.GetStringWidth = function() return _G.__SECRET_NUMBER or error("secret") end
+            ok(DC.PlaceRow(sp, d.row) == "corner" and d.row.points[1][1] == "TOPRIGHT" and d.row.points[1][2] == sp.heal,
+               "a secret name: the top-right corner")
+            sp.deckTag.text.GetStringWidth = function() return 40 end
+            ok(DC.PlaceRow(sp, d.row) == "name" and d.row.points[1][2] == sp.deckTag, "a plain name: after it")
+            sp.deckTag.text.GetStringWidth = keepSW
+            ok(d.row:GetWidth() >= 3 * 10 and d.row:GetHeight() >= 10, "the row is wide enough for its icons (it was 1 x 1 - Arn's AF never showed)")
+            local st = DC.Status()
+            local hit = false
+            for i = 2, #st do if st[i]:find(tostring(sp.unit) .. ":", 1, true) then hit = true end end
+            ok(type(st) == "table" and hit, "/bish dc: a line per box that built cues", st[2])
+            -- ONE SLOT, NEVER TWO ON TOP (Arn's /bish dc, 24 Nov: "flow refused: nil, buttons handed 55" = a 10-button group per
+            -- kind that answered nothing + a slot on top of it). A client whose AddAuraSlot answers nothing but hands its button
+            -- over: made, and no group after it; one whose AddAuraGroup answers nothing: never asked by the row.
+            do
+                local fake = CreateFrame("Frame")
+                local asked = { slot = 0, group = 0 }
+                fake.AddAuraSlot = function(self, key, filter, opts) asked.slot = asked.slot + 1 opts.initializeFrame(CreateFrame("Button")) end
+                fake.AddAuraGroup = function() asked.group = asked.group + 1 end
+                local dd = {}
+                local got, road = DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", { initializeFrame = function() end }, dd, "armor")
+                ok(got == true and road == "slot, no answer" and asked.slot == 1 and asked.group == 0 and dd.handedBy.armor == 1,
+                   "a slot that answers nothing but hands a button over is made - no group on top of it", road)
+                local k1, k2
+                fake.AddAuraSlot = function(self, key) if not k1 then k1 = key else k2 = key end return {} end
+                DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil) DC.MakeSlot(fake, "BiSDCtest", "HELPFUL", {}, nil)
+                ok(k1 and k2 and k1 ~= k2, "a fresh key every slot (a key the client knows may be the refusal)", tostring(k1) .. " " .. tostring(k2))
+            end
+            do  -- THE NAME HEADER INSIDE THE BOX (Arn's pick, 24 Nov - sketch A)
+                local EN = NS.EN
+                local pip = CreateFrame("Button", nil, UIParent)
+                pip:SetSize(120, 44)
+                local fake = { heal = pip, unit = "party1" }
+                local e = EN.Box(fake)
+                ok(EN.Head(fake) == EN.HEAD_H and e.head:IsShown() and e.bar.points[1][2] == e.box and e.bar.points[1][5] == -EN.HEAD_H,
+                   "a tall box: the dark header on top, the bar starts under it")
+                ok(e.over.points[1][2] == e.bar, "the overheal hangs from the bar's top, not the header's")
+                local px, inHead = DC.Px(fake)
+                ok(inHead and px == EN.HEAD_H - 2, "the icons fit the header strip", px)
+                pip:SetSize(120, 24)
+                ok(EN.Head(fake) == 0 and not e.head:IsShown() and e.bar.points[1][5] == 0, "a short box: no header, the bar keeps the whole height")
+                pip:SetSize(120, 44)
+                local keepH = NS.RD.Sw("head")
+                NS.RD.SetSw("head", false)
+                ok(EN.Head(fake) == 0 and not e.head:IsShown(), "the Name header switch off: no header")
+                NS.RD.SetSw("head", keepH)
+                ok(DC.Bar(fake) == e.bar, "the words sit on the bar under the header")
+            end
+            do  -- THE CLIENT'S BUTTON COMES BARE (Arn's shot, 24 Nov): it draws the aura only into a texture handed to SetIcon
+                local b = CreateFrame("Button")
+                local reg
+                b.SetIcon = function(self, t) reg = t end
+                ok(DC.Dress(b) and reg and reg == b.dcIcon, "each icon button hands the client a texture through SetIcon (bare = nothing drawn)")
+                DC.iconRefused = nil
+            end
+            ok(type(d.roads) == "table" and #d.roads == #d.kinds and not tostring(d.how):find("flow", 1, true),
+               "the row: one slot road per kind, no flow group", table.concat(d.roads or {}, "; "))
+            -- tank armor: on every box (Arn: "we can display those buffs on everyone")
+            CU.DB().on.armor = true
+            local keepRole = NS.RD.Role
+            NS.RD.Role = function() return "damage" end
+            DC.Paint(sp, true)
+            ok(sp.dc.rowSlots.armor and sp.dc.rowSlots.armor.filter == "HELPFUL" and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[16177]
+               and sp.dc.rowSlots.armor.opts.candidateFilters.includeSpellIDs[14893],
+               "armor procs on anyone's box (a damage dealer's too), from anyone (HELPFUL, not only yours)")
+            NS.RD.Role = keepRole
+            -- mind control: the client's answer drives it
+            CU.DB().on.mc = true
+            local keepUCA = _G.UnitCanAttack
+            _G.UnitCanAttack = function() return true end
+            DC.Paint(sp, true)
+            ok(sp.dcMC and sp.dcMC:GetAlpha() == 1 and sp.dcMC.text:GetText() == "MIND CONTROL", "a friend you can attack: MIND CONTROL")
+            _G.UnitCanAttack = function() return false end
+            DC.Paint(sp, true)
+            ok(sp.dcMC:GetAlpha() == 0, "back to normal: gone")
+            _G.UnitCanAttack = keepUCA
+            NS.FA.Cures = keepCures
+            for k, v in pairs(keepOn) do CU.DB().on[k] = v end
+            sp.dc = keepDC
+            if sp.dcMC then sp.dcMC:SetAlpha(0) end
+        else
+            ok(false, "a deck box for the debuff cues test")
+        end
+    end
+    -- THE DEBUFF BOOK (Arn, 24 Nov: "if the helpers didn't pick up a [debuff], it can learn on the fly")
+    do
+        local DK = NS.DK
+        ok(DK ~= nil, "the debuff book is loaded")
+        if DK then
+            local g = function(w, t) return (DK.Guess(w, t)) end
+            local a1, p1 = DK.Guess("Deals 10 damage every 3 sec until the target is healed above 90% health.", nil)
+            ok(a1 == "past" and math.abs(p1 - 0.9) < 1e-9, "\"healed above 90%\": heal past, the line at 90%")
+            ok(g("Poison. When dispelled, stuns all nearby allies for 4 sec.", "Poison") == "nodispel", "\"when dispelled ...\": don't dispel")
+            ok(g("Healing received reduced by 50%.", "Magic") == "reduce", "healing received reduced: heals land weaker")
+            ok(g("Absorbs the next 2000 healing received.", nil) == "absorb", "absorbs the next healing")
+            ok(g("Inflicts Nature damage every 2 sec.", "Poison") == "dispel" and g("Bleeding.", nil) == "watch",
+               "a plain poison: dispel; a plain bleed: nothing to say yet")
+            local book = DK.Book()
+            local keepBook = {}
+            for k, v in pairs(book) do keepBook[k] = v book[k] = nil end
+            local keepDesc, keepSec = C_Spell and C_Spell.GetSpellDescription, _G.C_Secrets
+            _G.C_Spell = _G.C_Spell or {}
+            C_Spell.GetSpellDescription = function(id)
+                if id == 990001 then return "Bleeds for 50. Lasts until healed above 80% health." end
+                return ""
+            end
+            STATE.inCombat = false
+            _G.C_UnitAuras = _G.C_UnitAuras or {}
+            local keepWalk = C_UnitAuras.GetAuraDataByIndex
+            C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)       -- (the client's walk: throws in a fight)
+                if STATE.inCombat then error("Auras cannot be accessed when secret while tainted", 2) end
+                local list = AURAS[unit] and AURAS[unit][filter or "HELPFUL"]
+                return list and list[i] or nil
+            end
+            local keepAur = AURAS.party1
+            AURAS.party1 = { HARMFUL = { { spellId = 990001, name = "Test Rend", dispelName = nil, isHarmful = true } } }
+            DK.Sweep()
+            local row = book[990001]
+            ok(row and row.name == "Test Rend" and row.act == "past" and math.abs(row.pct - 0.8) < 1e-9 and row.n == 1,
+               "the fight's end: a new debuff on party1 read, written down, guessed (heal past 80%)")
+            ok(NS.HP.All()[990001] and NS.HP.All()[990001].learned and NS.HP.All()[1271761].pct == 0.9,
+               "a learned line joins the heal-past lines; ours stay")
+            local DD = NS.DD
+            ok(DD and NS.HP.All()[1288524] and NS.HP.All()[1288524].pct == 0.9, "the known list's Spinning Glaive joins the 90% line")
+            ok(DD and DD.Of("nodispel")[1271351] and DD.Of("nodispel")[1271352] and DD.TANK_BUFFS[16177] and DD.TANK_BUFFS[14893],
+               "the known list: Hyjal's two marks are DON'T DISPEL; the tanks' armor procs are there")
+            local acts = { past = true, nodispel = true, dispel = true, reduce = true, noheal = true, watch = true }
+            local bad
+            for id, r in pairs(DD and DD.LIST or {}) do
+                if not acts[r.act] or type(r.name) ~= "string" or (r.act == "past" and not (r.pct and r.pct > 0 and r.pct < 1))
+                   or (r.act == "reduce" and not (r.cut and r.cut > 0 and r.cut <= 1)) then bad = id end
+            end
+            ok(DD and not bad, "every known row has a real action, a name, and its number", bad)
+            DK.Sweep()
+            ok(book[990001].n == 2, "seen again: counted, not written twice")
+            STATE.inCombat = true
+            local before = book[990001].n
+            DK.Sweep()
+            ok(book[990001].n == before, "in a fight: nothing read (auras are secret there)")
+            STATE.inCombat = false
+            ok(DK.Report(5)[2]:find("990001 Test Rend", 1, true) and DK.Report(5)[2]:find("HEAL PAST 80%", 1, true), "/bish debuffs lists it", DK.Report(5)[2])
+            -- LEAN (the standing order): a raid's aura chatter out of a fight costs almost nothing - a known debuff
+            local Cost = dofile("../_bisdev/dev/cost.lua")
+            local onEv = DK.events.__scripts.OnEvent
+            local known = { addedAuras = { { spellId = 990001, name = "Test Rend", isHarmful = true } } }
+            local quiet = { updatedAuraInstanceIDs = { 7 } }
+            local nC, by = Cost.Count(function()
+                for i = 1, 100 do onEv(DK.events, "UNIT_AURA", "raid" .. (i % 40 + 1), (i % 4 == 0) and known or quiet) end
+            end)
+            ok(nC <= 300, "100 aura events out of a fight (a quarter carry a known debuff): at most 3 client calls each", nC, Cost.Top(by, 3))
+            print(("   cost: debuff book, 100 aura events out of a fight = %d calls (%s)"):format(nC, Cost.Top(by, 3)))
+            AURAS.party1 = keepAur
+            C_UnitAuras.GetAuraDataByIndex = keepWalk
+            C_Spell.GetSpellDescription = keepDesc
+            for k in pairs(book) do book[k] = nil end
+            for k, v in pairs(keepBook) do book[k] = v end
+        end
+    end
+    -- WHERE THE ONE WINDOW OPENS (Arn, 24 Nov, sketch B: where the switches were - the deck's right edge)
+    do
+        local r = NS.DB().radar
+        local keepPos, keepFrame = r.deckWinPos, NS.RD.frame
+        r.deckWinPos = nil
+        CU.Close()
+        local deck = CreateFrame("Frame", nil, UIParent)
+        deck:SetSize(400, 300)
+        deck.IsShown = function() return true end
+        deck.GetRight = function() return 900 end
+        deck.GetTop = function() return 700 end
+        NS.RD.frame = deck
+        CU.Open("deck")
+        local cp = c.points[1]
+        local fs, cs = deck:GetEffectiveScale(), c:GetEffectiveScale()
+        ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[3] == "BOTTOMLEFT" and math.abs(cp[4] - (900 * fs / cs + 6)) < 0.01
+           and math.abs(cp[5] - 700 * fs / cs) < 0.01,
+           "the deck showing: the window at the deck's right edge, tops level - pinned to the SCREEN (a new deck width never moves it)")
+        CU.Close()
+        deck.IsShown = function() return false end
+        CU.Open("cues")
+        ok(c.points[1][2] == UIParent and c.points[1][1] == "CENTER", "no deck: the middle")
+        -- dragged: it opens there next time, and the drag ends at the pull
+        c.__scripts.OnDragStart(c)
+        ok(c.moving, "it drags")
+        c:ClearAllPoints() c:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
+        CU.events.__scripts.OnEvent(CU.events, "PLAYER_REGEN_DISABLED")
+        ok(not c.moving and r.deckWinPos and r.deckWinPos[1] == "TOPLEFT" and r.deckWinPos[3] == 120, "the pull ends the drag; the spot kept")
+        CU.Close()
+        deck.IsShown = function() return true end
+        CU.Open("deck")
+        cp = c.points[1]
+        ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[4] == 120, "opened again where you left it (the deck or not)")
+        CU.Close()
+        r.deckWinPos, NS.RD.frame = keepPos, keepFrame
+    end
     CU.sel = "oath"
-    CU.Toggle() CU.Toggle()
-    ok(CU.sel ~= "oath" and not c.order[5]:IsShown() and c.order[4]:IsShown(), "the card: four rows, a cue you cannot act on never chosen")
+    CU.Close() CU.Toggle()
+    local nShown = #CU.TabShown()
+    ok(CU.sel ~= "oath" and c.order[nShown]:IsShown() and not (c.order[nShown + 1] and c.order[nShown + 1]:IsShown()) and nShown < #CU.LIST,
+       "the card: one row per cue you can act on (" .. nShown .. "), a cue you cannot act on never chosen")
     _G.UnitClass = function() return "Paladin", "PALADIN", 2 end
     seen = {}
     for _, k in ipairs(CU.Shown()) do seen[k] = true end

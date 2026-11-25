@@ -1742,6 +1742,8 @@ RD.SW = {
     { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
     { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
     { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
+    { key = "head",   group = "LOOK",      name = "Name header",              tip = "The name and the buff / debuff icons in a dark strip at the top of each box, off the health bar (a short raid box keeps its whole height for the bar)." },
+    { key = "bb",     group = "LOOK",      name = "Black box",                tip = "The red light and the keypad under the window." },
     -- RAID GROUPS (21 Nov 2026, BiS Cues sheet 6, Arn picked B + its own switch). OFF until switched on (`off`, see RD.Sw),
     -- and left alone by the presets and RESET's "everything on" - they change where boxes stand, not what a box shows.
     -- The sort switch (one setting that cycles) has its own row under these (RD.SORTS).
@@ -1755,9 +1757,9 @@ RD.SW = {
     { key = "cast",   group = "THE FIGHT", name = "Mini cast bars",           tip = "A red line under whoever a caster targets; grey when you cannot kick it." },
     { key = "alerts", group = "THE FIGHT", name = "LOS / RANGE / OVER boxes", tip = "Three boxes on top for a failed heal or a big overheal. Off: the word shows on the box itself." },
     { key = "cc",     group = "THE FIGHT", name = "Loss of control box",      tip = "A fourth box on top: how long you are stunned, silenced, feared or locked out of a school, counting down." },
-    { key = "fuel",   group = "MANA",      name = "Fuel strip",               tip = "Your mana with the boss's health, above the window." },
+    { key = "fuel",   group = "MANA",      name = "Mana vs boss",             tip = "Above the window: your mana against the boss's health - the boss's red past your mana means you run dry first; the hot band = drink soon at this pace; the small % at the end is your regen." },
     { key = "tools",  group = "MANA",      name = "Tools row",                tip = "Mana Tide, potion, Mana Spring, drink, rations, Grounding." },
-    { key = "mana",   group = "MANA",      name = "Party mana",               tip = "In the fuel strip: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
+    { key = "mana",   group = "MANA",      name = "Party mana",               tip = "In the Mana vs boss strip: a bar per mana user in your group, shown once they drop under half - and Mana Tide lights up when all of them have." },
     { key = "totems", group = "SHAMAN",    name = "Totem buttons",            tip = "CALL, BRING, RECALL." },
     { key = "timers", group = "SHAMAN",    name = "Totem timers",             tip = "Air, water, earth, fire. Click one to drop it again." },
     { key = "bounce", group = "SHAMAN",    name = "Chain Heal path",          tip = "After your Chain Heal, a bolt across the boxes it landed on: gold for 3, amber for 2, a red flash for 1. A star on each crit." },
@@ -1771,14 +1773,13 @@ RD.SW = {
     { key = "hellvoice", group = "YOUR GROUP", name = "Hellfire voice",       tip = "Your PC's voice says \"Hellfire\" when a warlock's box catches fire. At most once every 12 s a warlock." },
     { key = "tap",    group = "YOUR GROUP", name = "Life Tap tag",            tip = "TAP in amber under a warlock's name for 3 s after he trades health for mana. Only when the game shows his cast (often not in a fight)." },
     { key = "crit",   group = "EXTRAS",    name = "Revelation CRIT",          tip = "The Revelation weapon enchant's proc: a gold CRIT on the synergy bar while your next spell will crit. The game draws it, even in a fight." },
-    { key = "bb",     group = "EXTRAS",    name = "Black box",                tip = "The red light and the keypad under the window." },
 }
 RD.SW_PRESETS = {
-    full = { names = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
+    full = { names = true, head = true, edges = true, pets = true, attn = true, target = true, kicks = true, cures = true, cast = true, alerts = true, cc = true,
              fuel = true, tools = true, totems = true, timers = true, bb = true, rip = true, mana = true, bounce = true, bsound = true,
              oath = true, vigil = true, swift = true, hell = true, hellvoice = true, tap = true, crit = true },
     bare = {},
-    lean = { names = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
+    lean = { names = true, head = true, target = true, kicks = true, cures = true, totems = true, timers = true },   -- the engineer's fans
 }
 RD.SW_ORDER = { "bare", "lean", "full" }
 RD.SW_WORD = { bare = "BARE", lean = "LEAN", full = "FULL" }
@@ -3779,6 +3780,49 @@ function RD.SwForMe(s)
     local mine = CU and CU.MyClass and CU.MyClass()
     return mine == nil or mine == cls
 end
+--- A switch row in the DECK list: yours (RD.SwForMe) and not a cue - a cue lives on the CUES / DEBUFFS tabs only (Arn,
+--- 24 Nov, sketch B: "One window, three tabs"; the seven rows that were both a switch and a cue). Cues.lua sets RD.SwOwned.
+function RD.SwInList(s)
+    return RD.SwForMe(s) and not (RD.SwOwned and RD.SwOwned(s.key))
+end
+
+--- THE DECK TAB'S COLUMNS (24 Nov 2026): the panel lives inside BiS Cues' window now (Cues.lua, CU.Host), so its rows flow
+--- into columns `colW` wide from the top of the panel down to `bottom` (a negative y): the presets and the two sliders top
+--- the first column, then the heads and rows in their order (a head never ends a column), RESET last. Answers the number
+--- of columns used and whether it all fit in `maxCols`.
+function RD.FlowSwitches(p, colW, bottom, maxCols)
+    if not (p and p.flow) then return 0, false end
+    colW = colW or RD.SW_W
+    local gap = 8
+    local pw = math.floor((colW - 16 - 8) / 3)
+    for k, name in ipairs(RD.SW_ORDER) do
+        local b = p.presets and p.presets[name]
+        if b then b:ClearAllPoints() b:SetSize(pw, 18) b:SetPoint("TOPLEFT", p, "TOPLEFT", 8 + (k - 1) * (pw + 4), -4) end
+    end
+    local sy = -28
+    for _, key in ipairs({ "width", "height" }) do
+        local sl = p.sliders and p.sliders[key]
+        if sl then sl:ClearAllPoints() sl:SetPoint("TOPLEFT", p, "TOPLEFT", 64, sy - 4) sy = sy - 18 end
+    end
+    local col, x, y = 1, 0, sy - 4
+    local items = {}
+    for _, it in ipairs(p.flow) do items[#items + 1] = it end
+    if p.reset then items[#items + 1] = { el = p.reset, h = 24, reset = true } end
+    for i, it in ipairs(items) do
+        local need = it.h + ((it.head and items[i + 1]) and items[i + 1].h or 0)   -- a head takes its first row along
+        if y - need < bottom and y < -8 then
+            col = col + 1
+            x, y = (col - 1) * (colW + gap), -4
+        end
+        it.el:ClearAllPoints()
+        if it.head then it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 8, y - 3)
+        elseif it.reset then it.el:SetSize(colW - 16, 18) it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 8, y - 6)
+        else it.el:SetSize(colW - 8, RD.SW_ROW_H) it.el:SetPoint("TOPLEFT", p, "TOPLEFT", x + 4, y) end
+        y = y - it.h
+    end
+    return col, col <= (maxCols or col)
+end
+
 function RD.BuildSwitches()
     if RD.swPanel then return RD.swPanel end
     local c = RD.PHOS
@@ -3813,6 +3857,7 @@ function RD.BuildSwitches()
     close.hl:SetAllPoints(close)
     close.hl:SetColorTexture(c[1], c[2], c[3], 0.22)
     close:SetScript("OnClick", function() p:Hide() end)
+    p.closeB = close
     -- the three presets
     p.presets = {}
     local pw = math.floor((RD.SW_W - 16 - 8) / 3)
@@ -3901,7 +3946,8 @@ function RD.BuildSwitches()
     p.rows = {}
     local y, group = -88, nil
     local list = {}
-    for _, s in ipairs(RD.SW) do if RD.SwForMe(s) then list[#list + 1] = s end end
+    for _, s in ipairs(RD.SW) do if RD.SwInList(s) then list[#list + 1] = s end end
+    p.flow = {}                                                -- heads, rows and the sort row in order (RD.FlowSwitches)
     for _, s in ipairs(list) do
         if s.group ~= group then
             group = s.group
@@ -3910,6 +3956,7 @@ function RD.BuildSwitches()
             h:SetTextColor(1, 0.7, 0.28, 1)
             h:SetPoint("TOPLEFT", p, "TOPLEFT", 8, y - 3)
             h:SetText(group)
+            p.flow[#p.flow + 1] = { el = h, h = 14, head = true }
             y = y - 14
         end
         local row = CreateFrame("Button", nil, p)
@@ -3950,8 +3997,12 @@ function RD.BuildSwitches()
         end)
         row:SetScript("OnLeave", function(self) swWash(self, false) if GameTooltip then GameTooltip:Hide() end end)
         p.rows[#p.rows + 1] = row
+        p.flow[#p.flow + 1] = { el = row, h = RD.SW_ROW_H }
         y = y - RD.SW_ROW_H
-        if s.key == "cols" then y = RD.BuildSortRow(p, y, font) end     -- the sort: one row that cycles (sheet 6)
+        if s.key == "cols" then
+            y = RD.BuildSortRow(p, y, font)                            -- the sort: one row that cycles (sheet 6)
+            p.flow[#p.flow + 1] = { el = p.sortRow, h = RD.SW_ROW_H }
+        end
     end
     local reset = CreateFrame("Button", nil, p)
     reset:SetSize(RD.SW_W - 16, 18)
@@ -5801,8 +5852,11 @@ function RD.CueMark(sp)
     local m = hold:CreateTexture(nil, "OVERLAY", nil, 6)
     if m.SetTexCoord then m:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     -- IN THE MIDDLE OF THE HEALTH BAR, not of the whole box (17 Nov, Arn's second shot: the icon row under the bar pulled
-    -- it low) - the bar is the pip, sp.heal
-    local bar = sp.heal or sp.deckPlate
+    -- it low) - the bar is the pip, sp.heal; since the name header (24 Nov, Arn's shot: "Chain Heal" rode up under the
+    -- strip) the health bar under the header, the deck box's own bar (Engineer.lua's e.bar)
+    local EN = NS.EN
+    local e = sp.en or (EN and EN.Box and sp.heal and EN.Box(sp))
+    local bar = (e and e.bar) or sp.heal or sp.deckPlate
     local h = bar.GetHeight and bar:GetHeight()
     local px = math.min(C.px, math.max(10, (type(h) == "number" and h > 0 and h or C.px + 6) - 6))
     m:SetSize(px, px)
@@ -5820,11 +5874,20 @@ function RD.CueMark(sp)
     back:SetPoint("TOPLEFT", word, "TOPLEFT", -W.padX, W.padY)
     back:SetPoint("BOTTOMRIGHT", word, "BOTTOMRIGHT", W.padX, -W.padY)
     back:Hide() word:Hide()
-    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back }
+    sp.cue = { hold = hold, edge = b, icon = m, word = word, back = back, bar = bar }
     sp.ripHold = hold
     return sp.cue
 end
 RD.CUE_FACE = 22
+--- THE WORD FITS THE BAR (24 Nov 2026, Arn, a party's thin bars: "maybe make the font smaller" - the 10-point word with
+--- its dark box stood taller than the bar and ate into the name header): the font is the bar's height less the box's
+--- edges, never above `max`, never below 7. Measured each time it shows (the box height slider changes the bar).
+function RD.WordSize(bar, max, pad)
+    max = max or RD.CUE_WORD.size
+    local okH, h = pcall(function() return bar and bar.GetHeight and bar:GetHeight() end)
+    if not (okH and type(h) == "number" and h > 0) then return max end
+    return math.max(7, math.min(max, math.floor(h - 2 * (pad or RD.CUE_WORD.padY) - 2)))
+end
 --[[ THE CUE MAKES ROOM FOR A TAG (23 Nov 2026, Arn's shot: "MANA TIDE" ran into the box's "Chain Heal" - "1"): while a tag
   shows on the line under the name, the cue (its word, its icon) goes UNDER that line when the bar is tall enough, else to the
   bar's right end; back to the middle when the tag goes. A plain frame (RD.CueMark's hold): moved in a fight too. ]]
@@ -5868,7 +5931,19 @@ function RD.CueShow(sp, on)
         if q.ck then q.face.key = q.ck end
         NS.CU.FaceShow(q.face, model ~= nil)
     end
-    if on and not icon and not model then q.word:Show() q.back:Show() else q.word:Hide() q.back:Hide() end
+    if on and not icon and not model then
+        local W = RD.CUE_WORD
+        local size = RD.WordSize(q.bar, W.size, W.padY)
+        if q.size ~= size then
+            q.size = size
+            pcall(q.word.SetFont, q.word, W.font, size, "OUTLINE")
+            local pad = (size < W.size) and 0 or W.padY                 -- (a thin bar: the box hugs the word)
+            q.back:ClearAllPoints()
+            q.back:SetPoint("TOPLEFT", q.word, "TOPLEFT", -W.padX, pad)
+            q.back:SetPoint("BOTTOMRIGHT", q.word, "BOTTOMRIGHT", W.padX, -pad)
+        end
+        q.word:Show() q.back:Show()
+    else q.word:Hide() q.back:Hide() end
     if icon then q.icon:Show() q.edge:Show() else q.icon:Hide() q.edge:Hide() end
 end
 

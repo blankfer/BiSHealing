@@ -49,6 +49,14 @@ Burn.lua
 Reveal.lua
 # BiS Cues: one card for every cue - its look, its sound, its place in the cue row; the import string
 Cues.lua
+# the known debuffs: what a healer does about each (heal past, don't dispel, dispel, heals weaker), as data
+Debuffs.lua
+# heal past the line: a debuff that wants them healed above a % - the line on the deck box's bar, the gap, the edge (BiS Cues)
+HealPast.lua
+# the debuff book: learns every new debuff it sees on the group (out of a fight) and guesses what a healer does about it
+DebuffBook.lua
+# what to do about a debuff, on the deck box: one word across the bar (CURE, NO CURE, -50%, NO HEAL, MIND CONTROL), icons after the name
+DebuffCues.lua
 Guard.lua
 TestCam.lua
 # the target rhythm test (secret alpha): can a mage ask mid-fight by flipping targets

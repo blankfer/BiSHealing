@@ -2336,6 +2336,22 @@ SlashCmdList.BISHEALING = function(input)
         NS.DO.healabsorb(msg:match("test"))
     elseif msg == "burn" then
         NS.DO.burn()
+    elseif msg == "debuffs" then
+        -- THE DEBUFF BOOK (DebuffBook.lua, 24 Nov 2026): what it learned on the fly, newest first
+        if NS.DK then for _, l in ipairs(NS.DK.Report(12)) do Print(l) end else Print("debuff book: not loaded") end
+    elseif msg == "dc fixed" then
+        -- the icon row: packed by the client's flow (default) or one fixed spot per kind - a way back if the flow misdraws
+        NS.DB().dcFixed = not NS.DB().dcFixed or nil
+        if NS.DC then NS.DC.Reset() end
+        Print("debuff cues icon row: " .. (NS.DB().dcFixed and "fixed spots" or "packed (the client's flow)") .. " - from the next repaint")
+    elseif msg == "dc any" then
+        if NS.DC then for _, l in ipairs(NS.DC.AnyProbe()) do Print(l) end end
+    elseif msg == "dc" then
+        -- THE DEBUFF CUES ON THE BOXES (DebuffCues.lua): what each box built, for a screenshot
+        if NS.DC then for _, l in ipairs(NS.DC.Status()) do Print(l) end else Print("debuff cues: not loaded") end
+    elseif msg == "past" then
+        -- HEAL PAST THE LINE (HealPast.lua, 24 Nov 2026): on or off, and whether the client took the filter
+        Print(NS.HP and NS.HP.Status() or "heal past the line: not loaded")
     elseif msg == "cues" or msg:match("^cues ") or msg == "export" or msg:match("^import") then
         -- BiS Cues (Cues.lua): the card; the string out and in
         -- (the string is base64 - its capitals matter, so the import gets what was typed, not the lowered msg)
