@@ -15790,7 +15790,14 @@ do
             do
                 local keepWorn, keepGis, keepCd = STATE.worn, C_Item.GetItemSpell, _G.GetInventoryItemCooldown
                 local USE = { [20503] = "Enamored Water Spirit", [19950] = "Zandalarian Hero Charm" }
-                C_Item.GetItemSpell = function(id) if USE[id] then return USE[id], 24854 end return nil end
+                local SID = { [20503] = 24854, [19950] = 24658 }
+                local keepDesc = C_Spell.GetSpellDescription
+                C_Spell.GetSpellDescription = function(id)
+                    if id == 24854 then return "Summons a Mana Spring Totem that restores 10 mana every 2 seconds for 1 min." end
+                    if id == 24658 then return "Increases spell damage and healing by up to 204." end
+                    return keepDesc(id)
+                end
+                C_Item.GetItemSpell = function(id) if USE[id] then return USE[id], SID[id] end return nil end
                 local cds = {}
                 _G.GetInventoryItemCooldown = function(unit, slot) local c = cds[slot] if c then return c[1], c[2], 1 end return 0, 0, 1 end
                 local function x(b) local p = b.points and b.points[#b.points] return p and p[4] end
@@ -15808,7 +15815,17 @@ do
                    "an on-use trinket put on: its button, clicking uses slot 13")
                 ok(t.tip and t.tip[1] ~= nil and t.tip[2]:find("Use: Enamored Water Spirit", 1, true), "the hover says what it does", t.tip and t.tip[2])
                 ok(t.food and t.food:IsShown() ~= false, "its own icon")
-                ok(x(t) and x(RD.fuel) and x(t) > x(RD.fuel), "after the drink, outside the mana box")
+                -- a MANA trinket (Arn: "put the enamoured water totem in the blue box since its a mana thing"): in the box,
+                -- right after the potion - Mana Tide still the middle of five - and the box runs past it
+                ok(t.mana and x(t) and x(RD.potion) and x(RD.tide) and x(t) > x(RD.potion) and x(t) < x(RD.tide),
+                   "a mana trinket: inside the blue box, after the potion")
+                local mb = RD.manaBox
+                ok(mb and mb:IsShown(), "the blue box still drawn round the mana group")
+                -- "does it have the smart light up thing": it learns what it restores (10 every 2 s for 1 min = 300 of
+                -- 1375) like the potion, so the client's curves light it when you are missing that much
+                ok(t.at == 0.22 and t.amount == 300 and RD.FullFor(t) == RD.FULL_AT.trinket,
+                   "it learns what it restores: lights below 22% mana, full at 15%", tostring(t.at))
+                ok(t.tip and t.tip[2]:find("restores ~300 mana", 1, true), "and the hover says so", t.tip and t.tip[2])
                 ok(RD.rations and x(RD.rations) ~= railX, "the rest of the row moved over to make room")
                 -- cooling: the swipe and a faded icon; ready again: full
                 cds[13] = { 100, 600 }
@@ -15821,6 +15838,15 @@ do
                 STATE.worn = { [13] = 20503, [14] = 19950 }
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 14, false)
                 ok(RD.trink2:IsShown() and RD.trink2.macro == "/use 14", "both trinkets: both buttons")
+                ok(not RD.trink2.mana and x(RD.trink2) > x(RD.fuel) and x(t) < x(RD.tide),
+                   "a trinket that is not a mana thing stays outside the box, after the drink")
+                -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
+                local wasW = RD.waterUntil
+                RD.waterUntil = (GetTime() or 0) + 60
+                RD.PaintTrinkets()
+                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "a water totem of yours standing: faded")
+                RD.waterUntil = wasW
+                RD.PaintTrinkets()
                 -- taken off in a fight: it waits for the end (secure buttons), then goes
                 local wasC = STATE.inCombat
                 STATE.inCombat = true
@@ -15836,6 +15862,7 @@ do
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 1, false)
                 ok((RD.trink2.points and #RD.trink2.points or 0) == n0, "a helmet swap: the deck left alone")
                 STATE.worn, C_Item.GetItemSpell, _G.GetInventoryItemCooldown = keepWorn, keepGis, keepCd
+                C_Spell.GetSpellDescription = keepDesc
                 RD.Arm()
             end
             -- the sliders (Arn: "maybe we also put the sliders there for width and height")

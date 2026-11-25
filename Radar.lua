@@ -2308,7 +2308,8 @@ end
 --- the gap under it.
 -- Mana Tide in the MIDDLE of the mana four (Arn, 16 Nov: "move it to the middle of the mana i confused it for my call totems a
 -- couple times cause they were both far left")
--- the on-use trinkets after the drink, outside the blue mana box (24 Nov 2026); only placed while equipped (`absent`)
+-- the on-use trinkets after the drink, outside the blue mana box (24 Nov 2026); only placed while equipped (`absent`); a
+-- MANA trinket (`b.mana`) goes INTO the box, after the potion (RD.DeckTools)
 RD.TOOL_KEYS = { "shield", "potion", "tide", "reserve", "fuel", "trink1", "trink2", "rations", "chaff", "res" }
 RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
 function RD.DeckTools(W, top)
@@ -2317,16 +2318,34 @@ function RD.DeckTools(W, top)
     -- every tool, in its order - NOT only the shown ones (Arn, 16 Nov: "all the buttons for food are gone" after a /reload:
     -- at the first layout the game has not shown them yet, so a "shown only" list placed none); a narrow window (Arn's
     -- shot: "the mana thing did not center"): the mana four on a line of their own, centred in their box, the rest under
-    local all, mana, rest = {}, {}, {}
+    -- A MANA TRINKET IN THE BLUE BOX (24 Nov 2026): the first goes right after the potion (Mana Tide stays the middle of
+    -- five), a second at the box's end; any other trinket stays outside, after it
+    local all, mana, rest, pre, extra = {}, {}, {}, {}, nil
+    local trinks = 0
     for _, k in ipairs(RD.TOOL_KEYS) do
         local b = RD[k]
         if b and b.absent then b:Hide() end          -- a trinket slot with nothing to use: no button, no gap
         if b and not b.absent then
             if b.trinket and not b:IsShown() then b:Show() end
-            all[#all + 1] = b
-            if RD.MANA_KEYS[k] then mana[#mana + 1] = b else rest[#rest + 1] = b end
+            if b.trinket and b.mana then
+                trinks = trinks + 1
+                if trinks == 1 then
+                    local at = #mana + 1
+                    for i, m in ipairs(mana) do if m == RD.potion then at = i + 1 end end
+                    table.insert(mana, at, b)
+                else
+                    extra = b
+                end
+            elseif RD.MANA_KEYS[k] then mana[#mana + 1] = b
+            elseif #mana == 0 then pre[#pre + 1] = b
+            else rest[#rest + 1] = b end
         end
     end
+    if extra then mana[#mana + 1] = extra end
+    for _, b in ipairs(pre) do all[#all + 1] = b end
+    for _, b in ipairs(mana) do all[#all + 1] = b end
+    for _, b in ipairs(rest) do all[#all + 1] = b end
+    for i = #pre, 1, -1 do table.insert(rest, 1, pre[i]) end   -- a narrow window: the mana line first, the rest under
     local lines = {}
     local function wrap(list)
         local i = 1
@@ -2356,10 +2375,7 @@ function RD.DeckTools(W, top)
         mb.edges = edge(mb, RD.MANA_BOX_COL, 1.5)
         RD.manaBox = mb
     end
-    local first, last                                  -- the box runs from the mana four's first button to its last
-    for _, k in ipairs(RD.TOOL_KEYS) do
-        if RD.MANA_KEYS[k] and RD[k] then first = first or RD[k] last = RD[k] end
-    end
+    local first, last = mana[1], mana[#mana]           -- the box runs from the mana group's first button to its last
     if first and xs[first] and xs[last] and ys[first] == ys[last] then
         local l, r = xs[first] - S / 2 - 2, xs[last] + S / 2 + 2
         mb:SetSize(r - l, S + 4)
@@ -5376,7 +5392,7 @@ RD.iconCurves = {}
 --- at 10% mana" - "mana tide full brightness at 25% mana" - "if water restores 800 mana over 24 seconds when i am out of
 --- combat it should light up to 100% when i am at 1600 mana needed"): dim above the tool's own point `at` (where it starts
 --- to help), brightening linearly as your mana falls, full at `full` and below. The client evaluates it.
-RD.FULL_AT = { potion = 0.10, tide = 0.25, reserve = 0.15 }
+RD.FULL_AT = { potion = 0.10, tide = 0.25, reserve = 0.15, trinket = 0.15 }
 --- Where a tool is full bright: its fixed point, or - the drink - missing TWICE what one drink restores.
 function RD.FullFor(b)
     if not b then return nil end
@@ -6598,12 +6614,24 @@ function RD.ArmTrinkets()
             b:SetAttribute("*macrotext1", macro)
             b:EnableMouse(macro and true or false)
             b.macro, b.item, b.absent = macro, id, not id
+            b.mana, b.use, b.at, b.amount, b.guess = nil, nil, nil, nil, nil
             if id then
                 local okN, nm = false, nil
                 if nameOf then okN, nm = pcall(nameOf, id) end
                 nm = okN and plain(nm) or nil
-                b.tip = { type(nm) == "string" and nm or ("Trinket " .. (slot - 12)),
-                          "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." }
+                -- A MANA TRINKET (24 Nov 2026, Arn: "put the enamoured water totem in the blue box since its a mana thing
+                -- and does it have the smart light up thing when im getting low on mana?"): its use says "mana" - it goes
+                -- in the blue box, learns what it restores like the potion (RD.LearnTool) and lights by the same curves
+                local words = itemWords(id)
+                b.use = use
+                b.mana = (use .. " " .. (words or "")):lower():find("mana", 1, true) and true or nil
+                local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
+                if b.mana then
+                    RD.LearnTool(b, words)
+                    toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
+                else
+                    b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." }
+                end
                 -- the worn slot's own icon (always known for what you wear), else the item's
                 local okT, tex = false, nil
                 if GetInventoryItemTexture then okT, tex = pcall(GetInventoryItemTexture, "player", slot) end
@@ -6632,7 +6660,27 @@ function RD.PaintTrinkets()
             local s, d
             if ok then s = plain(start) d = plain(dur) end
             local cooling = type(s) == "number" and type(d) == "number" and s > 0 and d > 2
-            if b.food then b.food:SetVertexColor(1, 1, 1, cooling and RD.ICON_FADED or 1) end
+            local lit = false
+            local water = b.mana and RD.waterUntil > ((GetTime and GetTime()) or 0)
+            if b.mana and not cooling and not water and UnitPowerPercent then
+                -- ready, no water totem of yours standing (it would knock it down): the potion's ramp on your mana -
+                -- dim above what it restores, full at RD.FULL_AT.trinket - and the red / amber outline (the client's)
+                local ic = b.food and RD.IconCurve(b.at, RD.FullFor(b))
+                if ic then
+                    local okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic)
+                    lit = okI and paint({ b.food }, icol) or false
+                end
+                local ac = lit and RD.AttnOn() and RD.AttnCurve(b.at)
+                if ac then
+                    local f = RD.Attn(b)
+                    local okA, acol = pcall(UnitPowerPercent, "player", 0, true, ac)
+                    if okA and paint(f.edges, acol) then f:Show() else f:Hide() end
+                end
+            end
+            if not lit then
+                if b.food then b.food:SetVertexColor(1, 1, 1, (cooling or water) and RD.ICON_FADED or 1) end
+                if b.attn then b.attn:Hide() end
+            end
             n = n + 1
         end
     end
@@ -7263,6 +7311,15 @@ function RD.OnCast(unit, spellID)
         RD.waterUntil = now + RD.WATER.spring
         return "spring"
     end
+    -- a mana trinket's own use (its totem stands in the water place too): no water tool lights over it
+    for key in pairs(RD.TRINKET_SLOTS) do
+        local t = RD[key]
+        if name and t and t.mana and t.use == name then
+            RD.waterUntil = now + RD.WATER.spring
+            RD.PaintTrinkets()
+            return "trinket"
+        end
+    end
     -- the flare: your interrupt, or a spell that spends the same cooldown (a shaman's shocks share one)
     local FG = NS.FG
     local kick = FG and FG.KickSpell and FG.KickSpell() or nil
@@ -7555,6 +7612,7 @@ function RD.PaintTools(fight)
         end
         b.face:SetAlpha(drew and 1 or 0)
     end
+    RD.PaintTrinkets()                                -- a mana trinket lights on the same beat
 end
 
 --- Bogeys and range arcs: the ticker's work while shown.
