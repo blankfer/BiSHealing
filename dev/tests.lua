@@ -15801,6 +15801,7 @@ do
                 local cds = {}
                 _G.GetInventoryItemCooldown = function(unit, slot) local c = cds[slot] if c then return c[1], c[2], 1 end return 0, 0, 1 end
                 local function x(b) local p = b.points and b.points[#b.points] return p and p[4] end
+                local function useText(n) local F = NS.FM return ((F and F.TrinketSeq) and (F.TrinketSeq(n) .. "\n") or "") .. "/use " .. n end
                 -- a passive trinket in 13, nothing in 14: no buttons, no gap
                 STATE.worn = { [13] = 11111 }
                 RD.Arm()
@@ -15811,7 +15812,7 @@ do
                 STATE.worn = { [13] = 20503 }
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 13, false)
                 local t = RD.trink1
-                ok(not t.absent and t:IsShown() and t.macro == "/use 13" and t:GetAttribute("*macrotext1") == "/use 13",
+                ok(not t.absent and t:IsShown() and t.macro == useText(13) and t:GetAttribute("*macrotext1") == useText(13),
                    "an on-use trinket put on: its button, clicking uses slot 13")
                 ok(t.tip and t.tip[1] ~= nil and t.tip[2]:find("Use: Enamored Water Spirit", 1, true), "the hover says what it does", t.tip and t.tip[2])
                 ok(t.food and t.food:IsShown() ~= false, "its own icon")
@@ -15837,7 +15838,7 @@ do
                 -- a second on-use trinket in 14
                 STATE.worn = { [13] = 20503, [14] = 19950 }
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 14, false)
-                ok(RD.trink2:IsShown() and RD.trink2.macro == "/use 14", "both trinkets: both buttons")
+                ok(RD.trink2:IsShown() and RD.trink2.macro == useText(14), "both trinkets: both buttons")
                 ok(not RD.trink2.mana and x(RD.trink2) > x(RD.fuel) and x(t) < x(RD.tide),
                    "a trinket that is not a mana thing stays outside the box, after the drink")
                 -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
@@ -15852,7 +15853,7 @@ do
                 STATE.inCombat = true
                 STATE.worn = { [14] = 19950 }
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 13, true)
-                ok(RD.pending and RD.trink1.macro == "/use 13", "in a fight: nothing changes yet, marked for after")
+                ok(RD.pending and RD.trink1.macro == useText(13), "in a fight: nothing changes yet, marked for after")
                 STATE.inCombat = wasC
                 RD.Arm()
                 ok(RD.trink1.absent and not RD.trink1:IsShown() and RD.trink1:GetAttribute("*macrotext1") == nil,

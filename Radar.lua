@@ -6609,7 +6609,11 @@ function RD.ArmTrinkets()
         local b = RD[key]
         if b then
             local id, use = RD.TrinketUse(slot)
-            local macro = id and ("/use " .. slot) or nil
+            -- THE BINDS' OWN SEQUENCE FIRST (24 Nov 2026, Mouse.lua FM.TrinketSeq): early in a fight a click here uses it the
+            -- way a bind would and counts for the binds (no bind meets it cooling); once that sequence rests, the plain /use
+            -- under it fires a trinket that came back mid-fight (Arn: "what if a 2 min trinket comes back during a fight")
+            local seq = NS.FM and NS.FM.TrinketSeq and NS.FM.TrinketSeq(slot)
+            local macro = id and ((seq and (seq .. "\n") or "") .. "/use " .. slot) or nil
             b:SetAttribute("*type1", macro and "macro" or nil)
             b:SetAttribute("*macrotext1", macro)
             b:EnableMouse(macro and true or false)
