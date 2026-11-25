@@ -17976,10 +17976,15 @@ do
         local deck = CreateFrame("Frame", nil, UIParent)
         deck:SetSize(400, 300)
         deck.IsShown = function() return true end
+        deck.GetRight = function() return 900 end
+        deck.GetTop = function() return 700 end
         NS.RD.frame = deck
         CU.Open("deck")
         local cp = c.points[1]
-        ok(cp and cp[1] == "TOPLEFT" and cp[2] == deck and cp[3] == "TOPRIGHT", "the deck showing: the window against its right edge, tops level")
+        local fs, cs = deck:GetEffectiveScale(), c:GetEffectiveScale()
+        ok(cp and cp[1] == "TOPLEFT" and cp[2] == UIParent and cp[3] == "BOTTOMLEFT" and math.abs(cp[4] - (900 * fs / cs + 6)) < 0.01
+           and math.abs(cp[5] - 700 * fs / cs) < 0.01,
+           "the deck showing: the window at the deck's right edge, tops level - pinned to the SCREEN (a new deck width never moves it)")
         CU.Close()
         deck.IsShown = function() return false end
         CU.Open("cues")

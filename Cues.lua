@@ -1301,10 +1301,19 @@ function CU.Place(c)
         c:SetPoint(pos[1], UIParent, pos[2] or pos[1], pos[3], pos[4] or 0)
         return "drag"
     end
+    -- BY THE SCREEN, NEVER BY THE DECK (Arn, 24 Nov: "sliding the width bar makes the deck go crazy"): hung on the deck's
+    -- right edge, the window - and the WIDTH slider under the mouse - moved with every new width, and the move changed the
+    -- width again. Now the deck's edge is read once and the window put at that spot on the screen.
     local f = NS.RD and NS.RD.frame
     if f and f.IsShown and f:IsShown() then
-        c:SetPoint("TOPLEFT", f, "TOPRIGHT", 6, 0)
-        return "deck"
+        local okR, right = pcall(f.GetRight, f)
+        local okT, top = pcall(f.GetTop, f)
+        local fs = (f.GetEffectiveScale and f:GetEffectiveScale()) or 1
+        local cs = (c.GetEffectiveScale and c:GetEffectiveScale()) or 1
+        if okR and okT and type(right) == "number" and type(top) == "number" and cs > 0 then
+            c:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", right * fs / cs + 6, top * fs / cs)
+            return "deck"
+        end
     end
     c:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
     return "middle"
