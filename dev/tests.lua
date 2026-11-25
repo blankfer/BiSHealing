@@ -945,6 +945,15 @@ end
 _G.GetInventoryItemTexture = function(unit, slot)
     return (unit == "player" and STATE.worn[slot]) and ("Interface\\Icons\\Trinket" .. slot) or nil
 end
+-- THEIR COOLDOWN AND THEIR USE (24 Nov 2026, trinkets once a fight): both worn trinkets have a Use: (the Hero Charm,
+-- Burst of Knowledge), as the client answers; nothing cools until a test says so (start 0 = ready).
+_G.GetInventoryItemCooldown = function(unit, slot) return 0, 0, 1 end
+_G.C_Item = _G.C_Item or {}
+_G.C_Item.GetItemSpell = function(id)
+    if id == 19950 then return "Zandalarian Hero Charm", 24658 end
+    if id == 11832 then return "Burst of Knowledge", 15646 end
+    return nil
+end
 _G.C_Spell = _G.C_Spell or {}
 _G.C_Spell.PickupSpell = function(id)
     if type(id) ~= "number" then error("bad argument #1 to 'PickupSpell'", 2) end
@@ -6799,14 +6808,35 @@ do
             local cell2 = CreateFrame("Button", "TrinketCell", UIParent, "SecureUnitButtonTemplate")
             FM.ApplyTo(cell2)
             ok(cell2.__attrs["*macrotext1"] == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-               .. "/click BiSHealT13\n/click BiSHealT14\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
-               "one press: the guard, both trinkets, the booster, the heal", cell2.__attrs["*macrotext1"])
-            -- a cooling trinket stops a Forever macro, so each slot is its own hidden button the bind /clicks (Arn, 24 Nov)
-            local t13, t14 = _G.BiSHealT13, _G.BiSHealT14
-            ok(t13 and t14 and t13.__attrs.type == "item" and t13.__attrs.item == "13" and t14.__attrs.item == "14",
-               "each trinket slot has its own secure button, type item, its slot")
-            ok(t13.__attrs.useOnKeyDown == false and t14.__attrs.useOnKeyDown == false,
-               "and fires on the up-press a /click sends (Arn, 24 Nov: without it the totem never dropped)")
+               .. FM.TrinketSeq(13) .. "\n" .. FM.TrinketSeq(14) .. "\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
+               "one press: the guard, both trinkets (once a fight), the booster, the heal", cell2.__attrs["*macrotext1"])
+            ok(FM.TrinketSeq(14):find("^/castsequence reset=combat 14, null"), "a trinket is a cast sequence that rests on null (Arn, 24 Nov)", FM.TrinketSeq(14))
+            -- A COOLING TRINKET STOPS A FOREVER MACRO (Arn measured, 24 Nov): while it cools, no line at all
+            do
+                local keepCd = _G.GetInventoryItemCooldown
+                local now = GetTime()
+                _G.GetInventoryItemCooldown = function(_, slot) if slot == 14 then return now - 5, 600, 1 end return 0, 0, 1 end
+                local v14 = FM.trinkVar[14]
+                FM.trinkSig = "11"
+                ok(FM.TrinketCheck() == true, "out of a fight, the cooldown starting is heard")
+                FM.ApplyTo(cell2)                    -- (a test cell: FM.Apply walks the real ones)
+                local tx = cell2.__attrs["*macrotext1"] or ""
+                ok(tx:find(FM.TrinketSeq(13), 1, true) and not tx:find(" 14, null", 1, true),
+                   "trinket 2 cooling (out of a fight): its line comes out of the bind, trinket 1 stays", tx)
+                _G.GetInventoryItemCooldown = keepCd
+                FM.TrinketCheck()
+                FM.ApplyTo(cell2)
+                tx = cell2.__attrs["*macrotext1"] or ""
+                ok(FM.trinkVar[14] == v14 + 1 and tx:find(FM.TrinketSeq(14), 1, true),
+                   "ready again: back in, as a fresh sequence (its text moved on)", tx)
+                local wasC = STATE.inCombat
+                STATE.inCombat = true
+                _G.GetInventoryItemCooldown = function(_, slot) if slot == 14 then return now - 5, 600, 1 end return 0, 0, 1 end
+                ok(FM.TrinketCheck() == false, "in a fight nothing is written (the sequence itself rests on null)")
+                STATE.inCombat = wasC
+                _G.GetInventoryItemCooldown = keepCd
+                FM.TrinketCheck()
+            end
             ok(FM.CycleRank("", "left") == "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 1)",
                "the rank button keeps everything in front", tostring(FM.Get("", "left")))
             local nm2 = FM.Split(FM.Get("", "left"))
@@ -6827,7 +6857,7 @@ do
             ok(w.trinketTicks[1].tick.__shown and w.trinketTicks[2].tick.__shown, "tick both on the shift tab")
             FM.ApplyTo(cell2)
             local sh = cell2.__attrs["shift-macrotext1"] or ""
-            ok(sh:find("/click BiSHealT13\n/click BiSHealT14\n/cast [@mouseover] Healing Wave(Rank 3)", 1, true),
+            ok(sh:find(FM.TrinketSeq(13) .. "\n" .. FM.TrinketSeq(14) .. "\n/cast [@mouseover] Healing Wave(Rank 3)", 1, true),
                "every shift bind now uses both trinkets first", sh)
             ok(cell2.__attrs["*type1"] == "spell" and cell2.__attrs["*macrotext1"] == nil,
                "and the no-modifier tab is untouched - a plain spell", tostring(cell2.__attrs["*type1"]))
