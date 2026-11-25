@@ -82,6 +82,10 @@ local function start(unit, id)
     local st = BN.on[unit]
     if st and st.id == id then return false end
     BN.on[unit] = { id = id, t0 = now() }
+    -- THE VOICE FROM OUR OWN SIGHTING (25 Nov 2026, Arn: "its not saying hellfire ... or the warlock name"): it used to come
+    -- from a hook on the game's badge OnShow, which had to go (22 Nov: a script there kept the client from showing the badge
+    -- at all) and took the voice with it. Now the burn starting - his cast or his aura, whichever road answered - speaks.
+    if not st and BN.Speak then BN.Speak(unit, unit) end
     return true
 end
 local function stop(unit)

@@ -17173,6 +17173,7 @@ do
     local keepVC, heardV = _G.C_VoiceChat, {}
     _G.C_VoiceChat = { SpeakText = function(voice, text, rate, volume) heardV[#heardV + 1] = { voice, text, rate, volume } end }
     BN.spoke, BN.quietUntil = {}, 0
+    if NS.CU then NS.CU.spoke = {} end                -- (the burn started above spoke already: its 12 s forgotten)
     hs.opts.initializeFrame(hb)
     ok(not hb.Icon:IsShown() and hb.__w == BN.FLAME.px and hb.bisIcon and hb.bisModel,
        "the client's button: a small square under his name - Hellfire's icon under a 3D fire, Blizzard's own art hidden", hb.__w)
@@ -17211,6 +17212,17 @@ do
     NS.RD.SetSw("hell", true)
     BN.Container(sp)
     ok(sp.burnC.enabled == true, "back on")
+    -- WHO CALLS THE VOICE (Arn, 25 Nov: "its not saying hellfire ... or the warlock name"): the checks above call BN.Speak
+    -- themselves, so they stayed green while nothing in the addon called it any more. His burn starting must.
+    TICK(BN.VOICE.every + 1)
+    if NS.CU then NS.CU.spoke = {} end
+    BN.spoke, BN.on = {}, {}
+    local nV = #heardV
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949)
+    ok(#heardV == nV + 1 and heardV[#heardV][2]:find("^Hellfire"), "his Hellfire starting (our own sighting) speaks - nothing hooked on the game's button", #heardV - nV)
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949)
+    ok(#heardV == nV + 1, "the same burn seen again: said once")
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949)
     _G.C_VoiceChat = keepVC
     local other = { unit = "party2", heal = CreateFrame("Button") }
     other.heal:SetSize(74, 58)
