@@ -814,6 +814,10 @@ function FM.TrinketButton(slot)
     local ok, b = pcall(CreateFrame, "Button", FM.TRINKET_BTN .. slot, UIParent, "SecureActionButtonTemplate")
     if not ok or not b then return nil end
     b:RegisterForClicks("AnyUp", "AnyDown")
+    -- FIRES ON THE "UP" A /click SENDS (measured 24 Nov 2026): a plain `/click` is an up-press, and a secure button follows
+    -- the client's key-down setting, so it did NOTHING - the totem never dropped (and the "cooling trinket lets the heal
+    -- through" probe only passed because nothing ran). With useOnKeyDown false, `/click BiSHealT14` dropped it.
+    b:SetAttribute("useOnKeyDown", false)
     b:SetAttribute("type", "item")
     b:SetAttribute("item", tostring(slot))
     -- left shown with no size or art, as in the test (a hidden button's /click is not proven)

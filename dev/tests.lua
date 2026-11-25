@@ -6805,6 +6805,8 @@ do
             local t13, t14 = _G.BiSHealT13, _G.BiSHealT14
             ok(t13 and t14 and t13.__attrs.type == "item" and t13.__attrs.item == "13" and t14.__attrs.item == "14",
                "each trinket slot has its own secure button, type item, its slot")
+            ok(t13.__attrs.useOnKeyDown == false and t14.__attrs.useOnKeyDown == false,
+               "and fires on the up-press a /click sends (Arn, 24 Nov: without it the totem never dropped)")
             ok(FM.CycleRank("", "left") == "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 1)",
                "the rank button keeps everything in front", tostring(FM.Get("", "left")))
             local nm2 = FM.Split(FM.Get("", "left"))
