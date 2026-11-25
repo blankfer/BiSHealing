@@ -2705,6 +2705,21 @@ function RD.DeckName(sp)
     if room and room.name == "cut" and type(n) == "string" and not (NS.Secret and NS.Secret(n)) then n = n:sub(1, RD.NAME_CUT) end
     return n
 end
+--- THE NAMES FOLLOW THE SLOT, MID-FIGHT TOO (25 Nov 2026, Arn: "if someone leaves raid or party during a fight to not mess
+--- with the healing deck"). A box heals its unit token (party3), and the client moves everyone below up a slot when one
+--- leaves - the bar and its class colour are read off the token every paint, but the name was written only at the layout,
+--- which waits for the fight's end: the box said the one who LEFT while it healed the one who moved up. A font string is
+--- not secure, so every box's name is written again off its token now (empty for a slot nobody holds).
+function RD.PaintDeckNames()
+    local n = 0
+    for _, sp in ipairs(RD.spokes or {}) do
+        if sp.deckTag and sp.deckTag.text and sp.unit then
+            sp.deckTag.text:SetText(RD.DeckName(sp))
+            n = n + 1
+        end
+    end
+    return n
+end
 --- `room` (RD.BoxRoom) cuts or drops the name; `group` = the raid group for the G2 tag (nil: none); `paw` = a pet's paw
 --- takes the top-right corner. The name never runs under the corner: its width stops RD.CORNER_W short.
 function RD.DeckTag(sp, w, room, group, paw)
@@ -8417,7 +8432,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
        or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_LEVEL_UP" then   -- a role set: the pip's sign follows
         -- in a fight it only marks RD.pending; then a repaint, so whoever LEFT goes dark now, not at the fight's end
         -- (11 Nov, Arn: "left group still icons remain ... during combat")
-        if not RD.Arm() then RD.Paint() end
+        if not RD.Arm() then RD.Paint() RD.PaintDeckNames() end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then   -- you stood up (a res taken, back at your body)
         for _, sp in ipairs(RD.spokes) do RD.PaintHeal(sp) end
         RD.resDirty = true

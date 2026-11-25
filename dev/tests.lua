@@ -15348,6 +15348,25 @@ do
        "the warrior (no role named: the guess) is the tank row's long box", tankSp and tankSp.deckPlate and tankSp.deckPlate.__w)
     ok(tankSp and tankSp.deckTag and tankSp.deckTag.text.__text == "RAGEFANG",
        "its callsign on the box, like a flight tracker (Arn: \"puts names on the boxes\")", tankSp and tankSp.deckTag and tankSp.deckTag.text.__text)
+    -- SOMEONE LEAVES MID-FIGHT (Arn, 25 Nov: "if someone leaves raid or party during a fight to not mess with the healing
+    -- deck"): the client moves the next one up into party1. The layout waits for the fight's end, but the box heals the
+    -- token - so its NAME follows the token now, driven from the real roster event, never the old name over a new person.
+    do
+        local keepGUN, keepCombat, keepActive = _G.GetUnitName, STATE.inCombat, RD.Active
+        RD.Active = function() return true end          -- (the deck on, as it is in the game; this stretch of the suite has it off)
+        _G.GetUnitName = function(u, ...) if u == "party1" then return "Tor" end return keepGUN(u, ...) end
+        STATE.inCombat = true
+        fire(RD.events, "GROUP_ROSTER_UPDATE")
+        ok(RD.pending and tankSp.deckTag.text.__text == "TOR",
+           "left mid-fight: the layout waits, the box's name is whoever holds the slot now", tankSp.deckTag.text.__text)
+        _G.GetUnitName = function(u, ...) if u == "party1" then return nil end return keepGUN(u, ...) end
+        fire(RD.events, "GROUP_ROSTER_UPDATE")
+        ok(tankSp.deckTag.text.__text == "", "nobody in the slot: no name, never a stale one")
+        _G.GetUnitName, STATE.inCombat = keepGUN, false
+        fire(RD.events, "PLAYER_REGEN_ENABLED")
+        ok(not RD.pending and tankSp.deckTag.text.__text == "RAGEFANG", "the fight over: laid out again, back to RAGEFANG")
+        STATE.inCombat, RD.Active = keepCombat, keepActive
+    end
     local meSp
     for _, sp in ipairs(RD.spokes) do if sp.unit == "player" then meSp = sp end end
     ok(meSp and meSp.deckTag and meSp.deckTag.text.__w == meSp.deckPlate.__w - 6,
