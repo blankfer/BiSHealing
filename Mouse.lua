@@ -795,6 +795,37 @@ function FM.HealLines(spell, mod, heal, room, guarded)
 end
 FM.MACRO_MAX = 255
 
+--[[ A TRINKET THROUGH ITS OWN BUTTON (24 Nov 2026). Arn: "the trinket on the bind ... gets stuck on item not ready". MEASURED
+  that night: `/use 14` (Enamored Water Spirit, cooling) + `/cast [@player] Chain Heal` = "Item is not ready yet" and NO
+  Chain Heal - on Forever a cooling trinket STOPS the macro, as a cooling /cast does (a `/use 13` on a trinket that was
+  not cooling let the next line run, which is why the first probe misled). Trinkets after the heal: Arn, "nope dont want
+  trinkets after a heal". What works (his test): a hidden SecureActionButton, type "item", item "14", pressed with
+  `/click` - the cooling trinket fails inside that button and the macro goes on to the heal. So each slot has one
+  (`BiSHealT13` / `BiSHealT14`, made out of a fight, attributes written once and never again) and the bind's front line
+  is `/click BiSHealT13`; a trinket 1 that cools no longer stops trinket 2 either. Up AND down registered, as tested
+  (the client's /click sends one of the two; the other finds the trinket cooling and does nothing). In a fight with no
+  button made yet: the old `/use` line. ]]
+FM.TRINKET_BTN = "BiSHealT"
+FM.trinketBtns = FM.trinketBtns or {}
+--- The hidden button that uses one trinket slot - made on first need, out of a fight only (nil in one).
+function FM.TrinketButton(slot)
+    if FM.trinketBtns[slot] then return FM.trinketBtns[slot] end
+    if (InCombatLockdown and InCombatLockdown()) or not CreateFrame then return nil end
+    local ok, b = pcall(CreateFrame, "Button", FM.TRINKET_BTN .. slot, UIParent, "SecureActionButtonTemplate")
+    if not ok or not b then return nil end
+    b:RegisterForClicks("AnyUp", "AnyDown")
+    b:SetAttribute("type", "item")
+    b:SetAttribute("item", tostring(slot))
+    -- left shown with no size or art, as in the test (a hidden button's /click is not proven)
+    FM.trinketBtns[slot] = b
+    return b
+end
+--- The bind's line for one trinket slot: `/click BiSHealT13`, or `/use 13` while its button cannot be made.
+function FM.UseLine(slot)
+    if FM.TrinketButton(slot) then return "/click " .. FM.TRINKET_BTN .. slot end
+    return "/use " .. slot
+end
+
 function FM.FirstLines(cast, mod, noAimed)
     if type(cast) ~= "string" or FM.PingOf(cast) then return "" end
     local slots, boost = FM.Front(cast)
@@ -802,7 +833,7 @@ function FM.FirstLines(cast, mod, noAimed)
     local seen, lines = {}, {}
     table.sort(slots)
     for _, s in ipairs(slots) do
-        if not seen[s] then seen[s] = true lines[#lines + 1] = "/use " .. s end
+        if not seen[s] then seen[s] = true lines[#lines + 1] = FM.UseLine(s) end
     end
     if boost and not (noAimed and FM.AIMED[boost]) then
         -- an aimed one (Riptide) goes on the living friend under the mouse, never on you by the client's self-cast

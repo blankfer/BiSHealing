@@ -6799,8 +6799,12 @@ do
             local cell2 = CreateFrame("Button", "TrinketCell", UIParent, "SecureUnitButtonTemplate")
             FM.ApplyTo(cell2)
             ok(cell2.__attrs["*macrotext1"] == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-               .. "/use 13\n/use 14\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
+               .. "/click BiSHealT13\n/click BiSHealT14\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
                "one press: the guard, both trinkets, the booster, the heal", cell2.__attrs["*macrotext1"])
+            -- a cooling trinket stops a Forever macro, so each slot is its own hidden button the bind /clicks (Arn, 24 Nov)
+            local t13, t14 = _G.BiSHealT13, _G.BiSHealT14
+            ok(t13 and t14 and t13.__attrs.type == "item" and t13.__attrs.item == "13" and t14.__attrs.item == "14",
+               "each trinket slot has its own secure button, type item, its slot")
             ok(FM.CycleRank("", "left") == "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 1)",
                "the rank button keeps everything in front", tostring(FM.Get("", "left")))
             local nm2 = FM.Split(FM.Get("", "left"))
@@ -6821,7 +6825,7 @@ do
             ok(w.trinketTicks[1].tick.__shown and w.trinketTicks[2].tick.__shown, "tick both on the shift tab")
             FM.ApplyTo(cell2)
             local sh = cell2.__attrs["shift-macrotext1"] or ""
-            ok(sh:find("/use 13\n/use 14\n/cast [@mouseover] Healing Wave(Rank 3)", 1, true),
+            ok(sh:find("/click BiSHealT13\n/click BiSHealT14\n/cast [@mouseover] Healing Wave(Rank 3)", 1, true),
                "every shift bind now uses both trinkets first", sh)
             ok(cell2.__attrs["*type1"] == "spell" and cell2.__attrs["*macrotext1"] == nil,
                "and the no-modifier tab is untouched - a plain spell", tostring(cell2.__attrs["*type1"]))
