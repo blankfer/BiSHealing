@@ -2462,6 +2462,34 @@ do
        "so reconsidering leaves a deliberate bind where they put it, written down or not",
        tostring(FM.Get("", "wheelup")))
 
+    -- THE RANKS LOST AT A SPEC SWITCH (26 Nov 2026, Arn: "not remembering the ranks is when he is switching
+    -- specs"). The NEXT session: FM.touched is gone, the saved flag said "seeded" for good (a save from
+    -- before this fix), the binds came back from the save, and the macro list reloads - the real event,
+    -- through the grid - at a moment our macro is not in it. The old Reconsider wiped the mouse and
+    -- put the class defaults' TOP ranks in place of the player's.
+    MACROS = {}
+    d.binds, d.bindsSeeded, FM.asked, FM.touched = {}, nil, false, nil
+    FM.Get("", "left")                                                 -- the first login: our defaults
+    FM.Set("", "left", "Healing Wave(Rank 1)")
+    ok(d.bindsSeeded == nil, "a bind of their own: the mouse is not our guess any more, past this session too")
+    local was = FM.Get("", "left")
+    d.bindsSeeded, FM.touched, FM.asked = true, nil, true              -- next session, an old save's flag
+    MACROS = {}                                                        -- the list reloads without ours
+    fire(FG.events, "UPDATE_MACROS")
+    ok(FM.Get("", "left") == was and was == "Healing Wave(Rank 1)",
+       "the macro list reloading (a spec switch) keeps their rank, not the top one", tostring(FM.Get("", "left")))
+    ok(d.bindsSeeded == nil, "and the stale flag is gone for good")
+
+    -- still a guess while it IS the defaults: the late macro list may replace it (22 Sep)
+    MACROS = {}
+    d.binds, d.bindsSeeded, FM.asked, FM.touched = {}, nil, false, nil
+    FM.Get("", "left")
+    ok(d.bindsSeeded == true and FM.OnlyDefaults(d.binds) == true, "an untouched mouse is still only our defaults")
+    MACROS[121] = { name = FK.MACRO, body = FK.Encode({ left = "Healing Wave(Rank 2)" }) }
+    fire(FG.events, "UPDATE_MACROS")
+    ok(FM.Get("", "left") == "Healing Wave(Rank 2)", "so the macro that arrives late still wins over our guess",
+       tostring(FM.Get("", "left")))
+
     MACROS = {}
     d.binds, d.bindsSeeded, FM.asked, FM.touched = {}, nil, false, nil
     FM.Get("", "left")
