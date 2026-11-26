@@ -1251,6 +1251,10 @@ end
 --- change out of combat writes the whole mouse anyway - there is no half-saved state to repair.
 local function keep(d)
     FM.touched = true              -- a deliberate act, never to be thrown away by us
+    -- AND NOT ONLY FOR THIS SESSION (26 Nov 2026): `bindsSeeded` says "this mouse is our guess", and
+    -- it stayed true for good after the first login's class defaults, whatever the player bound
+    -- since. The next session's FM.Reconsider then took their ranks for our guess (see there).
+    d.bindsSeeded = nil
     if NS.FK and NS.FK.Save then
         -- SAID, NOT SILENT (14 Oct 2026, Arn's cousin: a Nature's Swiftness bind "not saving").
         -- A full macro sheds its LAST binds, and they were gone at the next load with no word.
@@ -1271,10 +1275,30 @@ end
 --- So: when the client says the macros changed, throw away a mouse that only we put there and
 --- ask again. Never a mouse the player has touched - FM.touched is the difference between our
 --- guess and their act, and their act wins every time.
+---
+--- THE RANKS LOST AT A SPEC SWITCH (26 Nov 2026, Arn: "not remembering the ranks is when he is switching
+--- specs"). FM.touched lasts one session; `bindsSeeded` lasted forever. A player who started on the class
+--- defaults and then dragged their own ranks still carried the flag, so in any later session where they had
+--- not touched the mouse yet, UPDATE_MACROS (every login, and - very likely - a spec switch, which reloads the
+--- macro list) wiped their binds and read the macro again. If the macro was not there at that moment, the
+--- class defaults - the TOP rank of each - came back in their place, and their next drag saved that over
+--- the macro for good. Now a seeded flag is believed only while the mouse still IS the defaults; a mouse
+--- that differs is theirs and the flag goes. With the book not in, nobody can tell: nothing is touched.
+function FM.OnlyDefaults(binds)
+    local defaults, booked = FM.Defaults()
+    if not booked then return nil end
+    for k, v in pairs(binds or {}) do if defaults[k] ~= v then return false end end
+    return true
+end
 function FM.Reconsider()
     if NS.FK and NS.FK.MacrosArrived then NS.FK.MacrosArrived() end   -- the event means the list is in
     local d = db()
     if FM.touched then return false end
+    if d.bindsSeeded then
+        local ours = FM.OnlyDefaults(d.binds)
+        if ours == nil then return false end                           -- the book is not in: next event
+        if ours == false then d.bindsSeeded = nil return false end     -- theirs since: never ours to wipe
+    end
     if d.bindsSeeded then
         for k in pairs(d.binds) do d.binds[k] = nil end
     elseif next(d.binds) then
