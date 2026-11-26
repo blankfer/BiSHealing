@@ -1,5 +1,12 @@
 # BiS Healing
 
+## 1.11.0
+
+- **Binds per spec:** with dual spec, spec 1 and spec 2 each keep their own binds, and your mouse switches with you. The first time you're in a spec it starts with the binds you had, so nothing changes until you bind something there. The bind window says which spec you're looking at. One spec: nothing changes.
+- **Fixed: your ranks could turn back into the top rank** after a spec switch or a login, for players who started on the default binds. Your own ranks now stay.
+- **Fixed: the deck could jump across the screen** when you grabbed it to drag. It now stays under your mouse.
+- **Fixed: names on the deck when someone leaves mid-fight.** Each box shows the name of the person it heals now, not the one who left.
+
 ## 1.10.0
 
 - **Debuff cues on the deck:** a debuff that matters shows as one word across that person's bar: HEAL PAST, DON'T HEAL, DISPEL or DON'T DISPEL, only what your class can act on. Icons for the rest sit after the name. Tank armor procs show on every box, from any healer. Heal past the line (off to start) marks how far to heal through a debuff like Grievous Garrote.
