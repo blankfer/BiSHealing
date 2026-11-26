@@ -1060,6 +1060,11 @@ end
 -- way there is: a test written that way passes with the fix taken out, because the handler runs
 -- whether or not the addon ever registered the event. (19 Sep 2026: the cold-start test below
 -- did exactly that, twice, and only a deliberate check with the fix removed caught it.)
+-- DUAL SPEC as the Forever census lists it (26 Nov 2026): C_SpecializationInfo.GetActiveSpecGroup and GetNumSpecGroups. A
+-- character with no dual spec bought answers group 1 of 1 - the mock's default.
+_G.C_SpecializationInfo = { GetActiveSpecGroup = function() return STATE.specGroup or 1 end }
+_G.GetNumSpecGroups = function() return STATE.specGroups or 1 end
+
 local function fire(f, event, ...)
     if not (f and f.__events and f.__events[event]) then return false end
     local only = f.__unitFilter and f.__unitFilter[event]
@@ -2492,6 +2497,81 @@ do
 
     MACROS = {}
     d.binds, d.bindsSeeded, FM.asked, FM.touched = {}, nil, false, nil
+    FM.Get("", "left")
+end
+
+-- BINDS PER SPEC (26 Nov 2026, Arn: "ideally if when someone switches specs our addon switches with it - maybe a spec 1 and 2
+-- it can alternate"). The client as Clique reads it on Forever: C_SpecializationInfo.GetActiveSpecGroup() 1 or 2,
+-- GetNumSpecGroups() 1 or 2 (both in the Forever census), ACTIVE_TALENT_GROUP_CHANGED at a switch. Driven by the real events on
+-- Mouse.lua's own frame; the cells must be ARMED with the new spec's binds, not only the table.
+do
+    local FK, FM = NS.FK, NS.FM
+    local d = NS.DB()
+    local function armedLeft()
+        local cell = (FG.frames or {})[1]
+        if not cell then return "no cell" end
+        local got = {}
+        for _, a in ipairs({ "spell1", "*spell1", "macrotext1", "*macrotext1" }) do
+            local v = cell:GetAttribute(a) if v then got[#got + 1] = tostring(v) end
+        end
+        return table.concat(got, " | ")
+    end
+    STATE.specGroups, STATE.specGroup = 2, 1
+    MACROS = {}
+    d.binds, d.bindsSeeded, FM.asked, FM.touched, d.specNow, d.specBinds = {}, nil, false, nil, nil, nil
+    FM.Get("", "left")
+    FM.Set("", "left", "Healing Wave(Rank 1)")
+    ok(fire(FM.specEvents, "PLAYER_LOGIN"), "the binds hear the login")
+    ok(d.specNow == 1, "first look: the mouse you have is spec 1's", tostring(d.specNow))
+    ok(fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED") and d.specNow == 1, "an event with no switch moves nothing")
+
+    STATE.specGroup = 2
+    fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED")
+    ok(d.specNow == 2 and FM.Get("", "left") == "Healing Wave(Rank 1)", "spec 2 the first time: the same mouse to start from",
+       tostring(d.specNow) .. " " .. tostring(FM.Get("", "left")))
+    local body = MACROS[121] and MACROS[121].body or ""
+    ok(body:find("SG=2", 1, true), "the macro says whose binds it holds", body)
+    FM.Set("", "left", "Healing Wave(Rank 3)")
+    FM.Set("", "harm:left", "Earth Shock(Rank 1)")
+
+    STATE.specGroup = 1
+    fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED")
+    ok(FM.Get("", "left") == "Healing Wave(Rank 1)", "back to spec 1: its own rank", tostring(FM.Get("", "left")))
+    ok(FM.Get("", "harm:left") == nil, "and spec 2's hostile bind stayed with spec 2", tostring(FM.Get("", "harm:left")))
+    ok(armedLeft():find("Healing Wave(Rank 1)", 1, true), "and the cells are ARMED with it", armedLeft())
+    ok((MACROS[121].body or ""):find("SG=1", 1, true), "the macro holds spec 1's now", MACROS[121].body)
+
+    STATE.specGroup = 2
+    fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED")
+    ok(FM.Get("", "left") == "Healing Wave(Rank 3)" and FM.Get("", "harm:left") == "Earth Shock(Rank 1)",
+       "spec 2 again: everything it had", tostring(FM.Get("", "left")))
+    ok(armedLeft():find("Healing Wave(Rank 3)", 1, true), "armed too", armedLeft())
+
+    -- THE SAVE FILE LOST (the old beta's bug): only the macro comes back, and it says it is spec 2's
+    d.binds, d.bindsSeeded, FM.asked, FM.touched, d.specNow, d.specBinds = {}, nil, false, nil, nil, nil
+    ok(FM.Get("", "left") == "Healing Wave(Rank 3)" and d.specNow == 2, "the macro brings the binds back AND whose they are",
+       tostring(FM.Get("", "left")) .. " " .. tostring(d.specNow))
+    fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED")
+    ok(FM.Get("", "left") == "Healing Wave(Rank 3)", "so the next look does not take them for spec 1's")
+
+    -- THE BIND WINDOW names the spec, only with two
+    local w = FM.Window()
+    w:Refresh()
+    ok(not w.con or (w.con.slots.spec and w.con.slots.spec.text == "spec 2"), "the bind window says spec 2")
+    STATE.specGroups = 1
+    w:Refresh()
+    ok(not w.con or w.con.slots.spec == nil, "one spec: no word")
+
+    -- ONE SPEC (no dual spec bought): nothing ever moves
+    STATE.specGroup = 1
+    d.specNow = 1
+    fire(FM.specEvents, "ACTIVE_TALENT_GROUP_CHANGED")
+    ok(FM.Get("", "left") == "Healing Wave(Rank 3)" and d.specNow == 1, "one group: the mouse stays",
+       tostring(FM.Get("", "left")) .. " " .. tostring(d.specNow))
+
+    STATE.specGroups, STATE.specGroup = nil, nil
+    MACROS = {}
+    d.binds, d.bindsSeeded, FM.asked, FM.touched, d.specNow, d.specBinds = {}, nil, false, nil, nil, nil
     FM.Get("", "left")
 end
 

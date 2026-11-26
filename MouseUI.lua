@@ -901,6 +901,12 @@ function FM.Window()
     end
 
     function w:Refresh()
+        -- WHICH SPEC'S BINDS you are looking at (binds per spec, 26 Nov 2026): a word in the header's rotation, only for a
+        -- character with dual spec - one group, nothing to tell apart
+        if self.con and self.con.Set then
+            local g = FM.SpecGroups and FM.SpecGroups() > 1 and FM.SpecGroup and FM.SpecGroup()
+            self.con:Set("spec", g and ("spec " .. g) or nil, "gold")
+        end
         local hostile = self.set ~= ""
         for _, t in ipairs(self.sets or {}) do
             local on = (t.key == self.set)

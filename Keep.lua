@@ -246,6 +246,10 @@ local function settingRows(settings)
     -- reading it finds no slot "V" and skips the row. 1 = bg, 2 = on; off, the default, writes nothing.
     local PVPCODE = { bg = 1, on = 2 }
     if PVPCODE[settings.pvp or ""] then out[#out + 1] = "PV=" .. PVPCODE[settings.pvp] end
+    -- THE SPEC GROUP these binds belong to (26 Nov 2026, binds per spec - Mouse.lua FM.SpecSwap), "SG", two capitals like PV:
+    -- an older install finds no slot "G" under no modifier "S" and skips it
+    local sg = tonumber(settings.spec)
+    if sg == 1 or sg == 2 then out[#out + 1] = "SG=" .. sg end
     local px = tonumber(settings.markers)
     if px and px ~= 10 then out[#out + 1] = "M=" .. math.floor(px + 0.5) end
     -- THE BUFF-DROP SOUND (N for Noise), both halves in one row: the file id, and a 1 after a
@@ -406,6 +410,9 @@ function FK.Decode(body)
             settings.dim = tonumber(idx) / 100
         elseif code == "PV" then
             settings.pvp = (tonumber(idx) == 2 and "on") or (tonumber(idx) == 1 and "bg") or "off"
+        elseif code == "SG" then
+            local g = tonumber(idx)
+            settings.spec = (g == 1 or g == 2) and g or nil
         elseif code == "U" then
             -- THE BUFF WATCHED ON THE GROUP (U for "up on anyone"), and the only setting row that
             -- carries a NAME. It cannot carry one directly - a row holds digits - so it rides the
@@ -548,7 +555,7 @@ function FK.Save(binds)
                                              pos = pos, hidden = t.shown == false, hots = t.hots,
                                              ring = t.ring, dim = t.dim, hover = t.hover,
                                              trinketTabs = t.trinketTabs,
-                                             clique = t.clique, layout = t.layout, pvp = t.pvp,
+                                             clique = t.clique, layout = t.layout, pvp = t.pvp, spec = t.specNow,
                                              target = t.target, markers = t.markers, tot = t.tot,
                                              -- (no "me" row since 8 Nov 2026: the "me" cell is retired)
                                              mana = t.mana, manaAt = t.manaAt, manaPos = t.manaPos,

@@ -2476,7 +2476,9 @@ NS.loaded = { found = false }
 --
 -- These are SEPARATE TABLES, never aliases: two globals pointing at one table is one file saved
 -- and one lost, which would look exactly like the bug we are working around.
-local MIRROR = { "binds", "minimap", "shown", "bindsSeeded", "dbver", "savedAt", "saves", "holds", "tank", "tankSize", "tankLift", "tankLook" }
+-- (specNow / specBinds, 26 Nov 2026: the binds per spec are this character's, like the binds - Mouse.lua FM.SpecSwap)
+local MIRROR = { "binds", "minimap", "shown", "bindsSeeded", "dbver", "savedAt", "saves", "holds", "tank", "tankSize", "tankLift", "tankLook",
+                 "specNow", "specBinds" }
 
 local function copy(v)
     if type(v) ~= "table" then return v end

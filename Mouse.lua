@@ -155,6 +155,9 @@ local function db()
             -- the list is in, this asks again, and seeds nothing.
             FM.asked = NS.FK.read and true or false
             if type(kept) == "table" then for k, v in pairs(kept) do d.binds[k] = v end end
+            -- whose binds these are (binds per spec, 26 Nov 2026): the macro says which spec group wrote them, so a
+            -- switch made while the save file was lost still finds the right drawer (FM.SpecSwap)
+            if type(kept) == "table" and type(settings) == "table" and settings.spec then d.specNow = settings.spec end
             -- AND THE SIZE, which rides in the same macro because it would not survive a restart
             -- anywhere else on this client. Applied WITHOUT saving: writing back to the macro in
             -- the middle of reading it would store a half-restored mouse.
@@ -1325,6 +1328,82 @@ function FM.Clear(mod, slotKey)
     local d = db()
     d.binds[(mod or "") .. slotKey] = nil
     keep(d)
+end
+
+--[[ BINDS PER SPEC (26 Nov 2026, Arn: "ideally if when someone switches specs our addon switches with it - maybe a spec 1
+  and 2 it can alternate"). The game's dual spec: two spec groups, 1 and 2. `d.binds` stays THE mouse everything reads -
+  the binds of the group named in `d.specNow`; the other group's wait in `d.specBinds[g]`. At a switch (FM.SpecSwap):
+  the mouse goes into its group's drawer, the new group's comes out - the FIRST time a group is seen, it starts as a copy
+  of the mouse you had, so nothing changes until you bind something there. Then it is written to the macro (marked with
+  its group, Keep.lua's SG row) and armed. Clique's road on Forever, learned not copied: C_SpecializationInfo.
+  GetActiveSpecGroup(), ACTIVE_TALENT_GROUP_CHANGED, and a second try a moment after login (the group can be unknown
+  early). One group (no dual spec bought): nothing ever moves. A switch cannot happen in a fight; arming waits for its
+  end anyway (FM.Apply). UNTESTED LIVE - Arn has no dual spec; the player who switches is the test. ]]
+FM.SPEC_RETRY = 1.0
+
+--- The spec group you are in (1 or 2), or nil when the game does not say yet.
+function FM.SpecGroup()
+    local S = C_SpecializationInfo
+    local fn = S and S.GetActiveSpecGroup
+    if type(fn) ~= "function" then return nil end
+    local ok, g = pcall(fn)
+    g = ok and NS.Plain(g) or nil
+    return (g == 1 or g == 2) and g or nil
+end
+
+--- How many spec groups this character has (2 = dual spec bought).
+function FM.SpecGroups()
+    local fn = GetNumSpecGroups or GetNumTalentGroups
+    if type(fn) ~= "function" then return 1 end
+    local ok, n = pcall(fn)
+    n = ok and NS.Plain(n) or nil
+    return type(n) == "number" and n or 1
+end
+
+local function copyBinds(t)
+    local out = {}
+    for k, v in pairs(type(t) == "table" and t or {}) do if type(v) == "string" then out[k] = v end end
+    return out
+end
+
+--- The game says the spec may have changed: answers the group now in use, and whether the mouse moved.
+function FM.SpecSwap()
+    local g = FM.SpecGroup()
+    if not g then return nil, false end
+    local d = db()
+    if type(d) ~= "table" or type(d.binds) ~= "table" then return g, false end
+    if d.specNow ~= 1 and d.specNow ~= 2 then
+        d.specNow = g                                  -- first look: the mouse you have is this group's
+        return g, false
+    end
+    if d.specNow == g then return g, false end
+    d.specBinds = type(d.specBinds) == "table" and d.specBinds or {}
+    d.specBinds[d.specNow] = copyBinds(d.binds)
+    local nxt = d.specBinds[g]
+    if type(nxt) ~= "table" then nxt = copyBinds(d.binds) end   -- first time here: the same mouse to start from
+    for k in pairs(d.binds) do d.binds[k] = nil end
+    for k, v in pairs(nxt) do d.binds[k] = v end
+    d.specBinds[g] = nil                               -- it is THE mouse now; the drawer holds only the other one
+    d.specNow, d.bindsSeeded = g, nil
+    keep(d)                                            -- written to the macro, marked with its group
+    FM.Apply()                                         -- armed now, or after the fight
+    if FM.win and FM.win.Refresh then FM.win:Refresh() end   -- an open bind window shows the new spec's mouse
+    if NS.Print then NS.Print("spec %d: its own binds are on your mouse now", g) end
+    return g, true
+end
+
+do
+    local okF, f = pcall(CreateFrame, "Frame")
+    if okF and f then
+        for _, e in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_LOGIN" }) do pcall(f.RegisterEvent, f, e) end
+        f:SetScript("OnEvent", function(_, event)
+            local g = FM.SpecSwap()
+            if not g and event == "PLAYER_LOGIN" and C_Timer and C_Timer.After then
+                C_Timer.After(FM.SPEC_RETRY, function() FM.SpecSwap() end)
+            end
+        end)
+        FM.specEvents = f
+    end
 end
 
 --- Write every click bind onto one cell. OUT OF COMBAT ONLY: SetAttribute on a secure frame is
