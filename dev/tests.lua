@@ -17599,6 +17599,60 @@ do
     BN.Cast("UNIT_SPELLCAST_CHANNEL_START", "party1", 1949)
     ok(#heardV == nV + 1, "the same burn seen again: said once")
     BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949)
+    -- THE FIRE ROAD (Arn, 25 Nov: "still wont say hellfire"; his probe deck in Blackrock Depths): the client hid his channel's
+    -- id (in a fight and out of one) and, in a fight, his aura - so the roads above never started a burn. What it said
+    -- plainly: UNIT_COMBAT's action and school, amount secret. Hellfire = a fire WOUND on him ~1 s after his hidden channel.
+    -- Driven through the frames, as the client delivers it.
+    TICK(BN.VOICE.every + 1)
+    if NS.CU then NS.CU.spoke = {} end
+    BN.spoke, BN.on, BN.chanAt = {}, {}, {}
+    BN.HiddenChannel()                                -- (the secret-id check above left a channel waiting)
+    nV = #heardV
+    local function hidden(event, unit) return fire(BN.events, event, unit, "Cast-guid", secret()) end
+    local function combat(unit, action, school) return fire(BN.fireEvents, "UNIT_COMBAT", unit, action, "", secret(), school) end
+    local keepRaid, keepNum = _G.IsInRaid, _G.GetNumGroupMembers
+    _G.IsInRaid, _G.GetNumGroupMembers = function() return false end, function() return 3 end   -- (you, party1, party2)
+    BN.armed = nil
+    ok(BN.Arm() and BN.events.__events.UNIT_SPELLCAST_CHANNEL_START, "a warlock in your party: listening for his channels")
+    ok(not (BN.fireEvents.__events and BN.fireEvents.__events.UNIT_COMBAT), "no hidden channel waiting: UNIT_COMBAT not heard (lean)")
+    ok(hidden("UNIT_SPELLCAST_CHANNEL_START", "party1") and BN.chanAt.party1 and BN.fireEvents.__events.UNIT_COMBAT,
+       "his channel with a secret id: UNIT_COMBAT heard while it waits")
+    ok(#heardV == nV and not BN.on.party1, "a hidden channel alone says nothing (it could be Drain Life)")
+    TICK(1.0)
+    combat("party1", "WOUND", 1)
+    ok(#heardV == nV, "a physical hit on him (school 1): not Hellfire")
+    combat("party1", "HEAL", 4)
+    ok(#heardV == nV, "a heal on him: not Hellfire")
+    combat("party1", "WOUND", 4)
+    ok(#heardV == nV + 1 and heardV[#heardV][2]:find("^Hellfire"), "a fire wound on him 1 s after his hidden channel: the voice says Hellfire",
+       heardV[#heardV] and heardV[#heardV][2])
+    ok(not BN.chanAt.party1 and not BN.fireEvents.__events.UNIT_COMBAT and not BN.on.party1,
+       "judged: UNIT_COMBAT dropped again, and no burn started (its stop is hidden too)")
+    TICK(1.0)
+    hidden("UNIT_SPELLCAST_CHANNEL_START", "party1")
+    TICK(1.0)
+    combat("party1", "WOUND", 4)
+    ok(#heardV == nV + 1, "his next Hellfire within " .. NS.CU.EVERY .. " s: said once")
+    TICK(NS.CU.EVERY + 1)
+    hidden("UNIT_SPELLCAST_CHANNEL_START", "party1")
+    TICK(BN.FIRE_ROAD.within + 0.5)
+    combat("party1", "WOUND", 4)
+    ok(#heardV == nV + 1 and not BN.fireEvents.__events.UNIT_COMBAT, "a fire hit long after his channel (a mob's fire): nothing, and not listening any more")
+    hidden("UNIT_SPELLCAST_CHANNEL_START", "party1")
+    hidden("UNIT_SPELLCAST_CHANNEL_STOP", "party1")
+    ok(not BN.chanAt.party1 and not BN.fireEvents.__events.UNIT_COMBAT, "his channel ends before any fire: stop waiting")
+    hidden("UNIT_SPELLCAST_CHANNEL_START", "party2")
+    ok(not BN.chanAt.party2 and not BN.fireEvents.__events.UNIT_COMBAT, "a shaman's hidden channel: nothing waits")
+    hidden("UNIT_SPELLCAST_CHANNEL_START", "party1")
+    TICK(1.0)
+    combat("party1", "WOUND", secret())
+    ok(#heardV == nV + 1, "a secret school is never compared")
+    TICK(1.0)
+    local Cost2 = dofile("../_bisdev/dev/cost.lua")
+    local nIdle = Cost2.Count(function() combat("party2", "WOUND", 4) end)
+    ok(nIdle <= 4, "a stranger's hit while nothing waits: <= 4 client calls", nIdle)
+    _G.IsInRaid, _G.GetNumGroupMembers = keepRaid, keepNum
+    BN.Cast("UNIT_SPELLCAST_CHANNEL_STOP", "party1", 1949)
     _G.C_VoiceChat = keepVC
     local other = { unit = "party2", heal = CreateFrame("Button") }
     other.heal:SetSize(74, 58)

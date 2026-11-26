@@ -34,7 +34,7 @@ BN.EVERY = 0.5                                             -- the repaint while 
 
 BN.on = {}                                                 -- unit -> { id, t0 }: Hellfire seen on him
 BN.tap = {}                                                -- unit -> GetTime() the TAP tag goes
-BN.seen = { aura = "never asked", cast = "never heard" }
+BN.seen = { aura = "never asked", cast = "never heard", fire = "never heard" }
 
 local function now() return GetTime and GetTime() or 0 end
 local function plain(v) if v == nil or (NS.Secret and NS.Secret(v)) then return nil end return v end
@@ -108,11 +108,51 @@ function BN.Look(unit)
     return false                                           -- (hidden: the cast road may still answer)
 end
 
+--[[ THE FIRE ROAD (25 Nov 2026, Arn: "still wont say hellfire"; his probe deck in Blackrock Depths the same night): his
+  channel's id, name and icon come SECRET - in a fight and out of one - and in a fight his aura too, so neither road above
+  ever started a burn and the voice never spoke. What the client still says plainly: UNIT_COMBAT's action and school (only
+  the amount is secret). Hellfire burns HIM, fire (school 4), every second: after his Hellfire channels a fire WOUND on him
+  came ~1 s later, one a second; after his other channels (Drain Life and such) none. So: a hidden channel of his, then a fire
+  wound on him within BN.FIRE_ROAD.within s = Hellfire, and the voice speaks. Voice only - no burn is started (nothing would
+  end it: the channel's stop is hidden too). UNIT_COMBAT is heard only while such a channel waits (lean). ]]
+BN.FIRE_ROAD = { within = 1.6, school = 4 }
+BN.chanAt = {}                                             -- unit -> GetTime() his hidden channel started
+BN.fireEvents = CreateFrame("Frame")
+local function fireListen()
+    local f, want = BN.fireEvents, next(BN.chanAt) ~= nil
+    if want == (BN.fireOn or false) then return end
+    BN.fireOn = want
+    if want then f:RegisterEvent("UNIT_COMBAT") else f:UnregisterEvent("UNIT_COMBAT") end
+end
+--- A warlock's channel whose id is hidden: start waiting for the fire on him (or stop waiting).
+function BN.HiddenChannel(event, unit)
+    if event == "UNIT_SPELLCAST_CHANNEL_START" then BN.chanAt[unit] = now()
+    elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then BN.chanAt[unit] = nil end
+    fireListen()
+end
+--- UNIT_COMBAT on a warlock while his hidden channel waits: a fire wound on him in time = Hellfire.
+function BN.Fire(unit, action, school)
+    local t, t0 = now(), BN.chanAt[unit]
+    for u, at in pairs(BN.chanAt) do if t - at > BN.FIRE_ROAD.within then BN.chanAt[u] = nil end end
+    local heard = false
+    if t0 and BN.chanAt[unit] and plain(action) == "WOUND" and plain(school) == BN.FIRE_ROAD.school then
+        BN.chanAt[unit] = nil
+        BN.seen.fire = "Hellfire at " .. string.format("%.1f", t - t0) .. " s"
+        if BN.Speak then BN.Speak(unit, unit) end
+        heard = true
+    end
+    fireListen()
+    return heard
+end
+BN.fireEvents:SetScript("OnEvent", function(_, _, unit, action, _, _, school)
+    if BN.Mine(unit) then BN.Fire(unit, action, school) end
+end)
+
 --- The cast road: a plain spell id only.
 function BN.Cast(event, unit, id)
     if not BN.Warlock(unit) then return false end
     local sid = plain(id)
-    if sid == nil then BN.seen.cast = "hidden id" return false end
+    if sid == nil then BN.seen.cast = "hidden id" BN.HiddenChannel(event, unit) return false end
     BN.seen.cast = event .. " " .. tostring(sid)
     if HELL[sid] then
         if event == "UNIT_SPELLCAST_CHANNEL_START" then return start(unit, sid) end
@@ -256,7 +296,7 @@ function BN.Arm()
     for _, ev in ipairs({ "UNIT_AURA", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_SUCCEEDED" }) do
         if want then f:RegisterEvent(ev) else f:UnregisterEvent(ev) end
     end
-    if not want then BN.on, BN.tap = {}, {} end
+    if not want then BN.on, BN.tap, BN.chanAt = {}, {}, {} BN.HiddenChannel() end
     return want
 end
 BN.events:RegisterEvent("GROUP_ROSTER_UPDATE")
@@ -264,7 +304,7 @@ BN.events:RegisterEvent("PLAYER_ENTERING_WORLD")
 BN.events:SetScript("OnEvent", function(_, event, unit, guid, id)
     if event == "PLAYER_ENTERING_WORLD" then BN.quietUntil = (GetTime and GetTime() or 0) + 5 end
     if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
-        BN.on, BN.tap = {}, {}                             -- (tokens move when the group changes)
+        BN.on, BN.tap, BN.chanAt = {}, {}, {} BN.HiddenChannel() -- (tokens move when the group changes)
         BN.Arm()
         return
     end
@@ -593,8 +633,8 @@ end
 function BN.Status()
     local who = {}
     for unit, st in pairs(BN.on) do who[#who + 1] = unit .. " rank " .. st.id end
-    local line = string.format("burn: listening %s | Hellfire on: %s | aura road: %s | cast road: %s | game draws it: %s (%d drawn)",
-        tostring(BN.armed and true or false), #who > 0 and table.concat(who, ", ") or "nobody", BN.seen.aura, BN.seen.cast,
+    local line = string.format("burn: listening %s | Hellfire on: %s | aura road: %s | cast road: %s | fire road: %s | game draws it: %s (%d drawn)",
+        tostring(BN.armed and true or false), #who > 0 and table.concat(who, ", ") or "nobody", BN.seen.aura, BN.seen.cast, BN.seen.fire,
         tostring(BN.drawSeen or "not built"), BN.drawn or 0)
     if NS.Print then NS.Print(line) end
     return line
