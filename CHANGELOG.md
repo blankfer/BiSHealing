@@ -1,5 +1,9 @@
 # BiS Healing
 
+## 1.11.1
+
+- **Fixed: the Hellfire voice was silent.** The game hides which spell a warlock is channelling, and in a fight his Hellfire too, so the voice never knew he had started. Now a warlock channelling with fire burning him a moment later counts as Hellfire, and the voice says "Hellfire" and his name again.
+
 ## 1.11.0
 
 - **Binds per spec:** with dual spec, spec 1 and spec 2 each keep their own binds, and your mouse switches with you. The first time you're in a spec it starts with the binds you had, so nothing changes until you bind something there. The bind window says which spec you're looking at. One spec: nothing changes.
