@@ -1,7 +1,12 @@
-# BiS Healing — CurseForge page text (1.10.0)
+# BiS Healing — CurseForge page text (1.11.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.10.0 text (25 Nov, 1.11.0): "Every healer keeps their own binds" gains "— and every spec" and a
+dual-spec paragraph (each spec its own binds, the mouse switches with you); its old first line ("this client forgets
+addon settings at every restart") was wrong - the saves come back on Forever (counters 613 / 180 unbroken), the macro
+is the crash backup now. "Ranks are kept" adds: through a login or a spec switch too.
 
 Changed since the 1.9.0 text (25 Nov, 1.10.0): "The deck" gains the debuff cues (HEAL PAST / DON'T HEAL / DISPEL /
 DON'T DISPEL, tank armor procs, heal past the line), on-use trinkets in the tools row (a mana trinket in the blue
@@ -104,7 +109,7 @@ Forty names on the screen and one of them is about to die. You do not want a spe
 **Use ours:** left-click the minimap button or type `/bish mouse`. You get a drawn mouse: drop a spell on the button you want to press. Left, right, middle, two thumb buttons, wheel up and wheel down, each with no modifier, Shift, Ctrl or Alt: 28 places.
 
 - **Your heals, ready to drag.** A row of your trained healing spells sits in the window, each at your highest rank — drag one onto a button.
-- **Ranks are kept.** Drop Rank 4 and you get Rank 4, not the biggest one you know — the same bar for a third of the mana. Click the little number on a slot to step through your ranks.
+- **Ranks are kept.** Drop Rank 4 and you get Rank 4, not the biggest one you know — the same bar for a third of the mana, through a login or a spec switch too. Click the little number on a slot to step through your ranks.
 - **Nature's Swiftness first, in one press.** Drop Nature's Swiftness onto a button that already holds a heal: that button pops it, then casts the heal on whoever you clicked. The slot shows half of each icon. On cooldown you simply get the normal heal; drop the heal again to take it off. Inner Focus (priest) and Divine Favor (paladin) work the same way.
 - **Trinkets first, in one press.** Each tab (no modifier, Shift, Ctrl, Alt) has two ticks: **trinket 1** and **trinket 2**. Tick them and the first press of a fight uses those trinkets, then the heal; every press after that just heals. Never out of a fight. Or drag a trinket you wear onto one heal's button. It stacks with Nature's Swiftness. A trinket with nothing to use, or on cooldown, is left out of the bind, so it never blocks the heal. One that comes back mid-fight: click it on the deck.
 - **Macros, too.** Drag a macro from your macro window (Esc > Macros) onto any button, heal side or hostile side. Write `[@mouseover]` in the macro to aim it at the cell you click.
@@ -139,9 +144,11 @@ Open `/bish mouse` and there are four chips along the bottom: **Assist**, **Atta
 
 **The cell you click is who it pings.** Alt-click your own cell to ping Assist on yourself; put Attack on a button and click the target cell with a mob in it. Same gesture as healing, no radial menu, no mouse travel.
 
-## Every healer keeps their own binds
+## Every healer keeps their own binds — and every spec
 
-This client forgets addon settings at every restart, so BiS Healing keeps your binds and settings in a macro called `BiSHealing` in **each character's own macro tab**. Your druid and your priest never share, and everything comes back at login. Please don't rename it. (`/bish keep` shows what's in it.)
+Your druid and your priest never share: each character keeps its own binds and settings. BiS Healing also writes them into a macro called `BiSHealing` in **each character's own macro tab**, so they come back even after a crash. Please don't rename it. (`/bish keep` shows what's in it.)
+
+**Dual spec? Each spec keeps its own binds.** Change spec and your mouse changes with you. The first time you're in a spec it starts with the binds you had, so nothing changes until you bind something there. The bind window shows which spec you're looking at. One spec: nothing changes.
 
 ## Cockpit colours for classic
 
