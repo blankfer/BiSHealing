@@ -3336,8 +3336,23 @@ end
   told apart by its moment: it went down within RD.BORROWED_FOR of the trinket's use, RD.trinketTotemAt) stand in the water
   place and show on its timer, but the box keeps dropping the totem it had. ]]
 RD.BORROWED_FOR = 2
+--- A TOTEM YOU DO NOT KNOW IS NEVER THE BOX'S (26 Nov 2026, Arn's shot: Enamored Water Spirit's totem is "Ancient Mana Spring
+--- Totem" - not a spell in your book - and the water box learned it; its click then did nothing). Asked of the spell book
+--- (FM.Ranks); a book not read yet answers "known" (nothing is refused on a guess).
+function RD.KnowsTotem(name)
+    local FM = NS.FM
+    local spell = RD.TotemSpell(name)
+    if not (spell and FM and FM.Ranks) then return true end
+    local ok, ranks = pcall(FM.Ranks, spell)
+    if not (ok and type(ranks) == "table") then return true end
+    if #ranks > 0 then return true end
+    local okB, base = pcall(FM.Ranks, RD.BOOK_SURE)                       -- (the book read at all? a shaman always has it)
+    return not (okB and type(base) == "table" and #base > 0)
+end
+RD.BOOK_SURE = "Healing Wave"
 function RD.NotForBox(name, start)
     if RD.TotemSpell(name) == RD.TIDE then return "mana tide" end
+    if not RD.KnowsTotem(name) then return "not yours" end
     local at = RD.trinketTotemAt
     if at and type(start) == "number" and math.abs(start - at) <= RD.BORROWED_FOR then return "a trinket's" end
     return nil
@@ -3358,6 +3373,8 @@ function RD.LearnTimers()
         if type(name) == "string" and name ~= "" and not older and not RD.NotForBox(name, start) then
             d.totemSlots[t.slot] = RD.TotemSpell(name)
         end
+        -- (a name learned before 26 Nov that is no spell of yours - the trinket's "Ancient Mana Spring Totem" - is let go)
+        if d.totemSlots[t.slot] and not RD.KnowsTotem(d.totemSlots[t.slot]) then d.totemSlots[t.slot] = nil end
         local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
         t:SetAttribute("type1", want and "macro" or nil)
@@ -3701,6 +3718,7 @@ function RD.OpenFly(t)
     local col = t and RD.flyCols and RD.flyCols[t.k]
     if not col or (col.count or 0) == 0 then RD.flyWhy = "nothing of its kind to pick" return false end
     for _, c in pairs(RD.flyCols) do if c ~= col and c:IsShown() then c:Hide() end end
+    if NS.TR and NS.TR.CloseFly and NS.TR.flyFrom then NS.TR.CloseFly("a totem opened") end   -- (one pop-out at a time)
     RD.FlyAim(col, t)
     if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(t) then GameTooltip:Hide() end   -- (it would cover the column)
     RD.flyFrom, RD.flyAt, RD.flyOffAt = t, (GetTime and GetTime()) or 0, nil
@@ -7068,10 +7086,10 @@ function RD.TrinketUse(slot)
     if type(id) ~= "number" then return nil end
     local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
     if not getSpell then return nil end
-    local okS, use = pcall(getSpell, id)
+    local okS, use, useId = pcall(getSpell, id)
     use = okS and plain(use) or nil
     if type(use) ~= "string" or use == "" then return nil end
-    return id, use
+    return id, use, okS and plain(useId) or nil
 end
 --[[ THE TRINKET CHIP (26 Nov 2026, Arn's pick B of https://claude.ai/artifact/4AMhTF198MPf4cz7dPxyEX - "The time takes the
   word's place"): beside the icon, the first word of the trinket's name ("BURST", "ENAMORED"); while it cools, the CLIENT's
@@ -7084,6 +7102,10 @@ RD.TRINK_FONT = 10
 -- look and both modes - cooling shows by the client's sweep and the time in the word's place
 RD.TRINK_BOX_COL = RD.SHIPS[1].accent
 RD.TRINK_PAD = 3
+-- READY OR NOT AT A GLANCE (26 Nov 2026, Arn: "build 1" - the pink box faint while it cools, one flash when it is back, a
+-- fight or not; no sound, no chat): RD.TrinketReadyLook
+RD.TRINK_COOL_EDGE = 0.25                          -- the pink box's alpha while the trinket cools
+RD.TRINK_FLASH = { low = 0.15, out = 0.12, back = 0.3 }
 RD.TRINK_MIN_W = 24                                 -- the word's box is never narrower than a "4:59"
 -- the client writes minutes:seconds under this. 7200 came out "8m" on Arn's deck (26 Nov: the client did not take it); the
 -- totem timers' 600 is the one seen working live ("4:59"), so a trinket shows "15m" above ten minutes, "9:59" under
@@ -7120,7 +7142,48 @@ function RD.TrinketChip(b)
     local P = RD.TRINK_BOX_COL
     b.pink = CreateFrame("Frame", nil, b)
     b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 2)    -- (2 px: a 1.5 line can vanish between screen pixels)
+    -- the flash when it comes back: the box dips and returns, once (the client runs it; nothing of ours ticks)
+    local okG, g = pcall(b.pink.CreateAnimationGroup, b.pink)
+    if okG and g then
+        local F = RD.TRINK_FLASH
+        local a1 = g:CreateAnimation("Alpha")
+        a1:SetFromAlpha(1) a1:SetToAlpha(F.low) a1:SetDuration(F.out)
+        if a1.SetOrder then a1:SetOrder(1) end
+        local a2 = g:CreateAnimation("Alpha")
+        a2:SetFromAlpha(F.low) a2:SetToAlpha(1) a2:SetDuration(F.back)
+        if a2.SetOrder then a2:SetOrder(2) end
+        b.pinkFlash = g
+    end
     if NS.TR and NS.TR.HookChip then NS.TR.HookChip(b) end        -- Shift + hover: your other trinkets (Trinkets.lua)
+end
+--- THE TIME IN THE MIDDLE OF THE WORD'S PLACE (26 Nov 2026, Arn's shot: "center cooldown" - the client's number sat against the
+--- icon): its own countdown text pinned to the centre of the word's box. Again at each cooldown start (the client may make
+--- the text late).
+function RD.CenterNum(b)
+    local cd = b and b.num
+    if not (cd and cd.GetRegions) then return 0 end
+    local n = 0
+    for _, reg in ipairs({ cd:GetRegions() }) do
+        if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" then
+            if reg.ClearAllPoints then pcall(reg.ClearAllPoints, reg) end
+            if reg.SetPoint then pcall(reg.SetPoint, reg, "CENTER", cd, "CENTER", 0, 0) end
+            if reg.SetJustifyH then pcall(reg.SetJustifyH, reg, "CENTER") end
+            n = n + 1
+        end
+    end
+    return n
+end
+--- The pink box: faint while the trinket cools; back at full and ONE flash the moment it is ready again (a GCD never counts:
+--- `cooling` is the trinket's own wait).
+function RD.TrinketReadyLook(b, cooling)
+    if not (b and b.pink) then return nil end
+    b.pink:SetAlpha(cooling and RD.TRINK_COOL_EDGE or 1)
+    local back = b.cooling and not cooling
+    if back and b.pinkFlash and b.pinkFlash.Play then
+        if b.pinkFlash.Stop then b.pinkFlash:Stop() end
+        b.pinkFlash:Play()
+    end
+    return back and "flash" or (cooling and "faint" or "lit")
 end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
@@ -7137,7 +7200,7 @@ function RD.SizeChip(b)
         local ok, w = pcall(b.word.GetStringWidth, b.word)
         if ok and type(w) == "number" and w == w then ww = math.max(ww, math.ceil(w) + 2) end
     end
-    if b.num then b.num:SetSize(ww, RD.SYS_PX) end
+    if b.num then b.num:SetSize(ww, RD.SYS_PX) RD.CenterNum(b) end
     b.chipW = RD.SYS_PX + 3 + ww
     if b.pink then
         b.pink:ClearAllPoints()
@@ -7158,47 +7221,79 @@ function RD.ManaTrinket(use, words)
        or t:find("gain %d+ mana") or t:find("gives? %d+ mana") then return true end
     return nil
 end
+--[[ EVERY WORN TRINKET HAS ITS CHIP (26 Nov 2026, Arn: "i change trinket and they went away because i think they dont have a on
+  use effect to click"): with no chip there was nothing to Shift over to switch back. A passive trinket gets its chip too -
+  icon, word, pink box; its click does nothing (no Use:), Shift and right-click work. An EMPTY slot gets one ("EMPTY", no icon)
+  while you carry a trinket that could go in it. Only with neither is there no chip. ]]
+--- Do you carry a trinket in your bags (one that could go on)?
+function RD.CarryTrinket()
+    local TR = NS.TR
+    if not (TR and TR.FlyList) then return false end
+    local ok, list = pcall(TR.FlyList, 13)
+    return ok and type(list) == "table" and #list > 0
+end
 function RD.ArmTrinkets()
     if combat() then return false end
     local nameOf = (C_Item and C_Item.GetItemNameByID) or GetItemInfo
+    local foot = "  Shift: your other trinkets pop out (in a fight, a pick waits for its end).  Right-click: your trinket list."
+    local carry = nil
     for key, slot in pairs(RD.TRINKET_SLOTS) do
         local b = RD[key]
         if b then
-            local id, use = RD.TrinketUse(slot)
-            -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with)
+            local worn
+            if GetInventoryItemID then
+                local okW, w = pcall(GetInventoryItemID, "player", slot)
+                worn = okW and plain(w) or nil
+                if type(worn) ~= "number" then worn = nil end
+            end
+            local id, use, useId = RD.TrinketUse(slot)
+            b.useId = useId                                               -- (its cast is heard by id too: RD.OnCast)
+            if carry == nil and not worn then carry = RD.CarryTrinket() end
+            local shown = worn or carry
+            -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with); a passive
+            -- trinket or an empty slot: no click of its own
             local macro = id and ("/use " .. slot) or nil
             b:SetAttribute("*type1", macro and "macro" or nil)
             b:SetAttribute("*macrotext1", macro)
-            b:EnableMouse(macro and true or false)
-            b.macro, b.item, b.absent = macro, id, not id
+            b:EnableMouse(shown and true or false)
+            b.macro, b.item, b.absent, b.worn = macro, worn, not shown, worn
             b.mana, b.use, b.at, b.amount, b.guess = nil, nil, nil, nil, nil
-            if id then
+            if worn then
                 local okN, nm = false, nil
-                if nameOf then okN, nm = pcall(nameOf, id) end
+                if nameOf then okN, nm = pcall(nameOf, worn) end
                 nm = okN and plain(nm) or nil
-                -- A MANA TRINKET (24 Nov 2026, Arn: "does it have the smart light up thing when im getting low on mana?"): its
-                -- use says "mana" - it learns what it restores like the potion (RD.LearnTool) and lights by the same curves
-                local words = itemWords(id)
-                b.use = use
-                b.mana = RD.ManaTrinket(use, words)
                 local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
-                local foot = "  Shift: your other trinkets pop out (in a fight, a pick waits for its end).  Right-click: your trinket list."
-                if b.mana then
-                    RD.LearnTool(b, words)
-                    toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
-                    b.tip[2] = b.tip[2] .. foot
+                if use then
+                    -- A MANA TRINKET (24 Nov 2026, Arn: "does it have the smart light up thing when im getting low on mana?"):
+                    -- its use gives mana back - it learns what it restores like the potion (RD.LearnTool), the same curves
+                    local words = itemWords(worn)
+                    b.use = use
+                    b.mana = RD.ManaTrinket(use, words)
+                    if b.mana then
+                        RD.LearnTool(b, words)
+                        toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
+                        b.tip[2] = b.tip[2] .. foot
+                    else
+                        b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." .. foot }
+                    end
                 else
-                    b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." .. foot }
+                    b.tip = { title, "No Use: to click (trinket slot " .. (slot - 12) .. ")." .. foot }
                 end
                 b.wordText = RD.TrinketWord(nm) or ("TRINKET " .. (slot - 12))
-                -- (the deck only: the radar's scope carries no words)
-                if b.word then b.word:SetText((RD.Deck and RD.Deck()) and b.wordText or "") end
-                RD.SizeChip(b)
                 -- the worn slot's own icon (always known for what you wear), else the item's
                 local okT, tex = false, nil
                 if GetInventoryItemTexture then okT, tex = pcall(GetInventoryItemTexture, "player", slot) end
-                if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, id) end
+                if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, worn) end
                 b.face:SetAlpha(1)
+            elseif carry then
+                b.tip = { "Trinket " .. (slot - 12) .. ": empty", "Nothing on." .. foot }
+                b.wordText = "EMPTY"
+                b.face:SetAlpha(0)
+            end
+            if shown then
+                -- (the deck only: the radar's scope carries no words)
+                if b.word then b.word:SetText((RD.Deck and RD.Deck()) and b.wordText or "") end
+                RD.SizeChip(b)
             else
                 b.tip, b.wordText, b.chipW = nil, nil, nil
                 if b.word then b.word:SetText("") end
@@ -7226,11 +7321,12 @@ function RD.PaintTrinkets()
                             and s + d > ((GetTime and GetTime()) or 0)
             -- the time in the word's place: the client's number while it cools (a GCD is not cooling: no number for it)
             if b.num and b.num.SetCooldown then
-                if cooling then pcall(b.num.SetCooldown, b.num, s, d)
+                if cooling then pcall(b.num.SetCooldown, b.num, s, d) RD.CenterNum(b)
                 elseif b.num.Clear then pcall(b.num.Clear, b.num)
                 else pcall(b.num.SetCooldown, b.num, 0, 0) end
             end
             if b.word then if cooling then b.word:Hide() else b.word:Show() end end
+            RD.TrinketReadyLook(b, cooling)
             b.cooling = cooling
             -- the icon at full, always (Arn, 26 Nov: "on all looks always show trinket icon lit")
             if b.food then
@@ -7890,7 +7986,7 @@ function RD.OnCast(unit, spellID)
     -- is timed, so a totem it puts down is never taken for the box's own (RD.NotForBox)
     for key in pairs(RD.TRINKET_SLOTS) do
         local t = RD[key]
-        if name and t and t.use == name then RD.trinketTotemAt = now end
+        if t and ((name and t.use == name) or (t.useId and t.useId == spellID)) then RD.trinketTotemAt = now end
         if name and t and t.mana and t.use == name then
             RD.waterUntil = now + RD.WATER.spring
             RD.PaintTrinkets()

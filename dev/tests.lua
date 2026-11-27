@@ -946,6 +946,13 @@ _G.CreateFrameUnguarded = function(kind, name, parent, template)
         function made:SetHideCountdownNumbers(v) self.__noNumbers = v end
         function made:SetSwipeColor(...) self.__swipe = { ... } end
         function made:SetSwipeTexture(t) self.__swipeTex = t end
+        -- ITS OWN COUNTDOWN TEXT is one of its regions, as the client's (26 Nov 2026: the trinket chip pins it to the centre)
+        local cnt = made:CreateFontString(nil, "OVERLAY")
+        cnt.GetObjectType = function() return "FontString" end
+        cnt:SetPoint("LEFT", made, "LEFT", 0, 0)
+        made.__regions = made.__regions or {}
+        table.insert(made.__regions, cnt)
+        made.__countdown = cnt
     end
     return made
 end
@@ -1133,6 +1140,14 @@ local BOOK = setmetatable({}, {
         if FM and FM.bookEvents then fire(FM.bookEvents, "SPELLS_CHANGED") end
     end,
 })
+-- THE TOTEMS THIS SHAMAN KNOWS, for the tests that need them in the book (26 Nov 2026: a totem box only learns a totem you
+-- know - RD.KnowsTotem - so a test of the boxes teaches the book its totems first, and takes them away after)
+STATE.TOTEM_BOOK = { "Mana Spring Totem", "Healing Stream Totem", "Flametongue Totem", "Strength of Earth Totem",
+                     "Magma Totem", "Searing Totem", "Windfury Totem", "Grace of Air Totem" }
+function STATE.learnTotems(on)
+    for i, n in ipairs(STATE.TOTEM_BOOK) do BOOK[90 + i] = on and { name = n, rank = "" } or nil end
+    if NS.FM and NS.FM.BookChanged then NS.FM.BookChanged() end
+end
 -- AND WHEN A TEST SWAPS THE CALL RATHER THAN THE PAGE. Several blocks below replace
 -- C_SpellBook.GetSpellBookItemInfo to give a spell a different id, or none - which stands for the
 -- book filling in its ids at login, or a rank being learned. The client fires the same event for
@@ -15665,6 +15680,7 @@ do
         local keepT = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
         local keepTex = _G.C_Spell.GetSpellTexture
         _G.C_Spell.GetSpellTexture = function(n) return n == "Mana Spring Totem" and 136053 or nil end
+        STATE.learnTotems(true)
         local timers = {}
         for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
         ok(timers[1].slot == 4 and timers[2].slot == 3 and timers[3].slot == 2 and timers[4].slot == 1,
@@ -15702,6 +15718,17 @@ do
         RD.trinketTotemAt = CLOCK - 60
         RD.LearnTimers()
         ok(w.totem == "Mana Spring Totem", "your own Mana Spring, long after a trinket use: learned as before", w.totem)
+        -- A TOTEM YOU DO NOT KNOW (Arn's shot: Enamored's totem is "Ancient Mana Spring Totem", the box learned it)
+        STATE.totemName[3] = "Ancient Mana Spring Totem"
+        RD.LearnTimers()
+        ok(w.totem == "Mana Spring Totem" and RD.NotForBox("Ancient Mana Spring Totem", 0) == "not yours",
+           "a totem that is no spell of yours (the trinket's Ancient Mana Spring): never learned", w.totem)
+        NS.DB().radar.totemSlots[3] = "Ancient Mana Spring Totem"              -- (learned before this fix)
+        RD.LearnTimers()
+        ok(NS.DB().radar.totemSlots[3] == nil and w.totem == nil and w:GetAttribute("macrotext1") == nil,
+           "one learned before the fix is let go: the box waits for your own totem", tostring(w.totem))
+        STATE.totemName[3] = "Mana Spring Totem"
+        RD.LearnTimers()
         RD.trinketTotemAt = nil
         STATE.totemName[3] = "Healing Stream Totem"
         RD.LearnTimers()
@@ -15738,6 +15765,7 @@ do
         NS.DB().radar.totemSlots = nil
         for k = 1, 4 do timers[k]:Hide() end
         _G.C_Spell.GetSpellTexture = keepTex
+        STATE.learnTotems(false)
     end
     -- THE TOTEM POP-OUT (Arn, 26 Nov: "make these totem button do the pop out when i shift [hover] like the bis tool totems ...
     -- when i let go of shift it selects and not drop it but if i hold shift and click i drop")
@@ -15757,6 +15785,7 @@ do
         STATE.multiCast = { [1] = { 3599, 3599, 8190, 8227 }, [3] = { 5675, 5394 } }
         local keepTot = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
         for k = 1, 4 do TOTEMS[k] = false end                          -- (no totem standing: the picks alone decide)
+        STATE.learnTotems(true)
         local timers = {}
         for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
         local fire1, water = timers[4], timers[2]
@@ -15912,6 +15941,7 @@ do
         for _, b in ipairs(fb) do b:SetScript("PostClick", b.__pc) b.__pc = nil end
         STATE.shift, STATE.multiCast, RD.flyLists = false, nil, nil
         for k = 1, 4 do TOTEMS[k] = keepTot[k] end
+        STATE.learnTotems(false)
         RD.CloseFly()
         NS.DB().radar.totemSlots = nil
         for k = 1, 4 do timers[k]:Hide() end
@@ -16175,8 +16205,20 @@ do
                 -- a passive trinket in 13, nothing in 14: no buttons, no gap
                 STATE.worn = { [13] = 11111 }
                 RD.Arm()
-                ok(RD.trink1.absent and RD.trink2.absent and not RD.trink1:IsShown() and not RD.trink2:IsShown(),
-                   "a trinket with no Use:, or none: no button")
+                -- (Arn, 26 Nov: "i change trinket and they went away because i think they dont have a on use effect")
+                ok(not RD.trink1.absent and RD.trink1:IsShown() and RD.trink1.macro == nil and RD.trink1:GetAttribute("*type1") == nil
+                   and RD.trink1.tip and RD.trink1.tip[2]:find("No Use:", 1, true) and RD.trink1.chipW and RD.trink1.__mouse ~= false,
+                   "a passive trinket keeps its chip: no click of its own, Shift and right-click still there")
+                ok(RD.trink2.absent and not RD.trink2:IsShown(), "an empty slot with no trinket in your bags: no chip")
+                do  -- an empty slot while you carry a trinket: an EMPTY chip, so you can put one on
+                    local keepCarry = RD.CarryTrinket
+                    RD.CarryTrinket = function() return true end
+                    RD.ArmTrinkets()
+                    ok(not RD.trink2.absent and RD.trink2.wordText == "EMPTY" and RD.trink2.macro == nil and RD.trink2.chipW,
+                       "an empty slot, a trinket in your bags: an EMPTY chip to Shift over", RD.trink2.wordText)
+                    RD.CarryTrinket = keepCarry
+                    RD.ArmTrinkets()
+                end
                 local railX = RD.rations and x(RD.rations)
                 -- the water spirit put on (out of a fight): the event lays the deck out again, a button after the drink
                 STATE.worn = { [13] = 20503 }
@@ -16218,11 +16260,27 @@ do
                 cds[13] = { GetTime() - 5, 600 }
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
                 ok(t.food.__vertex and t.food.__vertex[4] == 1, "used: still lit in full while it cools (Arn, 26 Nov: always lit)")
+                local cdText = t.num and t.num.__countdown
+                ok(cdText and cdText.points and #cdText.points == 1 and cdText.points[1][1] == "CENTER" and cdText.points[1][2] == t.num,
+                   "the client's countdown pinned to the middle of the word's place (Arn: \"center cooldown\")")
                 ok(not t.word:IsShown() and t.num and t.num.__dur == 600,
                    "and the time takes the word's place: the client's countdown, the word away (Arn's pick B)")
                 cds[13] = nil
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
                 ok(t.food.__vertex and t.food.__vertex[4] == 1 and t.word:IsShown(), "ready: full, the word back")
+                -- READY OR NOT AT A GLANCE (Arn: "build 1"): the pink box faint while it cools, one flash when it is back
+                local fl = t.pinkFlash
+                ok(fl and fl:IsPlaying() and t.pink:GetAlpha() == 1, "it came back: the pink box at full and its one flash plays")
+                ok(fl.looping == nil and fl.anims[1].to == RD.TRINK_FLASH.low and fl.anims[2].to == 1, "one dip and back, never a loop")
+                fl:Stop()
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(not fl:IsPlaying(), "ready and still ready: no second flash")
+                cds[13] = { GetTime() - 5, 600 }
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(t.pink:GetAlpha() == RD.TRINK_COOL_EDGE and not fl:IsPlaying(), "cooling again: the pink box faint")
+                cds[13] = nil
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                fl:Stop()
                 -- TWO MODES (Arn, 26 Nov: "always lit smart lit, we keep the same border rules but always lit always shows
                 -- the icons"): the Smart lit switch off = always lit
                 ok(RD.Sw("smartlit") and RD.Faded() == RD.ICON_FADED, "smart lit by default: a waiting icon dim")
@@ -16261,6 +16319,11 @@ do
                     RD.OnCast("player", 24854)
                     ok(RD.trinketTotemAt == CLOCK and RD.NotForBox("Mana Spring Totem", CLOCK + 0.3),
                        "the trinket's use is heard: a Mana Spring that goes down with it is the trinket's, not the box's")
+                    -- the game names the cast otherwise than the item's use: heard by the use's spell id all the same
+                    C_Spell.GetSpellName = function(id) if id == 24854 then return "Summon Ancient Mana Spring" end return keepGN(id) end
+                    RD.trinketTotemAt = nil
+                    RD.OnCast("player", 24854)
+                    ok(RD.trinketTotemAt == CLOCK, "a cast named otherwise (the game's own name for it): heard by its spell id")
                     RD.trinketTotemAt = nil
                     C_Spell.GetSpellName = keepGN
                 end
@@ -19170,6 +19233,38 @@ do
         CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
         ok(not TR.col:IsShown() and not TR.flyWatch:IsShown() and not (TR.flyKeys.__events or {}).MODIFIER_STATE_CHANGED,
            "off both a moment: closed, Shift no longer heard")
+        -- THE WHOLE CHIP COUNTS (Arn: "on the icon holding shift it stays open on the words it blinks"): the mouse on the
+        -- word = inside the chip's click spot (no OnLeave), though off its 22 px frame
+        chip:GetScript("OnEnter")(chip)
+        chip.__mouseOver, TR.col.__mouseOver = false, false
+        CLOCK = CLOCK + 0.1 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        ok(TR.col:IsShown(), "the mouse on the trinket's word: it stays open (no blink)")
+        -- ONE POP-OUT AT A TIME (Arn: "if i put my mouse right in the gap both open")
+        do
+            local RD = NS.RD
+            local keepCols, keepFrom = RD.flyCols, RD.flyFrom
+            local tcol = CreateFrame("Frame", nil, UIParent)
+            tcol.b, tcol.count, tcol.size = { CreateFrame("Button", nil, tcol) }, 1, 22
+            tcol:Hide()
+            local box = CreateFrame("Button", nil, UIParent)
+            box.k = 1
+            RD.flyCols = { [1] = tcol }
+            ok(RD.OpenFly(box) and tcol:IsShown() and not TR.col:IsShown() and not TR.flyFrom,
+               "a totem pops out: the trinket column closes")
+            chip:GetScript("OnLeave")(chip)
+            chip:GetScript("OnEnter")(chip)
+            ok(TR.col:IsShown() and not tcol:IsShown() and not RD.flyFrom, "a trinket pops out: the totem column closes")
+            -- in a fight the game's snippets open a totem column: off the trinket, the trinket's goes
+            tcol:Show()
+            chip:GetScript("OnLeave")(chip)
+            chip.__mouseOver, TR.col.__mouseOver = false, false
+            TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+            ok(not TR.col:IsShown() and TR.flyWhy == "a totem column opened", "a totem column showing and the mouse off the trinket: it closes", TR.flyWhy)
+            tcol:Hide()
+            RD.flyCols, RD.flyFrom = keepCols, keepFrom
+            if RD.flyWatch then RD.flyWatch:Hide() end
+        end
         STATE.shift = false
         TR.hold, TR.queue = {}, {}
         C_Item.EquipItemByName = function() n = n + 1 end

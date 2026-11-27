@@ -456,6 +456,8 @@ function TR.OpenFly(chip)
     for i = #list + 1, #col.b do col.b[i]:Hide() end
     col.count = #list
     if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(chip) then GameTooltip:Hide() end
+    local RD = NS.RD
+    if RD and RD.CloseFly and RD.flyFrom then RD.CloseFly("a trinket opened") end   -- (one pop-out at a time)
     TR.flyFrom, TR.flyOffAt = chip, nil
     col:Show()
     TR.flyWatch:Show()
@@ -536,7 +538,16 @@ TR.flyWatch = CreateFrame("Frame")
 TR.flyWatch:Hide()
 TR.flyWatch:SetScript("OnUpdate", function()
     if not TR.flyFrom then TR.flyWatch:Hide() return end
-    if over(TR.flyFrom) or over(TR.col) then TR.flyOffAt = nil return end
+    -- ONE POP-OUT AT A TIME (Arn, 26 Nov: "if i put my mouse right in the gap both open"): a totem column showing (in a
+    -- fight the game's snippets open those) and the mouse off this trinket = this one goes
+    local RD = NS.RD
+    local onChip = TR.flyOver == TR.flyFrom or over(TR.flyFrom.pink) or over(TR.flyFrom)
+    if not onChip and not over(TR.col) and RD and RD.flyCols then
+        for _, c in pairs(RD.flyCols) do if c:IsShown() then TR.CloseFly("a totem column opened") return end end
+    end
+    -- THE WHOLE CHIP COUNTS (Arn, 26 Nov: "on the icon holding shift it stays open on the words it blinks"): the click
+    -- spot covers the word (its hit rect), so does this - the mouse still inside it (no OnLeave yet), or on its pink box
+    if onChip or over(TR.col) then TR.flyOffAt = nil return end
     TR.flyOffAt = TR.flyOffAt or now()
     if now() - TR.flyOffAt >= TR.FLY.off then TR.CloseFly("the mouse left") end
 end)
