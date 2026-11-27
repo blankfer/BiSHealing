@@ -18876,6 +18876,15 @@ do
     CU.Open("trinkets")
     ok(TR.page and TR.page:IsShown() and not CU.card.page:IsShown() and TR.page.cols[1].rows[1].text.__text:find("^1%. Burst"),
        "the BiS>Deck window's TRINKETS tab: the two lists, numbered", TR.page and TR.page.cols[1].rows[1].text.__text)
+    do  -- the gold note ("after this fight") by the close button, clear of the tabs (Arn's shot, 26 Nov: it printed over DECK)
+        local c, last = CU.card, CU.card.tabs[#CU.card.tabs]
+        c.note:SetText("after this fight")
+        local _, _, _, tx = last:GetPoint(1)
+        local tabsEnd = tx + last:GetWidth()
+        local noteLeft = CU.CARD_W - 24 - c.note:GetStringWidth()
+        ok(c.note.points and c.note.points[1][1] == "TOPRIGHT" and c.note.points[1][2] == c and noteLeft > tabsEnd, "the window's note sits right of the last tab", noteLeft .. " > " .. tabsEnd)
+        c.note:SetText("")
+    end
     TR.page.cols[1].rows[2].tick:GetScript("OnClick")()
     ok(not TR.InList(13, SCARAB), "a tick takes one off the list")
     CU.SetTab("cues")

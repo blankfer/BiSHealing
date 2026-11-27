@@ -1047,7 +1047,9 @@ function CU.Card()
     c.title:SetPoint("TOPLEFT", c, "TOPLEFT", 8, -7)
     c.title:SetText("BiS>Deck")
     c.note = text(c, 9, GOLD)
-    c.note:SetPoint("LEFT", c.title, "RIGHT", 8, 0)
+    -- (by the close button, right of the tabs: beside the title it printed over DECK - Arn's shot, 26 Nov)
+    c.note:SetPoint("TOPRIGHT", c, "TOPRIGHT", -24, -8)
+    if c.note.SetJustifyH then c.note:SetJustifyH("RIGHT") end
     c.close = button(c, 14, 14, "x", function() c:Hide() end)
     c.close:SetPoint("TOPRIGHT", c, "TOPRIGHT", -4, -4)
     -- THE ONE WINDOW (Arn, 24 Nov, sketch B: "One window, three tabs"): the cue card's own parts live on a page that the
