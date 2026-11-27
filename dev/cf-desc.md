@@ -1,7 +1,12 @@
-# BiS Healing — CurseForge page text (1.11.0)
+# BiS Healing — CurseForge page text (1.12.0)
 
 Paste everything below the line into the project description
 (CurseForge → BiS Healing, project 1703250 → Edit → Description).
+
+Changed since the 1.11.0 text (26 Nov, 1.12.0): the mouse section's "Trinkets first" bullet is gone (binds only heal now);
+"The deck" - the trinkets bullet (chips with the time in the word's place, Shift to swap from your bags, the priority list),
+"Your tools" gains Smart lit / always lit and the columns with the amber box, the shamans bullet gains the totem pop-out
+and saving totems into a Call, the window has four tabs (TRINKETS); `/bish trinkets` in the command table.
 
 Changed since the 1.10.0 text (25 Nov, 1.11.0): "Every healer keeps their own binds" gains "— and every spec" and a
 dual-spec paragraph (each spec its own binds, the mouse switches with you); its old first line ("this client forgets
@@ -111,7 +116,7 @@ Forty names on the screen and one of them is about to die. You do not want a spe
 - **Your heals, ready to drag.** A row of your trained healing spells sits in the window, each at your highest rank — drag one onto a button.
 - **Ranks are kept.** Drop Rank 4 and you get Rank 4, not the biggest one you know — the same bar for a third of the mana, through a login or a spec switch too. Click the little number on a slot to step through your ranks.
 - **Nature's Swiftness first, in one press.** Drop Nature's Swiftness onto a button that already holds a heal: that button pops it, then casts the heal on whoever you clicked. The slot shows half of each icon. On cooldown you simply get the normal heal; drop the heal again to take it off. Inner Focus (priest) and Divine Favor (paladin) work the same way.
-- **Trinkets first, in one press.** Each tab (no modifier, Shift, Ctrl, Alt) has two ticks: **trinket 1** and **trinket 2**. Tick them and the first press of a fight uses those trinkets, then the heal; every press after that just heals. Never out of a fight. Or drag a trinket you wear onto one heal's button. It stacks with Nature's Swiftness. A trinket with nothing to use, or on cooldown, is left out of the bind, so it never blocks the heal. One that comes back mid-fight: click it on the deck.
+- **Binds only heal.** A cooling trinket inside a bind stops the whole press, heal and all, so trinkets live on the deck instead (below).
 - **Macros, too.** Drag a macro from your macro window (Esc > Macros) onto any button, heal side or hostile side. Write `[@mouseover]` in the macro to aim it at the cell you click.
 - **Anything not bound targets the unit.** Leave a button empty and clicking a name selects them, like Blizzard's own frames.
 - **Right-click a slot** to clear it.
@@ -172,8 +177,8 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **Under each person:** an interrupt for their target - it lights the moment that target casts, and the enemy's cast bar fills the row - and a box for each cure you have, lit when they carry something you can remove. A cast you can't interrupt wears a grey shield.
 - **The top row:** **LOS**, **RNG** and **OVH** light when a heal fails or would be wasted; a box shows when **you** are stunned, silenced or locked out, with a countdown.
 - **The mana strip:** your mana, and a thin bar for each mana user in your group once they drop under half. When everyone is under, **Mana Tide glows**.
-- **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close.
-- **On-use trinkets:** a trinket with a Use: gets its own button while you wear it. A mana trinket sits in the blue mana box and lights up like the potion as your mana drops.
+- **Your tools:** your shield, Mana Tide, a mana potion, Mana Spring, a drink and food - each lights when it would keep you off empty. A **red outline** means click it now, **amber** means getting close. **Smart lit** keeps them dim until you need them; switch it off for **always lit**. They line up in columns over the totems: trinkets, the blue mana box, then your shield, food, Grounding and rez in an amber box.
+- **Your trinkets:** each one you wear sits in a pink box with its icon and the first word of its name. Click to use it; while it cools the time left takes the word's place and the box goes faint, and it flashes once when it's ready. **Hold Shift** over one and the trinkets in your bags drop down: pick one and it goes on (in a fight, it waits for the end). A **priority list** per slot (the TRINKETS tab) keeps your best one on: out of a fight it wears the best trinket that is ready or 30 seconds from it. A mana trinket lights up as your mana drops.
 - **Debuff cues:** a debuff that matters shows as one word across that person's bar - **HEAL PAST**, **DON'T HEAL**, **DISPEL** or **DON'T DISPEL** - and only what your class can act on. Icons for the rest sit after the name. Tank armor procs show on every box. A **heal past** line (off to start) marks how far to heal through a debuff like Grievous Garrote.
 - **Mana Tide, quietly:** one click drops it; click again to ping the totem so your group knows where to stand. Nothing goes in chat. Other BiS Healing users see a tag under your name.
 - **Heal cues:** the middle of a person's bar says heal them now, with this - **Chain Heal** on whoever has your Riptide, **Holy Light** on a paladin's Oath of Light, **Holy Shock** on Light's Vigil, **Swiftmend** on a druid's Rejuvenation or Regrowth while it's ready. On every box that person is in.
@@ -183,9 +188,9 @@ The deck puts **everything a healer looks at in one window**, and lets you switc
 - **DEAD, OFFLINE, AFK** across the bar, in dark red, grey and white.
 - **Raids:** a **G1, G2...** tag in each box's corner, sort by tanks, group, class or health, groups as rows or columns - and when the boxes get small, the extras go first and the health bar stays.
 - **In a battleground:** a gold **MVP** square on the box of your side's best healer and best killer (with BiS Tools).
-- **Shamans:** your four totem buttons with timers, CALL / BRING / RECALL (hold **Shift** over CALL to see every Call with its totems, and click one to make CALL drop that one), and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit. **JMP** (off to start) keeps the fight's average of how many people each Chain Heal hit.
+- **Shamans:** your four totem buttons with timers - **hold Shift** over one and the other totems of its element drop down; let go on one to make the box drop it next - CALL / BRING / RECALL (hold **Shift** over CALL to see every Call with its totems: click one to make CALL drop that one, or **hold left-click** to save your four totem boxes into it), and after each Chain Heal **a bolt across the people it landed on** - gold for 3, amber for 2, red for 1, a star on each crit, and a fanfare when all three crit. **JMP** (off to start) keeps the fight's average of how many people each Chain Heal hit.
 - **The black box** along the bottom.
-- **One window, three tabs:** the SWITCHES button opens **DECK** (BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET), **CUES** and **DEBUFFS**. It opens where you left it. Narrow it down to party-frame size and it stacks instead of overlapping.
+- **One window, four tabs:** the SWITCHES button opens **DECK** (BARE / LEAN / FULL and a switch for every part, plus width and height sliders and RESET), **CUES**, **DEBUFFS** and **TRINKETS**. It opens where you left it. Narrow it down to party-frame size and it stacks instead of overlapping.
 - **Move it** by its top strip; **resize** by dragging the bottom-right corner (Shift-drag for width). Out of a fight.
 
 Pick **the deck** in the options' look row. It and classic are the two looks.
@@ -323,7 +328,7 @@ Or type:
 | `/bish mouse` | the mouse binds, heal and hostile side, and the ping chips |
 | `/bish efficiency` | mana for mana: every rank of your heals, and which one to spam |
 | `/bish clique` | let Clique handle the clicks, or take them back |
-| `/bish trinkets shift both` | trinkets first on a modifier tab — `1`, `2`, `both`, `off` |
+| `/bish trinkets` | your trinket priority list — `why` says what it did last |
 | `/bish now` | the BiS> now block |
 | `/bish buffs` | the buff buttons in BiS> now — `on`, `off`, or one buff: `fort`, `spirit`, `shadow`, `mark`, `thorns`, `int` with `on` or `off` |
 | `/bish cures` · `/bish res` | the cure boxes, and click-a-corpse-to-res: `on` or `off` |
