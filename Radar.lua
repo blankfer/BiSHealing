@@ -6694,7 +6694,9 @@ end
   (hit rect, set out of a fight). Right-click: the trinket list (Trinkets.lua, the BiS>Deck window's TRINKETS tab). ]]
 RD.TRINK_FONT = 10
 RD.TRINK_MIN_W = 24                                 -- the word's box is never narrower than a "4:59"
-RD.TRINK_FULL = 7200                                -- the client writes minutes:seconds under this (a trinket waits up to 2 h)
+-- the client writes minutes:seconds under this. 7200 came out "8m" on Arn's deck (26 Nov: the client did not take it); the
+-- totem timers' 600 is the one seen working live ("4:59"), so a trinket shows "15m" above ten minutes, "9:59" under
+RD.TRINK_FULL = RD.TIMER_FULL
 function RD.TrinketChip(b)
     b.word = b:CreateFontString(nil, "OVERLAY")
     b.word:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", RD.TRINK_FONT, "")
