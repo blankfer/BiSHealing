@@ -6734,7 +6734,7 @@ function RD.TrinketChip(b)
     -- the pink box: a plain child of the button (it hides with it, takes no mouse), sized round the chip by RD.SizeChip
     local P = RD.TRINK_BOX_COL
     b.pink = CreateFrame("Frame", nil, b)
-    b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 1.5)
+    b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 2)    -- (2 px: a 1.5 line can vanish between screen pixels)
 end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
@@ -6762,6 +6762,16 @@ function RD.SizeChip(b)
     return b.chipW
 end
 
+--- A MANA trinket = one whose use GIVES mana back (Enamored Water Spirit: "Summons a Mana Spring Totem that restores 10
+--- mana ..."), never one that only names mana (Burst of Knowledge: "Reduces the mana cost of all spells" - 26 Nov 2026,
+--- Arn's shot: Burst wore the red "click now" outline at 77% mana).
+function RD.ManaTrinket(use, words)
+    local t = ((use or "") .. " " .. (words or "")):lower()
+    if not t:find("mana", 1, true) then return nil end
+    if t:find("mana spring", 1, true) or t:find("restor", 1, true) or t:find("regenerat", 1, true)
+       or t:find("gain %d+ mana") or t:find("gives? %d+ mana") then return true end
+    return nil
+end
 function RD.ArmTrinkets()
     if combat() then return false end
     local nameOf = (C_Item and C_Item.GetItemNameByID) or GetItemInfo
@@ -6784,7 +6794,7 @@ function RD.ArmTrinkets()
                 -- use says "mana" - it learns what it restores like the potion (RD.LearnTool) and lights by the same curves
                 local words = itemWords(id)
                 b.use = use
-                b.mana = (use .. " " .. (words or "")):lower():find("mana", 1, true) and true or nil
+                b.mana = RD.ManaTrinket(use, words)
                 local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
                 local foot = "  Right-click: your trinket list."
                 if b.mana then

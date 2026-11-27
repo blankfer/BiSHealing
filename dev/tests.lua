@@ -15982,6 +15982,10 @@ do
                    "a mana trinket: left of the blue box, outside it")
                 ok(t.word and t.word.__text == "ENAMORED" and t.chipW and t.chipW > RD.SYS_PX and t.word:IsShown(),
                    "its chip: the first word of its name beside the icon", t.word and t.word.__text)
+                ok(RD.ManaTrinket("Enamored Water Spirit", "Summons a Mana Spring Totem that restores 10 mana every 2 seconds")
+                   and not RD.ManaTrinket("Burst of Knowledge", "Reduces the mana cost of all spells by 100 for 10 sec.")
+                   and not RD.ManaTrinket("Zandalarian Hero Charm", "Increases spell damage and healing by up to 204."),
+                   "a mana trinket gives mana back; Burst (mana COST) is not one (Arn's shot: its red outline at 77%)")
                 ok(RD.TrinketWord("Burst of Knowledge") == "BURST" and RD.TrinketWord("Talisman, of Old") == "TALISMAN"
                    and RD.TrinketWord(nil) == nil, "the first word, in capitals")
                 ok(x(RD.potion) - x(t) >= t.chipW, "the next tool starts after the word, never on it", x(RD.potion) - x(t))
@@ -16036,6 +16040,9 @@ do
                 ok(not RD.trink2.mana and x(RD.trink2) > x(t) and x(RD.trink2) < x(RD.potion) and RD.trink2.word.__text == "ZANDALARIAN",
                    "the second trinket: beside the first, both left of the blue box")
                 ok((x(RD.trink2) - RD.SYS_PX / 2 - 2) > (x(t) - RD.SYS_PX / 2 - 2 + t.pink.__w), "the two pink boxes never touch")
+                local p2 = RD.trink2.pink
+                ok(p2 and p2.__w == RD.trink2.chipW + 4 and p2.__shown ~= false and p2.points and p2.points[1] and p2.points[1][2] == RD.trink2,
+                   "the second trinket has its own pink box too", p2 and tostring(p2.__w) .. " " .. tostring(p2.__shown))
                 -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
                 local wasW = RD.waterUntil
                 RD.waterUntil = (GetTime() or 0) + 60
