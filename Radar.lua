@@ -6749,6 +6749,7 @@ function RD.TrinketChip(b)
     local P = RD.TRINK_BOX_COL
     b.pink = CreateFrame("Frame", nil, b)
     b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 2)    -- (2 px: a 1.5 line can vanish between screen pixels)
+    if NS.TR and NS.TR.HookChip then NS.TR.HookChip(b) end        -- Shift + hover: your other trinkets (Trinkets.lua)
 end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
@@ -6810,7 +6811,7 @@ function RD.ArmTrinkets()
                 b.use = use
                 b.mana = RD.ManaTrinket(use, words)
                 local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
-                local foot = "  Right-click: your trinket list."
+                local foot = "  Shift: your other trinkets pop out (in a fight, a pick waits for its end).  Right-click: your trinket list."
                 if b.mana then
                     RD.LearnTool(b, words)
                     toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")

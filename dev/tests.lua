@@ -18835,6 +18835,7 @@ do
         end
     end
     _G.C_Timer = { After = function(t, fn) later[#later + 1] = { t = t, fn = fn } end }
+    local mockEquip = C_Item.EquipItemByName
     -- (as the client's: the time has passed when a timer runs - a mock that ran it at once would be kinder)
     local function runLater() local l = later later = {} for _, x in ipairs(l) do CLOCK = CLOCK + (x.t or 0) x.fn() end end
     NS.DB().radar.trinketPrio = nil
@@ -18911,6 +18912,75 @@ do
     C_Item.EquipItemByName = function() n = n + 1 end
     TR.Check("again")
     ok(n == 0, "and it does not try the same swap again and again")
+    -- SHIFT + HOVER A TRINKET (Arn, 26 Nov: "hold shift on the [trinket] so i can switch on the fly out of combat? maybe it
+    -- que if i do in combat?")
+    do
+        C_Item.EquipItemByName = mockEquip
+        STATE.worn = { [13] = BURST, [14] = CHARM }
+        BAG[1], BAG[2], BAG[3] = SCARAB, BOOTS, EYE
+        CD = {}
+        TR.last, TR.hold, TR.queue = nil, {}, {}
+        NS.DB().radar.trinketPrio = { [13] = { BURST, SCARAB }, [14] = {} }
+        TR.Changed()
+        local chip = CreateFrame("Button", nil, UIParent)
+        chip.slot = 13
+        chip:SetSize(22, 22)
+        TR.HookChip(chip)
+        STATE.shift = false
+        chip:GetScript("OnEnter")(chip)
+        ok(not (TR.col and TR.col:IsShown()) and TR.flyKeys.__events and TR.flyKeys.__events.MODIFIER_STATE_CHANGED,
+           "the mouse on a trinket, no Shift: nothing pops out (Shift now heard)")
+        fire(TR.flyKeys, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+        local col = TR.col
+        ok(col and col:IsShown() and col.count == 2 and col.b[1].id == SCARAB and col.b[2].id == EYE,
+           "Shift pressed: the trinkets in your bags drop down (not the worn ones, not the boots)", col and col.count)
+        ok(col.points[1][1] == "TOPLEFT" and col.points[1][2] == chip and col.points[1][3] == "BOTTOMLEFT", "under the trinket, touching it")
+        -- let go of Shift on Eye, out of a fight: it goes on now, and the list leaves the slot alone until it is used
+        chip:GetScript("OnLeave")(chip)
+        col.b[2]:GetScript("OnEnter")(col.b[2])
+        later = {}
+        fire(TR.flyKeys, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+        ok(STATE.worn[13] == EYE and not col:IsShown() and TR.hold[13] == EYE, "Shift let go on Eye: on now, the column away", STATE.worn[13])
+        col.b[2]:GetScript("OnLeave")(col.b[2])
+        ok(TR.Check("gear") == false and STATE.worn[13] == EYE, "the list (Burst first, ready) does not take your pick off")
+        CD[EYE] = { GetTime(), 180 }
+        ok(TR.Check("used") == true and STATE.worn[13] == BURST and not TR.hold[13], "you use Eye: the list takes over again (Burst back)")
+        -- IN A FIGHT: queued, its icon on the chip's corner, on at the fight's end
+        STATE.inCombat = true
+        STATE.shift = true
+
+        local deckChip = NS.RD.trink1
+        chip:GetScript("OnEnter")(chip)
+        ok(TR.col:IsShown(), "in a fight Shift still pops it out (plain frames)")
+        local scarabBtn
+        for i = 1, TR.col.count do if TR.col.b[i].id == SCARAB then scarabBtn = TR.col.b[i] end end
+        ok(scarabBtn and TR.Pick(13, SCARAB, "a click") == "queued" and STATE.worn[13] == BURST and TR.queue[13] == SCARAB,
+           "a pick in a fight: queued, nothing changes now")
+        ok(TR.frame.__events and TR.frame.__events.PLAYER_REGEN_ENABLED, "and the fight's end is listened for")
+        if deckChip and deckChip.slot == 13 then
+            ok(deckChip.queued and deckChip.queued:IsShown() and deckChip.queued.__texture == 1000 + SCARAB,
+               "the queued trinket's icon rides the deck chip's corner")
+        end
+        chip:GetScript("OnLeave")(chip)
+        STATE.inCombat, STATE.shift = false, false
+        fire(TR.frame, "PLAYER_REGEN_ENABLED")
+        ok(STATE.worn[13] == SCARAB and not TR.queue[13] and TR.hold[13] == SCARAB, "the fight over: Scarab goes on", STATE.worn[13])
+        if deckChip and deckChip.queued then ok(not deckChip.queued:IsShown(), "and the corner icon goes") end
+        -- the mouse leaves: closed a moment later
+        STATE.shift = true
+        chip:GetScript("OnEnter")(chip)
+        chip:GetScript("OnLeave")(chip)
+        ok(TR.col:IsShown() and TR.flyWatch:IsShown(), "open, its watcher on")
+        chip.__mouseOver, TR.col.__mouseOver = false, false
+        CLOCK = CLOCK + 0.1 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        ok(not TR.col:IsShown() and not TR.flyWatch:IsShown() and not (TR.flyKeys.__events or {}).MODIFIER_STATE_CHANGED,
+           "off both a moment: closed, Shift no longer heard")
+        STATE.shift = false
+        TR.hold, TR.queue = {}, {}
+        C_Item.EquipItemByName = function() n = n + 1 end
+        NS.DB().radar.trinketPrio = { [13] = { BURST, SCARAB }, [14] = {} }
+    end
     -- the tab: rows = the list first (numbered), then the rest of what you carry
     local rows = TR.Rows(13)
     ok(rows[1].id == BURST and rows[1].place == 1 and rows[2].id == SCARAB and rows[2].place == 2 and rows[3] and not rows[3].place,

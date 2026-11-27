@@ -167,7 +167,26 @@ end
 
 --- The trinket this slot should wear now: the first on its list that is carried, not worn in the other slot, and ready or
 --- within TR.EQUIP_WAIT. Answers id, seconds left, why (nil = keep what it wears).
+--- A HAND PICK HOLDS (26 Nov 2026, the Shift pop-out): a trinket you put on (or queued) by hand stays on - the list leaves
+--- that slot alone - until you USE it (its wait goes past TR.EQUIP_WAIT), then the list takes over again.
+function TR.Held(slot)
+    local h = TR.hold[slot]
+    if not h then return nil end
+    if TR.queue[slot] == h then return h end                              -- (still queued for after the fight)
+    if TR.Worn(slot) == h then
+        local left = TR.Left(h, "worn", slot)
+        if left and left > TR.EQUIP_WAIT + 1 then TR.hold[slot] = nil return nil end   -- used: the list again
+        return h
+    end
+    local l = TR.last
+    if l and l.slot == slot and l.id == h and now() - l.at < TR.REFUSED_FOR then return h end   -- (the game still at it)
+    TR.hold[slot] = nil                                                   -- taken off some other way: let go
+    return nil
+end
+TR.hold, TR.queue = {}, {}
+
 function TR.Choose(slot)
+    if TR.Held(slot) then return nil end
     local other = slot == 13 and 14 or 13
     local otherWorn = TR.Worn(other)
     for i, id in ipairs(TR.List(slot)) do
@@ -234,21 +253,10 @@ function TR.Check(why)
                 TR.why = "the game refused " .. (TR.Name(pick) or pick) .. " - put it on by hand once"
                 return false
             end
-            local eq = C_Item and C_Item.EquipItemByName
-            if not eq then TR.why = "this client has no way to put a trinket on" return false end
-            local ok, err = pcall(eq, pick, slot)
-            TR.last = { slot = slot, id = pick, at = t, from = worn }
-            TR.why = ok and (("slot %d: %s on (no. %d on its list, %s) - %s"):format(slot, TR.Name(pick) or pick, place,
-                left > 0 and ("%d s left"):format(math.ceil(left)) or "ready", why or "a look"))
-                or ("the game refused: " .. tostring(err))
-            if ok and C_Timer and C_Timer.After then
-                C_Timer.After(TR.REFUSED_FOR, function()
-                    local l = TR.last
-                    if l and l.id == pick and l.slot == slot and TR.Worn(slot) ~= pick then
-                        l.refused = true
-                        TR.why = "the game did not put on " .. (TR.Name(pick) or pick) .. " - put it on by hand once"
-                    end
-                end)
+            local ok = TR.Equip(slot, pick)
+            if ok then
+                TR.why = ("slot %d: %s on (no. %d on its list, %s) - %s"):format(slot, TR.Name(pick) or pick, place,
+                    left > 0 and ("%d s left"):format(math.ceil(left)) or "ready", why or "a look")
             end
             return ok
         end
@@ -256,6 +264,27 @@ function TR.Check(why)
     TR.why = "both slots wear their best (" .. (why or "a look") .. ")"
     TR.Timer()
     return false
+end
+--- Put a trinket on a slot now (out of a fight): the client's equip, remembered in TR.last; one that has not taken by
+--- TR.REFUSED_FOR is marked refused (said once, never retried in a loop).
+function TR.Equip(slot, id)
+    if fight() then return false end
+    local eq = C_Item and C_Item.EquipItemByName
+    if not eq then TR.why = "this client has no way to put a trinket on" return false end
+    local ok, err = pcall(eq, id, slot)
+    TR.last = { slot = slot, id = id, at = now(), from = TR.Worn(slot) }
+    if not ok then TR.why = "the game refused: " .. tostring(err) return false end
+    TR.why = ("slot %d: %s on"):format(slot, TR.Name(id) or id)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(TR.REFUSED_FOR, function()
+            local l = TR.last
+            if l and l.id == id and l.slot == slot and TR.Worn(slot) ~= id then
+                l.refused = true
+                TR.why = "the game did not put on " .. (TR.Name(id) or id) .. " - put it on by hand once"
+            end
+        end)
+    end
+    return true
 end
 --- A look in `s` seconds (one waiting at a time: the sooner wins).
 function TR.Soon(s)
@@ -282,7 +311,12 @@ TR.EVENTS = { "PLAYER_REGEN_ENABLED", "PLAYER_EQUIPMENT_CHANGED", "BAG_UPDATE_CO
 TR.frame = CreateFrame("Frame")
 TR.frame:SetScript("OnEvent", function(_, event)
     if fight() then TR.afterFight = true return end                       -- (one test in a fight, nothing else)
-    if event == "PLAYER_REGEN_ENABLED" then TR.afterFight = nil TR.Soon(0.5) return end
+    if event == "PLAYER_REGEN_ENABLED" then
+        TR.afterFight = nil
+        TR.RunQueue()                                                     -- (a pick made in the fight goes on first)
+        if TR.Any() then TR.Soon(0.5) end
+        return
+    end
     if event == "PLAYER_EQUIPMENT_CHANGED" then
         local l = TR.last
         if l and TR.Worn(l.slot) == l.id then l.refused = nil end
@@ -292,7 +326,7 @@ TR.frame:SetScript("OnEvent", function(_, event)
 end)
 --- Listen only while a list holds something.
 function TR.Listen()
-    local any = TR.Any()
+    local any = TR.Any() or next(TR.queue) ~= nil                         -- (a queued pick needs the fight's end too)
     if any == TR.listening then return any end
     TR.listening = any
     for _, ev in ipairs(TR.EVENTS) do
@@ -321,6 +355,223 @@ function TR.Report()
             #names > 0 and table.concat(names, ", ") or "empty")
     end
     return out
+end
+
+-- ----------------------------------------------------------------- the Shift pop-out
+
+--[[ SHIFT + HOVER A TRINKET (26 Nov 2026, Arn: "hold shift on the [trinket] so i can switch on the fly out of combat? maybe it
+  que if i do in combat?"). The totem boxes' hand: Shift over a deck trinket = the trinkets in your bags drop down under it
+  (up only at the screen's foot). Let go of Shift on one, or click it: out of a fight it goes on now; IN A FIGHT it is
+  QUEUED (the game never changes trinkets in one) - its icon rides the chip's corner - and goes on the moment the fight
+  ends. A hand pick holds against the priority list until you use it (TR.Held).
+  NOTHING SECURE: the column and its icons are plain frames on UIParent (they show, take clicks and anchor in a fight); the
+  chip itself is untouched - its own click still uses the worn trinket. ]]
+TR.FLY = { gap = 2, off = 0.3, margin = 6, max = 10 }
+
+--- The trinkets you could put on this slot: carried in the bags, not worn in either slot.
+function TR.FlyList(slot)
+    local out = {}
+    for _, id in ipairs(TR.Owned()) do
+        if id ~= TR.Worn(13) and id ~= TR.Worn(14) then out[#out + 1] = id end
+        if #out >= TR.FLY.max then break end
+    end
+    return out
+end
+
+function TR.FlyButton(col, i)
+    local b = CreateFrame("Button", nil, col)
+    if b.RegisterForClicks then b:RegisterForClicks("AnyUp") end
+    b.edge = b:CreateTexture(nil, "BACKGROUND")
+    b.edge:SetAllPoints(b)
+    local P = (NS.RD and NS.RD.TRINK_BOX_COL) or { 1, 0.45, 0.92 }
+    b.edge:SetColorTexture(P[1], P[2], P[3], 1)
+    b.pic = b:CreateTexture(nil, "ARTWORK")
+    b.pic:SetPoint("TOPLEFT", b, "TOPLEFT", 1, -1)
+    b.pic:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1, 1)
+    if b.pic.SetTexCoord then b.pic:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    b.hl = b:CreateTexture(nil, "HIGHLIGHT")                        -- (it pops on hover, like every clickable thing)
+    b.hl:SetAllPoints(b)
+    b.hl:SetColorTexture(1, 1, 1, 0.25)
+    b:SetScript("OnEnter", function(self)
+        TR.flyHover = self
+        if not (GameTooltip and self.id) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")                 -- (to the side: never over the column)
+        if not (GameTooltip.SetHyperlink and pcall(GameTooltip.SetHyperlink, GameTooltip, "item:" .. self.id)) then
+            GameTooltip:AddLine(TR.Name(self.id) or "a trinket")
+        end
+        GameTooltip:AddLine(fight() and "Click or let go of Shift: it goes on when this fight ends."
+            or "Click or let go of Shift: put it on now.", 0.6, 0.85, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function(self)
+        if TR.flyHover == self then TR.flyHover = nil end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    b:SetScript("OnClick", function(self) if self.id and col.slot then TR.Pick(col.slot, self.id, "a click") end end)
+    return b
+end
+
+--- Open the column under a chip (in a fight too: plain frames).
+function TR.OpenFly(chip)
+    local slot = chip and chip.slot
+    if not slot then return false end
+    local list = TR.FlyList(slot)
+    if #list == 0 then TR.flyWhy = "no other trinket in your bags" return false end
+    local col = TR.col
+    if not col then
+        col = CreateFrame("Frame", "BiSHealingTrinketFly", UIParent)
+        col:SetFrameStrata("DIALOG")
+        col.bg = col:CreateTexture(nil, "BACKGROUND")
+        col.bg:SetAllPoints(col)
+        col.bg:SetColorTexture(0, 0, 0, 0.85)
+        col.b = {}
+        col:Hide()
+        TR.col = col
+    end
+    local size = math.max(16, math.floor(((chip.GetHeight and chip:GetHeight()) or 22) + 0.5))
+    local gap = TR.FLY.gap
+    col.slot, col.chip = slot, chip
+    col:SetSize(size + 2 * gap, #list * (size + gap) + gap)
+    if col.SetScale and chip.GetEffectiveScale and UIParent.GetEffectiveScale then
+        local cs, us = chip:GetEffectiveScale(), UIParent:GetEffectiveScale()
+        if type(cs) == "number" and type(us) == "number" and us > 0 then col:SetScale(cs / us) end
+    end
+    local RD = NS.RD
+    local down = not (RD and RD.FlyDir) or RD.FlyDir(chip, col:GetHeight()) == "down"   -- (down first, as the totems)
+    col:ClearAllPoints()
+    if down then col:SetPoint("TOPLEFT", chip, "BOTTOMLEFT", 0, 0) else col:SetPoint("BOTTOMLEFT", chip, "TOPLEFT", 0, 0) end
+    for i, id in ipairs(list) do
+        local b = col.b[i] or TR.FlyButton(col, i)
+        col.b[i] = b
+        b.id = id
+        b:SetSize(size, size)
+        b:ClearAllPoints()
+        local y = gap + (i - 1) * (size + gap)                          -- (the first nearest the chip)
+        if down then b:SetPoint("TOP", col, "TOP", 0, -y) else b:SetPoint("BOTTOM", col, "BOTTOM", 0, y) end
+        local icon = TR.Icon(id)
+        if icon then b.pic:SetTexture(icon) end
+        b.pic:SetAlpha(TR.queue[slot] == id and 0.5 or 1)              -- (the one already queued: dimmed)
+        b:Show()
+    end
+    for i = #list + 1, #col.b do col.b[i]:Hide() end
+    col.count = #list
+    if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(chip) then GameTooltip:Hide() end
+    TR.flyFrom, TR.flyOffAt = chip, nil
+    col:Show()
+    TR.flyWatch:Show()
+    TR.flyWhy = "opened: " .. #list .. " to pick"
+    return true
+end
+function TR.CloseFly(why)
+    TR.flyFrom, TR.flyHover, TR.flyOffAt = nil, nil, nil
+    if TR.flyWatch then TR.flyWatch:Hide() end
+    if TR.col then TR.col:Hide() end
+    if why then TR.flyWhy = why end
+end
+
+--- A pick: out of a fight on now, in one queued for its end. Held against the list either way.
+function TR.Pick(slot, id, why)
+    TR.CloseFly("picked " .. (TR.Name(id) or id))
+    TR.hold[slot] = id
+    if fight() then
+        TR.queue[slot] = id
+        TR.why = ("slot %d: %s queued for the fight's end (%s)"):format(slot, TR.Name(id) or id, why or "a pick")
+        TR.Listen()
+        TR.PaintQueue()
+        return "queued"
+    end
+    TR.queue[slot] = nil
+    TR.PaintQueue()
+    return TR.Equip(slot, id) and "on" or false
+end
+--- The fight over: what was queued goes on.
+function TR.RunQueue()
+    if fight() then return 0 end
+    local n = 0
+    for _, slot in ipairs(TR.SLOTS) do
+        local id = TR.queue[slot]
+        if id then
+            TR.queue[slot] = nil
+            if TR.Worn(slot) ~= id and TR.Equip(slot, id) then n = n + 1 end
+        end
+    end
+    TR.PaintQueue()
+    TR.Listen()
+    return n
+end
+--- The queued trinket's icon in its chip's corner (the pink box's top right).
+function TR.PaintQueue()
+    local RD = NS.RD
+    for _, key in ipairs({ "trink1", "trink2" }) do
+        local b = RD and RD[key]
+        if b and b.pink then
+            local id = b.slot and TR.queue[b.slot]
+            if id and not b.queued then
+                b.queued = b.pink:CreateTexture(nil, "OVERLAY")
+                b.queued:SetSize(12, 12)
+                b.queued:SetPoint("TOPRIGHT", b.pink, "TOPRIGHT", -1, -1)
+                if b.queued.SetTexCoord then b.queued:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+            end
+            if b.queued then
+                if id then
+                    local icon = TR.Icon(id)
+                    if icon then b.queued:SetTexture(icon) end
+                    b.queued:Show()
+                else
+                    b.queued:Hide()
+                end
+            end
+        end
+    end
+end
+
+--- Is the mouse on it (a little round it: the gap between chip and column counts)?
+local function over(fr)
+    if not (fr and fr.IsMouseOver) then return false end
+    local m = TR.FLY.margin
+    local fine, yes = pcall(fr.IsMouseOver, fr, m, -m, -m, m)
+    return fine and yes and true or false
+end
+TR.flyWatch = CreateFrame("Frame")
+TR.flyWatch:Hide()
+TR.flyWatch:SetScript("OnUpdate", function()
+    if not TR.flyFrom then TR.flyWatch:Hide() return end
+    if over(TR.flyFrom) or over(TR.col) then TR.flyOffAt = nil return end
+    TR.flyOffAt = TR.flyOffAt or now()
+    if now() - TR.flyOffAt >= TR.FLY.off then TR.CloseFly("the mouse left") end
+end)
+-- Shift: heard only while the mouse is on a chip or the column is open
+TR.flyKeys = CreateFrame("Frame")
+TR.flyKeys:SetScript("OnEvent", function(_, _, key, down)
+    if key ~= "LSHIFT" and key ~= "RSHIFT" then return end
+    if down == 1 then
+        if not TR.flyFrom and TR.flyOver then TR.OpenFly(TR.flyOver) end
+    elseif TR.flyFrom and TR.flyHover and TR.flyHover.id and TR.col and TR.col.slot then
+        TR.Pick(TR.col.slot, TR.flyHover.id, "Shift let go")
+    end
+end)
+local function keys(on)
+    if on then pcall(TR.flyKeys.RegisterEvent, TR.flyKeys, "MODIFIER_STATE_CHANGED")
+    else pcall(TR.flyKeys.UnregisterEvent, TR.flyKeys, "MODIFIER_STATE_CHANGED") end
+end
+--- A deck chip learns the hand (Radar.lua RD.TrinketChip calls this once per chip).
+function TR.HookChip(b)
+    if not b or b.trHooked then return end
+    b.trHooked = true
+    b:HookScript("OnEnter", function(self)
+        TR.flyOver = self
+        keys(true)
+        if IsShiftKeyDown and IsShiftKeyDown() and not TR.flyFrom then TR.OpenFly(self) end
+    end)
+    b:HookScript("OnLeave", function(self)
+        if TR.flyOver == self then TR.flyOver = nil end
+        if not TR.flyFrom then keys(false) end
+    end)
+end
+local closeFly = TR.CloseFly
+function TR.CloseFly(why)
+    closeFly(why)
+    if not TR.flyOver then keys(false) end
 end
 
 -- ----------------------------------------------------------------- the TRINKETS tab
