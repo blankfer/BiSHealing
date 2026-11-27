@@ -1888,39 +1888,22 @@ end
 
 --- /bish hover [on|off] - the white crosshair on whoever your mouse is on (7 Oct 2026, Arn's
 --- cousin's idea). On by default.
---- /bish trinkets [none|shift|ctrl|alt] [1|2|both|off] - which trinkets every bind on that
---- modifier tab uses before its heal (10 Oct 2026, Arn: "each tab ... has a check ... pop trinket
---- 1 - 2 ... maybe even different for each modifier"). The same ticks as the mouse window's row.
---- No arguments: says what is set.
-NS.TRINKET_TABS = { { key = "", word = "none" }, { key = "shift-", word = "shift" },
-                    { key = "ctrl-", word = "ctrl" }, { key = "alt-", word = "alt" } }
-function NS.DO.trinkets(tab, which)
-    local FM = NS.FM
-    if not (FM and FM.TabTrinkets) then return nil end
-    local function say()
-        for _, m in ipairs(NS.TRINKET_TABS) do
-            local s = FM.TabTrinkets(m.key)
-            local words = {}
-            for _, n in ipairs(s) do words[#words + 1] = "trinket " .. (n == 13 and 1 or 2) end
-            Print("  %s: %s", m.word, #words > 0 and table.concat(words, " + ") .. " first" or "-")
-        end
+--- /bish trinkets [why|now] - THE TRINKET PRIORITY LIST (26 Nov 2026; Trinkets.lua). No word: the BiS>Deck window on its
+--- TRINKETS tab. `why`: what the list chose last and why; `now`: look again now (out of a fight). The old meaning (which
+--- trinkets every bind on a modifier tab used first) is gone with the trinkets on the binds.
+function NS.DO.trinkets(word)
+    local TR = NS.TR
+    if not TR then return nil end
+    if word == "why" then
+        for _, line in ipairs(TR.Report()) do Print(line) end
+        return TR.why
+    elseif word == "now" then
+        local did = TR.Check("asked")
+        Print("trinkets: %s", TR.why or "-")
+        return did
     end
-    if not tab then Print("trinkets first, per modifier:") say() return end
-    local mod
-    for _, m in ipairs(NS.TRINKET_TABS) do if m.word == tab then mod = m.key end end
-    local want = ({ ["1"] = { 13 }, ["2"] = { 14 }, both = { 13, 14 }, off = {} })[which or ""]
-    if not mod or not want then
-        Print("trinkets: /bish trinkets shift both  (none|shift|ctrl|alt, then 1|2|both|off)")
-        return nil
-    end
-    local on = {}
-    for _, s in ipairs(want) do on[s] = true end
-    FM.SetTabTrinket(mod, 13, on[13])
-    FM.SetTabTrinket(mod, 14, on[14])
-    if FM.Apply then FM.Apply() end
-    if FM.win and FM.win.Refresh then FM.win:Refresh() end
-    say()
-    return FM.TabTrinkets(mod)
+    if NS.CU and NS.CU.Open then return NS.CU.Open("trinkets") end
+    return nil
 end
 
 --- /bish pad [on|off] - heal with a controller (Arn, 15 Nov 2026, option A): the D-pad lights one person, A/B/X/Y are
@@ -2103,7 +2086,7 @@ function NS.DO.help()
     Print("  |cffb980ffoptions|r the window   |cffb980ffscale 90|r the grid's size   |cffb980fflayout|r"
         .. " |cffb980ffcolumns|r |cffb980ffacross|r |cffb980ffpyramid|r")
     Print("  |cffb980ffefficiency|r which heal, mana for mana   |cffb980ffheals|r the probe behind it")
-    Print("  |cffb980ffbuffs|r BiS> now's buff buttons   |cffb980fftrinkets|r trinkets first, per modifier")
+    Print("  |cffb980ffbuffs|r BiS> now's buff buttons   |cffb980fftrinkets|r your trinkets' priority list")
     Print("  |cffb980ffcures|r |cffb980ffhover|r |cffb980ffflash|r |cffb980ffoverword|r |cffb980ffbetween|r  on or off")
     Print("  |cffb980ffoverword|r off / any / half / 75%   |cffb980ffoverbutton|r left / right / wheel / thumb1 / thumb2")
     Print("  |cffb980ffwheel|r frames / ours / everywhere  where the wheel binds work")
@@ -2421,7 +2404,7 @@ SlashCmdList.BISHEALING = function(input)
     elseif msg == "ring" or msg:match("^ring%s") then
         NS.DO.ring(msg:match("^ring%s+(%S+)"))
     elseif msg == "trinkets" or msg:match("^trinkets%s") then
-        NS.DO.trinkets(msg:match("^trinkets%s+(%a+)"), msg:match("^trinkets%s+%a+%s+(%w+)"))
+        NS.DO.trinkets(msg:match("^trinkets%s+(%a+)"))
     elseif msg == "hover" or msg:match("^hover%s") then
         NS.DO.hover(msg:match("^hover%s+(%a+)"))
     elseif msg == "flash" or msg:match("^flash%s") then

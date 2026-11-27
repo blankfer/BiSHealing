@@ -1419,7 +1419,7 @@ function RD.SwReset()
     RD.ScaleHome()
     -- the raid layout back to its own too (21 Nov 2026): no group tags, groups as rows, tanks then groups
     local d = db()
-    if type(d.sw) == "table" then d.sw.gtag, d.sw.cols = nil, nil end
+    if type(d.sw) == "table" then d.sw.gtag, d.sw.cols, d.sw.smartlit = nil, nil, nil end
     d.deckSort = nil
     return RD.SwPreset("full")
 end
@@ -1775,6 +1775,10 @@ RD.SW = {
     { key = "edges",  group = "LOOK",      name = "Warning edges",            tip = "A box's edge turns amber when low, red when very low." },
     { key = "pets",   group = "LOOK",      name = "Pets",                     tip = "Hunter and warlock pets get a small box with a paw." },
     { key = "attn",   group = "LOOK",      name = "Attention outlines",       tip = "A red box on an icon you need to click now (food, a buff, a mana tool), amber when it is getting close." },
+    -- TWO MODES (26 Nov 2026, Arn: "lets do 2 modes always lit smart lit, we keep the same border rules but always lit always
+    -- shows the icons"): on (nil) = smart lit, today's deck; off = always lit (RD.Faded). Kept out of the presets (layout).
+    { key = "smartlit", group = "LOOK",    name = "Smart lit",                layout = true,
+      tip = "On: a tool's icon stays dim until you need it, then bright. Off (always lit): every icon shown in full all the time - the red and amber outlines still say what needs a click now." },
     { key = "head",   group = "LOOK",      name = "Name header",              tip = "The name and the buff / debuff icons in a dark strip at the top of each box, off the health bar (a short raid box keeps its whole height for the bar)." },
     { key = "bb",     group = "LOOK",      name = "Black box",                tip = "The red light and the keypad under the window." },
     -- RAID GROUPS (21 Nov 2026, BiS Cues sheet 6, Arn picked B + its own switch). OFF until switched on (`off`, see RD.Sw),
@@ -2343,62 +2347,61 @@ end
 -- couple times cause they were both far left")
 -- the on-use trinkets after the drink, outside the blue mana box (24 Nov 2026); only placed while equipped (`absent`); a
 -- MANA trinket (`b.mana`) goes INTO the box, after the potion (RD.DeckTools)
-RD.TOOL_KEYS = { "shield", "potion", "tide", "reserve", "fuel", "trink1", "trink2", "rations", "chaff", "res" }
+-- THE TRINKETS LEFT OF THE BLUE BOX (26 Nov 2026, Arn: "down by the mana bar at the bottom with mana tide but on the left of
+-- the blue box"): each a chip - its icon, then its name's first word, the time left in that word's place while it cools
+-- (RD.TrinketChip); a mana trinket no longer goes inside the box
+RD.TOOL_KEYS = { "shield", "trink1", "trink2", "potion", "tide", "reserve", "fuel", "rations", "chaff", "res" }
 RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
 function RD.DeckTools(W, top)
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
-    local per = math.max(1, math.floor((W - 2 * C.pad + gap) / (S + gap)))
     -- every tool, in its order - NOT only the shown ones (Arn, 16 Nov: "all the buttons for food are gone" after a /reload:
     -- at the first layout the game has not shown them yet, so a "shown only" list placed none); a narrow window (Arn's
     -- shot: "the mana thing did not center"): the mana four on a line of their own, centred in their box, the rest under
     -- A MANA TRINKET IN THE BLUE BOX (24 Nov 2026): the first goes right after the potion (Mana Tide stays the middle of
     -- five), a second at the box's end; any other trinket stays outside, after it
-    local all, mana, rest, pre, extra = {}, {}, {}, {}, nil
-    local trinks = 0
+    local all, mana, rest, pre = {}, {}, {}, {}
     for _, k in ipairs(RD.TOOL_KEYS) do
         local b = RD[k]
         if b and b.absent then b:Hide() end          -- a trinket slot with nothing to use: no button, no gap
         if b and not b.absent then
             if b.trinket and not b:IsShown() then b:Show() end
-            if b.trinket and b.mana then
-                trinks = trinks + 1
-                if trinks == 1 then
-                    local at = #mana + 1
-                    for i, m in ipairs(mana) do if m == RD.potion then at = i + 1 end end
-                    table.insert(mana, at, b)
-                else
-                    extra = b
-                end
-            elseif RD.MANA_KEYS[k] then mana[#mana + 1] = b
+            if RD.MANA_KEYS[k] then mana[#mana + 1] = b
             elseif #mana == 0 then pre[#pre + 1] = b
             else rest[#rest + 1] = b end
         end
     end
-    if extra then mana[#mana + 1] = extra end
     for _, b in ipairs(pre) do all[#all + 1] = b end
     for _, b in ipairs(mana) do all[#all + 1] = b end
     for _, b in ipairs(rest) do all[#all + 1] = b end
     for i = #pre, 1, -1 do table.insert(rest, 1, pre[i]) end   -- a narrow window: the mana line first, the rest under
+    -- each takes its icon, a trinket chip its word too (b.chipW); a line holds what fits across the window
+    local function wide(b) return b.chipW or S end
+    local room = W - 2 * C.pad
     local lines = {}
     local function wrap(list)
-        local i = 1
-        while i <= #list do
-            local l = {}
-            for k = i, math.min(#list, i + per - 1) do l[#l + 1] = list[k] end
-            lines[#lines + 1] = l
-            i = i + per
+        local l, used = {}, 0
+        for _, b in ipairs(list) do
+            local need = wide(b) + (#l > 0 and gap or 0)
+            if #l > 0 and used + need > room then lines[#lines + 1] = l l, used = {}, 0 need = wide(b) end
+            l[#l + 1] = b
+            used = used + need
         end
+        if #l > 0 then lines[#lines + 1] = l end
     end
-    if per >= #all then lines[1] = all else wrap(mana) wrap(rest) end
+    local total = 0
+    for i, b in ipairs(all) do total = total + wide(b) + (i > 1 and gap or 0) end
+    if total <= room then lines[1] = all else wrap(mana) wrap(rest) end
     local xs, ys = {}, {}
     for l, line in ipairs(lines) do
-        local cnt = #line
-        local x0 = (W - (cnt * S + (cnt - 1) * gap)) / 2 + S / 2
+        local lw = 0
+        for k, b in ipairs(line) do lw = lw + wide(b) + (k > 1 and gap or 0) end
+        local x = (W - lw) / 2
         local cy = top + (l - 1) * (S + C.gap) + S / 2
-        for k, b in ipairs(line) do
-            xs[b], ys[b] = x0 + (k - 1) * (S + gap), cy
+        for _, b in ipairs(line) do
+            xs[b], ys[b] = x + S / 2, cy
             at(b, xs[b], cy)
             if b.swHidden then b.swHidden = nil b:Show() end   -- the tools switch back on: the ones it hid
+            x = x + wide(b) + gap
         end
     end
     local nLines = math.max(1, #lines)
@@ -2502,12 +2505,15 @@ end
 --- DIMMER AND GREY WHILE IT WAITS (15 Nov 2026, Arn: "grounding totem dimmed too like the food until needed then bright"):
 --- at 30% a bright purple icon still read as lit. A waiting icon is RD.ICON_FADED (20%) and greyed; lit, full colour.
 function RD.LitAlpha(b, lit)
-    if b and b.food and b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, not lit) end
+    local smart = RD.Sw("smartlit")
+    if b and b.food and b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, (not lit) and smart) end
     if b and b ~= RD.rations then RD.AttnSet(b, lit and "red" or nil) end   -- lit full: the red box (the food has its own)
     if lit then return 1 end
-    if RD.Deck and RD.Deck() and b and b.iconTex then return RD.ICON_FADED end
+    if RD.Deck and RD.Deck() and b and b.iconTex then return RD.Faded() end
     return 0
 end
+--- A waiting icon's brightness: dim while smart lit (the switch on, the default), full while always lit.
+function RD.Faded() return RD.Sw("smartlit") and RD.ICON_FADED or 1 end
 
 -- THE TOTEMS' LINE under the tools (11 Nov): only the ones you know (RD.ArmTotems), centred; answers the height it took
 local function totemRow(W, y)
@@ -4621,6 +4627,7 @@ function RD.Build()
         local b = buildSystem(f, "Trinket" .. (slot - 12), "TOPLEFT", X, -8 - (slot - 7) * step, rail)
         b.kind, b.slot, b.absent, b.trinket = "trinket", slot, true, true
         b.cd = RD.Sweep(b.face, true)                -- the item's own cooldown over its icon (never the GCD loop)
+        RD.TrinketChip(b)
         b:EnableMouse(false)
         b:Hide()
         RD[key] = b
@@ -5447,13 +5454,14 @@ end
 function RD.IconCurve(at, full)
     at = math.max(0.02, math.min(tonumber(at) or RD.TOOL_GUESS, 0.98))
     full = tonumber(full)
-    local key = math.floor(at * 100 + 0.5) .. ":" .. (full and math.floor(full * 100 + 0.5) or "-")
+    local F = RD.Faded()
+    local key = math.floor(at * 100 + 0.5) .. ":" .. (full and math.floor(full * 100 + 0.5) or "-") .. ":" .. F
     if RD.iconCurves[key] then return RD.iconCurves[key] end
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
     local ok, c = pcall(C_CurveUtil.CreateColorCurve)
     if not ok or not c or not c.AddPoint then return nil end
     if c.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Linear then pcall(c.SetType, c, Enum.LuaCurveType.Linear) end
-    local x, F = math.floor(at * 100 + 0.5) / 100, RD.ICON_FADED
+    local x = math.floor(at * 100 + 0.5) / 100
     if full and full < x then
         pcall(c.AddPoint, c, 0.00, CreateColor(1, 1, 1, 1))
         pcall(c.AddPoint, c, full, CreateColor(1, 1, 1, 1))     -- full and below: bright
@@ -5493,6 +5501,7 @@ function RD.BuffLeft(name)
 end
 function RD.CascadeAlpha(left)
     if left == nil then return nil end
+    if not RD.Sw("smartlit") then return 1 end                   -- always lit
     return math.max(RD.BUFF_DIM_FLOOR, 1 - left)
 end
 
@@ -6678,6 +6687,64 @@ function RD.TrinketUse(slot)
     if type(use) ~= "string" or use == "" then return nil end
     return id, use
 end
+--[[ THE TRINKET CHIP (26 Nov 2026, Arn's pick B of https://claude.ai/artifact/4AMhTF198MPf4cz7dPxyEX - "The time takes the
+  word's place"): beside the icon, the first word of the trinket's name ("BURST", "ENAMORED"); while it cools, the CLIENT's
+  countdown in that place instead (a Cooldown frame, swipe off, numbers on, as the totem timers: it holds in a fight), in
+  amber. Nothing of ours ticks: the word comes back on the frame's own OnCooldownDone. The click spot covers the word too
+  (hit rect, set out of a fight). Right-click: the trinket list (Trinkets.lua, the BiS>Deck window's TRINKETS tab). ]]
+RD.TRINK_FONT = 10
+RD.TRINK_MIN_W = 24                                 -- the word's box is never narrower than a "4:59"
+RD.TRINK_FULL = 7200                                -- the client writes minutes:seconds under this (a trinket waits up to 2 h)
+function RD.TrinketChip(b)
+    b.word = b:CreateFontString(nil, "OVERLAY")
+    b.word:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", RD.TRINK_FONT, "")
+    b.word:SetPoint("LEFT", b, "RIGHT", 3, 0)
+    b.word:SetTextColor(0.93, 0.91, 0.96, 1)                                 -- art
+    local ok, cd = pcall(CreateFrame, "Cooldown", nil, b, "CooldownFrameTemplate")
+    if ok and cd then
+        cd:SetPoint("TOPLEFT", b, "TOPRIGHT", 1, 0)
+        cd:SetSize(RD.TRINK_MIN_W, RD.SYS_PX)
+        if cd.SetDrawSwipe then cd:SetDrawSwipe(false) end
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+        if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TRINK_FULL) end
+        if cd.GetRegions then                                                 -- the client's number, in amber
+            for _, reg in ipairs({ cd:GetRegions() }) do
+                if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" then
+                    if reg.SetTextColor then pcall(reg.SetTextColor, reg, RD.ATTN_AMBER[1], RD.ATTN_AMBER[2], RD.ATTN_AMBER[3], 1) end
+                    if reg.SetFont then pcall(reg.SetFont, reg, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", RD.TRINK_FONT, "") end
+                end
+            end
+        end
+        cd:SetScript("OnCooldownDone", function() RD.PaintTrinkets() end)
+        b.num = cd
+    end
+    b:HookScript("PostClick", function(_, button)
+        if button == "RightButton" and not combat() and NS.CU and NS.CU.Open then NS.CU.Open("trinkets") end
+    end)
+end
+--- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
+function RD.TrinketWord(name)
+    if type(name) ~= "string" then return nil end
+    local w = name:match("^%s*([^%s]+)")
+    if not w then return nil end
+    w = w:gsub("[,:]+$", "")
+    return w:upper()
+end
+--- The chip's width: the icon, the gap, the word's box (its word, never under a "4:59").
+function RD.SizeChip(b)
+    local ww = RD.TRINK_MIN_W
+    if b.word and b.word.GetStringWidth then
+        local ok, w = pcall(b.word.GetStringWidth, b.word)
+        if ok and type(w) == "number" and w == w then ww = math.max(ww, math.ceil(w) + 2) end
+    end
+    if b.num then b.num:SetSize(ww, RD.SYS_PX) end
+    b.chipW = RD.SYS_PX + 3 + ww
+    if b.SetHitRectInsets and not combat() then pcall(b.SetHitRectInsets, b, 0, -(3 + ww), 0, 0) end
+    return b.chipW
+end
+
 function RD.ArmTrinkets()
     if combat() then return false end
     local nameOf = (C_Item and C_Item.GetItemNameByID) or GetItemInfo
@@ -6685,11 +6752,8 @@ function RD.ArmTrinkets()
         local b = RD[key]
         if b then
             local id, use = RD.TrinketUse(slot)
-            -- THE BINDS' OWN SEQUENCE FIRST (24 Nov 2026, Mouse.lua FM.TrinketSeq): early in a fight a click here uses it the
-            -- way a bind would and counts for the binds (no bind meets it cooling); once that sequence rests, the plain /use
-            -- under it fires a trinket that came back mid-fight (Arn: "what if a 2 min trinket comes back during a fight")
-            local seq = NS.FM and NS.FM.TrinketSeq and NS.FM.TrinketSeq(slot)
-            local macro = id and ((seq and (seq .. "\n") or "") .. "/use " .. slot) or nil
+            -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with)
+            local macro = id and ("/use " .. slot) or nil
             b:SetAttribute("*type1", macro and "macro" or nil)
             b:SetAttribute("*macrotext1", macro)
             b:EnableMouse(macro and true or false)
@@ -6699,26 +6763,32 @@ function RD.ArmTrinkets()
                 local okN, nm = false, nil
                 if nameOf then okN, nm = pcall(nameOf, id) end
                 nm = okN and plain(nm) or nil
-                -- A MANA TRINKET (24 Nov 2026, Arn: "put the enamoured water totem in the blue box since its a mana thing
-                -- and does it have the smart light up thing when im getting low on mana?"): its use says "mana" - it goes
-                -- in the blue box, learns what it restores like the potion (RD.LearnTool) and lights by the same curves
+                -- A MANA TRINKET (24 Nov 2026, Arn: "does it have the smart light up thing when im getting low on mana?"): its
+                -- use says "mana" - it learns what it restores like the potion (RD.LearnTool) and lights by the same curves
                 local words = itemWords(id)
                 b.use = use
                 b.mana = (use .. " " .. (words or "")):lower():find("mana", 1, true) and true or nil
                 local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
+                local foot = "  Right-click: your trinket list."
                 if b.mana then
                     RD.LearnTool(b, words)
                     toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
+                    b.tip[2] = b.tip[2] .. foot
                 else
-                    b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." }
+                    b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." .. foot }
                 end
+                b.wordText = RD.TrinketWord(nm) or ("TRINKET " .. (slot - 12))
+                -- (the deck only: the radar's scope carries no words)
+                if b.word then b.word:SetText((RD.Deck and RD.Deck()) and b.wordText or "") end
+                RD.SizeChip(b)
                 -- the worn slot's own icon (always known for what you wear), else the item's
                 local okT, tex = false, nil
                 if GetInventoryItemTexture then okT, tex = pcall(GetInventoryItemTexture, "player", slot) end
                 if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, id) end
                 b.face:SetAlpha(1)
             else
-                b.tip = nil
+                b.tip, b.wordText, b.chipW = nil, nil, nil
+                if b.word then b.word:SetText("") end
                 b.face:SetAlpha(0)
                 b:Hide()
             end
@@ -6727,8 +6797,8 @@ function RD.ArmTrinkets()
     RD.PaintTrinkets()
     return true
 end
---- The trinkets' cooldowns: the client's swipe over the icon (handed whatever it answers), and the icon faded while it
---- cools when the answer is plain. Called on SPELL_UPDATE_COOLDOWN and at the arm.
+--- The trinkets' cooldowns: the client's swipe over the icon and its number in the word's place (handed whatever it
+--- answers), the icon faded and the word away while it cools. On SPELL_UPDATE_COOLDOWN, at the arm and when one is done.
 function RD.PaintTrinkets()
     local get = GetInventoryItemCooldown
     local n = 0
@@ -6740,6 +6810,15 @@ function RD.PaintTrinkets()
             local s, d
             if ok then s = plain(start) d = plain(dur) end
             local cooling = type(s) == "number" and type(d) == "number" and s > 0 and d > 2
+                            and s + d > ((GetTime and GetTime()) or 0)
+            -- the time in the word's place: the client's number while it cools (a GCD is not cooling: no number for it)
+            if b.num and b.num.SetCooldown then
+                if cooling then pcall(b.num.SetCooldown, b.num, s, d)
+                elseif b.num.Clear then pcall(b.num.Clear, b.num)
+                else pcall(b.num.SetCooldown, b.num, 0, 0) end
+            end
+            if b.word then if cooling then b.word:Hide() else b.word:Show() end end
+            b.cooling = cooling
             local lit = false
             local water = b.mana and RD.waterUntil > ((GetTime and GetTime()) or 0)
             if b.mana and not cooling and not water and UnitPowerPercent then
@@ -6758,7 +6837,7 @@ function RD.PaintTrinkets()
                 end
             end
             if not lit then
-                if b.food then b.food:SetVertexColor(1, 1, 1, (cooling or water) and RD.ICON_FADED or 1) end
+                if b.food then b.food:SetVertexColor(1, 1, 1, (cooling or water) and RD.Faded() or 1) end
                 if b.attn then b.attn:Hide() end
             end
             n = n + 1
@@ -7681,7 +7760,7 @@ function RD.PaintTools(fight)
                 local ic = RD.IconCurve(b.at, RD.FullFor(b))
                 local okI, icol = false, nil
                 if ic then okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic) end
-                if not (okI and paint({ b.food }, icol)) then b.food:SetVertexColor(1, 1, 1, RD.ICON_FADED) end
+                if not (okI and paint({ b.food }, icol)) then b.food:SetVertexColor(1, 1, 1, RD.Faded()) end
             end
             local sw = b.cd and not b.cd.wait and RD.SwipeCurve(b.at)   -- a cooling disc keeps its own colour
             if drew and sw then

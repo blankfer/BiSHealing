@@ -786,6 +786,9 @@ local function button(parent, w, h, label, onClick)
     b:SetScript("OnClick", onClick)
     return b
 end
+-- the card's kit, for a tab another file builds (Trinkets.lua): the same rows, buttons, edges and colours
+CU.Kit = { text = text, edges = edges, hoverRow = hoverRow, button = button,
+           tones = function() CU.Tones() return INK, DIM, ACC, GOLD, GOOD end }
 
 --- One picker: a search box, category chips, a list. `kind` = "look" | "sound".
 local function picker(card, kind, x, y, w)
@@ -1219,7 +1222,8 @@ end
   CUES = every cue but the debuffs; DEBUFFS = the debuff cues. The seven rows that were a switch AND a cue live on the
   cue tabs only (RD.SwOwned). The switches button opens it on DECK, /bish cues on CUES; it opens where you last dragged
   it, else against the deck's right edge (where the switches opened), else the middle. ]]
-CU.TABS = { { id = "deck", name = "DECK" }, { id = "cues", name = "CUES" }, { id = "debuffs", name = "DEBUFFS" } }
+CU.TABS = { { id = "deck", name = "DECK" }, { id = "cues", name = "CUES" }, { id = "debuffs", name = "DEBUFFS" },
+            { id = "trinkets", name = "TRINKETS" } }   -- (26 Nov 2026: the trinket priority list, Trinkets.lua TR.Page)
 CU.tab = "cues"
 
 --- The cues on the open tab, in row order (your class only, as CU.Shown).
@@ -1294,12 +1298,22 @@ function CU.SetTab(id)
     local c = CU.Card()
     local RD = NS.RD
     CU.tab = id
+    if id ~= "trinkets" and NS.TR and NS.TR.page then NS.TR.page:Hide() end
     if id == "deck" and RD and RD.BuildSwitches then
         local p = CU.Host(RD.BuildSwitches())
         c.page:Hide()
         p:Show()
         CU.FitDeck(c, p)
         if RD.PaintSwitches then RD.PaintSwitches() end
+        c.code:ClearAllPoints()
+        c.code:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 5)
+        c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 5)
+    elseif id == "trinkets" and NS.TR and NS.TR.Page then
+        if RD and RD.swPanel and RD.swPanel.hosted then RD.swPanel:Hide() end
+        c:SetSize(CU.CARD_W, CU.CARD_H)
+        c.page:Hide()
+        local tp = NS.TR.Page(c)
+        if tp then tp:Show() NS.TR.Paint() end
         c.code:ClearAllPoints()
         c.code:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 8, 5)
         c.code:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", -8, 5)
