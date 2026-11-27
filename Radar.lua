@@ -3701,6 +3701,7 @@ function RD.OpenFly(t)
     local col = t and RD.flyCols and RD.flyCols[t.k]
     if not col or (col.count or 0) == 0 then RD.flyWhy = "nothing of its kind to pick" return false end
     for _, c in pairs(RD.flyCols) do if c ~= col and c:IsShown() then c:Hide() end end
+    if NS.TR and NS.TR.CloseFly and NS.TR.flyFrom then NS.TR.CloseFly("a totem opened") end   -- (one pop-out at a time)
     RD.FlyAim(col, t)
     if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(t) then GameTooltip:Hide() end   -- (it would cover the column)
     RD.flyFrom, RD.flyAt, RD.flyOffAt = t, (GetTime and GetTime()) or 0, nil
@@ -7158,47 +7159,78 @@ function RD.ManaTrinket(use, words)
        or t:find("gain %d+ mana") or t:find("gives? %d+ mana") then return true end
     return nil
 end
+--[[ EVERY WORN TRINKET HAS ITS CHIP (26 Nov 2026, Arn: "i change trinket and they went away because i think they dont have a on
+  use effect to click"): with no chip there was nothing to Shift over to switch back. A passive trinket gets its chip too -
+  icon, word, pink box; its click does nothing (no Use:), Shift and right-click work. An EMPTY slot gets one ("EMPTY", no icon)
+  while you carry a trinket that could go in it. Only with neither is there no chip. ]]
+--- Do you carry a trinket in your bags (one that could go on)?
+function RD.CarryTrinket()
+    local TR = NS.TR
+    if not (TR and TR.FlyList) then return false end
+    local ok, list = pcall(TR.FlyList, 13)
+    return ok and type(list) == "table" and #list > 0
+end
 function RD.ArmTrinkets()
     if combat() then return false end
     local nameOf = (C_Item and C_Item.GetItemNameByID) or GetItemInfo
+    local foot = "  Shift: your other trinkets pop out (in a fight, a pick waits for its end).  Right-click: your trinket list."
+    local carry = nil
     for key, slot in pairs(RD.TRINKET_SLOTS) do
         local b = RD[key]
         if b then
+            local worn
+            if GetInventoryItemID then
+                local okW, w = pcall(GetInventoryItemID, "player", slot)
+                worn = okW and plain(w) or nil
+                if type(worn) ~= "number" then worn = nil end
+            end
             local id, use = RD.TrinketUse(slot)
-            -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with)
+            if carry == nil and not worn then carry = RD.CarryTrinket() end
+            local shown = worn or carry
+            -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with); a passive
+            -- trinket or an empty slot: no click of its own
             local macro = id and ("/use " .. slot) or nil
             b:SetAttribute("*type1", macro and "macro" or nil)
             b:SetAttribute("*macrotext1", macro)
-            b:EnableMouse(macro and true or false)
-            b.macro, b.item, b.absent = macro, id, not id
+            b:EnableMouse(shown and true or false)
+            b.macro, b.item, b.absent, b.worn = macro, worn, not shown, worn
             b.mana, b.use, b.at, b.amount, b.guess = nil, nil, nil, nil, nil
-            if id then
+            if worn then
                 local okN, nm = false, nil
-                if nameOf then okN, nm = pcall(nameOf, id) end
+                if nameOf then okN, nm = pcall(nameOf, worn) end
                 nm = okN and plain(nm) or nil
-                -- A MANA TRINKET (24 Nov 2026, Arn: "does it have the smart light up thing when im getting low on mana?"): its
-                -- use says "mana" - it learns what it restores like the potion (RD.LearnTool) and lights by the same curves
-                local words = itemWords(id)
-                b.use = use
-                b.mana = RD.ManaTrinket(use, words)
                 local title = type(nm) == "string" and nm or ("Trinket " .. (slot - 12))
-                local foot = "  Shift: your other trinkets pop out (in a fight, a pick waits for its end).  Right-click: your trinket list."
-                if b.mana then
-                    RD.LearnTool(b, words)
-                    toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
-                    b.tip[2] = b.tip[2] .. foot
+                if use then
+                    -- A MANA TRINKET (24 Nov 2026, Arn: "does it have the smart light up thing when im getting low on mana?"):
+                    -- its use gives mana back - it learns what it restores like the potion (RD.LearnTool), the same curves
+                    local words = itemWords(worn)
+                    b.use = use
+                    b.mana = RD.ManaTrinket(use, words)
+                    if b.mana then
+                        RD.LearnTool(b, words)
+                        toolTip(b, title, "Use: " .. use .. " (trinket slot " .. (slot - 12) .. ")")
+                        b.tip[2] = b.tip[2] .. foot
+                    else
+                        b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." .. foot }
+                    end
                 else
-                    b.tip = { title, "Use: " .. use .. ".  Click to use it (trinket slot " .. (slot - 12) .. ")." .. foot }
+                    b.tip = { title, "No Use: to click (trinket slot " .. (slot - 12) .. ")." .. foot }
                 end
                 b.wordText = RD.TrinketWord(nm) or ("TRINKET " .. (slot - 12))
-                -- (the deck only: the radar's scope carries no words)
-                if b.word then b.word:SetText((RD.Deck and RD.Deck()) and b.wordText or "") end
-                RD.SizeChip(b)
                 -- the worn slot's own icon (always known for what you wear), else the item's
                 local okT, tex = false, nil
                 if GetInventoryItemTexture then okT, tex = pcall(GetInventoryItemTexture, "player", slot) end
-                if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, id) end
+                if not (okT and RD.RealIcon(b, plain(tex))) then RD.ItemIcon(b, worn) end
                 b.face:SetAlpha(1)
+            elseif carry then
+                b.tip = { "Trinket " .. (slot - 12) .. ": empty", "Nothing on." .. foot }
+                b.wordText = "EMPTY"
+                b.face:SetAlpha(0)
+            end
+            if shown then
+                -- (the deck only: the radar's scope carries no words)
+                if b.word then b.word:SetText((RD.Deck and RD.Deck()) and b.wordText or "") end
+                RD.SizeChip(b)
             else
                 b.tip, b.wordText, b.chipW = nil, nil, nil
                 if b.word then b.word:SetText("") end

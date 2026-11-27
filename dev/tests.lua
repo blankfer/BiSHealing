@@ -16175,8 +16175,20 @@ do
                 -- a passive trinket in 13, nothing in 14: no buttons, no gap
                 STATE.worn = { [13] = 11111 }
                 RD.Arm()
-                ok(RD.trink1.absent and RD.trink2.absent and not RD.trink1:IsShown() and not RD.trink2:IsShown(),
-                   "a trinket with no Use:, or none: no button")
+                -- (Arn, 26 Nov: "i change trinket and they went away because i think they dont have a on use effect")
+                ok(not RD.trink1.absent and RD.trink1:IsShown() and RD.trink1.macro == nil and RD.trink1:GetAttribute("*type1") == nil
+                   and RD.trink1.tip and RD.trink1.tip[2]:find("No Use:", 1, true) and RD.trink1.chipW and RD.trink1.__mouse ~= false,
+                   "a passive trinket keeps its chip: no click of its own, Shift and right-click still there")
+                ok(RD.trink2.absent and not RD.trink2:IsShown(), "an empty slot with no trinket in your bags: no chip")
+                do  -- an empty slot while you carry a trinket: an EMPTY chip, so you can put one on
+                    local keepCarry = RD.CarryTrinket
+                    RD.CarryTrinket = function() return true end
+                    RD.ArmTrinkets()
+                    ok(not RD.trink2.absent and RD.trink2.wordText == "EMPTY" and RD.trink2.macro == nil and RD.trink2.chipW,
+                       "an empty slot, a trinket in your bags: an EMPTY chip to Shift over", RD.trink2.wordText)
+                    RD.CarryTrinket = keepCarry
+                    RD.ArmTrinkets()
+                end
                 local railX = RD.rations and x(RD.rations)
                 -- the water spirit put on (out of a fight): the event lays the deck out again, a button after the drink
                 STATE.worn = { [13] = 20503 }
@@ -19170,6 +19182,38 @@ do
         CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
         ok(not TR.col:IsShown() and not TR.flyWatch:IsShown() and not (TR.flyKeys.__events or {}).MODIFIER_STATE_CHANGED,
            "off both a moment: closed, Shift no longer heard")
+        -- THE WHOLE CHIP COUNTS (Arn: "on the icon holding shift it stays open on the words it blinks"): the mouse on the
+        -- word = inside the chip's click spot (no OnLeave), though off its 22 px frame
+        chip:GetScript("OnEnter")(chip)
+        chip.__mouseOver, TR.col.__mouseOver = false, false
+        CLOCK = CLOCK + 0.1 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        ok(TR.col:IsShown(), "the mouse on the trinket's word: it stays open (no blink)")
+        -- ONE POP-OUT AT A TIME (Arn: "if i put my mouse right in the gap both open")
+        do
+            local RD = NS.RD
+            local keepCols, keepFrom = RD.flyCols, RD.flyFrom
+            local tcol = CreateFrame("Frame", nil, UIParent)
+            tcol.b, tcol.count, tcol.size = { CreateFrame("Button", nil, tcol) }, 1, 22
+            tcol:Hide()
+            local box = CreateFrame("Button", nil, UIParent)
+            box.k = 1
+            RD.flyCols = { [1] = tcol }
+            ok(RD.OpenFly(box) and tcol:IsShown() and not TR.col:IsShown() and not TR.flyFrom,
+               "a totem pops out: the trinket column closes")
+            chip:GetScript("OnLeave")(chip)
+            chip:GetScript("OnEnter")(chip)
+            ok(TR.col:IsShown() and not tcol:IsShown() and not RD.flyFrom, "a trinket pops out: the totem column closes")
+            -- in a fight the game's snippets open a totem column: off the trinket, the trinket's goes
+            tcol:Show()
+            chip:GetScript("OnLeave")(chip)
+            chip.__mouseOver, TR.col.__mouseOver = false, false
+            TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+            ok(not TR.col:IsShown() and TR.flyWhy == "a totem column opened", "a totem column showing and the mouse off the trinket: it closes", TR.flyWhy)
+            tcol:Hide()
+            RD.flyCols, RD.flyFrom = keepCols, keepFrom
+            if RD.flyWatch then RD.flyWatch:Hide() end
+        end
         STATE.shift = false
         TR.hold, TR.queue = {}, {}
         C_Item.EquipItemByName = function() n = n + 1 end
