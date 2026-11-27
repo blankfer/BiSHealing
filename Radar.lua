@@ -3336,8 +3336,23 @@ end
   told apart by its moment: it went down within RD.BORROWED_FOR of the trinket's use, RD.trinketTotemAt) stand in the water
   place and show on its timer, but the box keeps dropping the totem it had. ]]
 RD.BORROWED_FOR = 2
+--- A TOTEM YOU DO NOT KNOW IS NEVER THE BOX'S (26 Nov 2026, Arn's shot: Enamored Water Spirit's totem is "Ancient Mana Spring
+--- Totem" - not a spell in your book - and the water box learned it; its click then did nothing). Asked of the spell book
+--- (FM.Ranks); a book not read yet answers "known" (nothing is refused on a guess).
+function RD.KnowsTotem(name)
+    local FM = NS.FM
+    local spell = RD.TotemSpell(name)
+    if not (spell and FM and FM.Ranks) then return true end
+    local ok, ranks = pcall(FM.Ranks, spell)
+    if not (ok and type(ranks) == "table") then return true end
+    if #ranks > 0 then return true end
+    local okB, base = pcall(FM.Ranks, RD.BOOK_SURE)                       -- (the book read at all? a shaman always has it)
+    return not (okB and type(base) == "table" and #base > 0)
+end
+RD.BOOK_SURE = "Healing Wave"
 function RD.NotForBox(name, start)
     if RD.TotemSpell(name) == RD.TIDE then return "mana tide" end
+    if not RD.KnowsTotem(name) then return "not yours" end
     local at = RD.trinketTotemAt
     if at and type(start) == "number" and math.abs(start - at) <= RD.BORROWED_FOR then return "a trinket's" end
     return nil
@@ -3358,6 +3373,8 @@ function RD.LearnTimers()
         if type(name) == "string" and name ~= "" and not older and not RD.NotForBox(name, start) then
             d.totemSlots[t.slot] = RD.TotemSpell(name)
         end
+        -- (a name learned before 26 Nov that is no spell of yours - the trinket's "Ancient Mana Spring Totem" - is let go)
+        if d.totemSlots[t.slot] and not RD.KnowsTotem(d.totemSlots[t.slot]) then d.totemSlots[t.slot] = nil end
         local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
         t:SetAttribute("type1", want and "macro" or nil)
@@ -7069,10 +7086,10 @@ function RD.TrinketUse(slot)
     if type(id) ~= "number" then return nil end
     local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
     if not getSpell then return nil end
-    local okS, use = pcall(getSpell, id)
+    local okS, use, useId = pcall(getSpell, id)
     use = okS and plain(use) or nil
     if type(use) ~= "string" or use == "" then return nil end
-    return id, use
+    return id, use, okS and plain(useId) or nil
 end
 --[[ THE TRINKET CHIP (26 Nov 2026, Arn's pick B of https://claude.ai/artifact/4AMhTF198MPf4cz7dPxyEX - "The time takes the
   word's place"): beside the icon, the first word of the trinket's name ("BURST", "ENAMORED"); while it cools, the CLIENT's
@@ -7229,7 +7246,8 @@ function RD.ArmTrinkets()
                 worn = okW and plain(w) or nil
                 if type(worn) ~= "number" then worn = nil end
             end
-            local id, use = RD.TrinketUse(slot)
+            local id, use, useId = RD.TrinketUse(slot)
+            b.useId = useId                                               -- (its cast is heard by id too: RD.OnCast)
             if carry == nil and not worn then carry = RD.CarryTrinket() end
             local shown = worn or carry
             -- the slot, plain (26 Nov 2026: no bind carries a trinket any more, so nothing to keep in step with); a passive
@@ -7968,7 +7986,7 @@ function RD.OnCast(unit, spellID)
     -- is timed, so a totem it puts down is never taken for the box's own (RD.NotForBox)
     for key in pairs(RD.TRINKET_SLOTS) do
         local t = RD[key]
-        if name and t and t.use == name then RD.trinketTotemAt = now end
+        if t and ((name and t.use == name) or (t.useId and t.useId == spellID)) then RD.trinketTotemAt = now end
         if name and t and t.mana and t.use == name then
             RD.waterUntil = now + RD.WATER.spring
             RD.PaintTrinkets()

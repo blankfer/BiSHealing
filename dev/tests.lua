@@ -1140,6 +1140,14 @@ local BOOK = setmetatable({}, {
         if FM and FM.bookEvents then fire(FM.bookEvents, "SPELLS_CHANGED") end
     end,
 })
+-- THE TOTEMS THIS SHAMAN KNOWS, for the tests that need them in the book (26 Nov 2026: a totem box only learns a totem you
+-- know - RD.KnowsTotem - so a test of the boxes teaches the book its totems first, and takes them away after)
+STATE.TOTEM_BOOK = { "Mana Spring Totem", "Healing Stream Totem", "Flametongue Totem", "Strength of Earth Totem",
+                     "Magma Totem", "Searing Totem", "Windfury Totem", "Grace of Air Totem" }
+function STATE.learnTotems(on)
+    for i, n in ipairs(STATE.TOTEM_BOOK) do BOOK[90 + i] = on and { name = n, rank = "" } or nil end
+    if NS.FM and NS.FM.BookChanged then NS.FM.BookChanged() end
+end
 -- AND WHEN A TEST SWAPS THE CALL RATHER THAN THE PAGE. Several blocks below replace
 -- C_SpellBook.GetSpellBookItemInfo to give a spell a different id, or none - which stands for the
 -- book filling in its ids at login, or a rank being learned. The client fires the same event for
@@ -15672,6 +15680,7 @@ do
         local keepT = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
         local keepTex = _G.C_Spell.GetSpellTexture
         _G.C_Spell.GetSpellTexture = function(n) return n == "Mana Spring Totem" and 136053 or nil end
+        STATE.learnTotems(true)
         local timers = {}
         for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
         ok(timers[1].slot == 4 and timers[2].slot == 3 and timers[3].slot == 2 and timers[4].slot == 1,
@@ -15709,6 +15718,17 @@ do
         RD.trinketTotemAt = CLOCK - 60
         RD.LearnTimers()
         ok(w.totem == "Mana Spring Totem", "your own Mana Spring, long after a trinket use: learned as before", w.totem)
+        -- A TOTEM YOU DO NOT KNOW (Arn's shot: Enamored's totem is "Ancient Mana Spring Totem", the box learned it)
+        STATE.totemName[3] = "Ancient Mana Spring Totem"
+        RD.LearnTimers()
+        ok(w.totem == "Mana Spring Totem" and RD.NotForBox("Ancient Mana Spring Totem", 0) == "not yours",
+           "a totem that is no spell of yours (the trinket's Ancient Mana Spring): never learned", w.totem)
+        NS.DB().radar.totemSlots[3] = "Ancient Mana Spring Totem"              -- (learned before this fix)
+        RD.LearnTimers()
+        ok(NS.DB().radar.totemSlots[3] == nil and w.totem == nil and w:GetAttribute("macrotext1") == nil,
+           "one learned before the fix is let go: the box waits for your own totem", tostring(w.totem))
+        STATE.totemName[3] = "Mana Spring Totem"
+        RD.LearnTimers()
         RD.trinketTotemAt = nil
         STATE.totemName[3] = "Healing Stream Totem"
         RD.LearnTimers()
@@ -15745,6 +15765,7 @@ do
         NS.DB().radar.totemSlots = nil
         for k = 1, 4 do timers[k]:Hide() end
         _G.C_Spell.GetSpellTexture = keepTex
+        STATE.learnTotems(false)
     end
     -- THE TOTEM POP-OUT (Arn, 26 Nov: "make these totem button do the pop out when i shift [hover] like the bis tool totems ...
     -- when i let go of shift it selects and not drop it but if i hold shift and click i drop")
@@ -15764,6 +15785,7 @@ do
         STATE.multiCast = { [1] = { 3599, 3599, 8190, 8227 }, [3] = { 5675, 5394 } }
         local keepTot = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
         for k = 1, 4 do TOTEMS[k] = false end                          -- (no totem standing: the picks alone decide)
+        STATE.learnTotems(true)
         local timers = {}
         for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
         local fire1, water = timers[4], timers[2]
@@ -15919,6 +15941,7 @@ do
         for _, b in ipairs(fb) do b:SetScript("PostClick", b.__pc) b.__pc = nil end
         STATE.shift, STATE.multiCast, RD.flyLists = false, nil, nil
         for k = 1, 4 do TOTEMS[k] = keepTot[k] end
+        STATE.learnTotems(false)
         RD.CloseFly()
         NS.DB().radar.totemSlots = nil
         for k = 1, 4 do timers[k]:Hide() end
@@ -16296,6 +16319,11 @@ do
                     RD.OnCast("player", 24854)
                     ok(RD.trinketTotemAt == CLOCK and RD.NotForBox("Mana Spring Totem", CLOCK + 0.3),
                        "the trinket's use is heard: a Mana Spring that goes down with it is the trinket's, not the box's")
+                    -- the game names the cast otherwise than the item's use: heard by the use's spell id all the same
+                    C_Spell.GetSpellName = function(id) if id == 24854 then return "Summon Ancient Mana Spring" end return keepGN(id) end
+                    RD.trinketTotemAt = nil
+                    RD.OnCast("player", 24854)
+                    ok(RD.trinketTotemAt == CLOCK, "a cast named otherwise (the game's own name for it): heard by its spell id")
                     RD.trinketTotemAt = nil
                     C_Spell.GetSpellName = keepGN
                 end
