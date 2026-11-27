@@ -7085,6 +7085,10 @@ RD.TRINK_FONT = 10
 -- look and both modes - cooling shows by the client's sweep and the time in the word's place
 RD.TRINK_BOX_COL = RD.SHIPS[1].accent
 RD.TRINK_PAD = 3
+-- READY OR NOT AT A GLANCE (26 Nov 2026, Arn: "build 1" - the pink box faint while it cools, one flash when it is back, a
+-- fight or not; no sound, no chat): RD.TrinketReadyLook
+RD.TRINK_COOL_EDGE = 0.25                          -- the pink box's alpha while the trinket cools
+RD.TRINK_FLASH = { low = 0.15, out = 0.12, back = 0.3 }
 RD.TRINK_MIN_W = 24                                 -- the word's box is never narrower than a "4:59"
 -- the client writes minutes:seconds under this. 7200 came out "8m" on Arn's deck (26 Nov: the client did not take it); the
 -- totem timers' 600 is the one seen working live ("4:59"), so a trinket shows "15m" above ten minutes, "9:59" under
@@ -7121,6 +7125,18 @@ function RD.TrinketChip(b)
     local P = RD.TRINK_BOX_COL
     b.pink = CreateFrame("Frame", nil, b)
     b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 2)    -- (2 px: a 1.5 line can vanish between screen pixels)
+    -- the flash when it comes back: the box dips and returns, once (the client runs it; nothing of ours ticks)
+    local okG, g = pcall(b.pink.CreateAnimationGroup, b.pink)
+    if okG and g then
+        local F = RD.TRINK_FLASH
+        local a1 = g:CreateAnimation("Alpha")
+        a1:SetFromAlpha(1) a1:SetToAlpha(F.low) a1:SetDuration(F.out)
+        if a1.SetOrder then a1:SetOrder(1) end
+        local a2 = g:CreateAnimation("Alpha")
+        a2:SetFromAlpha(F.low) a2:SetToAlpha(1) a2:SetDuration(F.back)
+        if a2.SetOrder then a2:SetOrder(2) end
+        b.pinkFlash = g
+    end
     if NS.TR and NS.TR.HookChip then NS.TR.HookChip(b) end        -- Shift + hover: your other trinkets (Trinkets.lua)
 end
 --- THE TIME IN THE MIDDLE OF THE WORD'S PLACE (26 Nov 2026, Arn's shot: "center cooldown" - the client's number sat against the
@@ -7139,6 +7155,18 @@ function RD.CenterNum(b)
         end
     end
     return n
+end
+--- The pink box: faint while the trinket cools; back at full and ONE flash the moment it is ready again (a GCD never counts:
+--- `cooling` is the trinket's own wait).
+function RD.TrinketReadyLook(b, cooling)
+    if not (b and b.pink) then return nil end
+    b.pink:SetAlpha(cooling and RD.TRINK_COOL_EDGE or 1)
+    local back = b.cooling and not cooling
+    if back and b.pinkFlash and b.pinkFlash.Play then
+        if b.pinkFlash.Stop then b.pinkFlash:Stop() end
+        b.pinkFlash:Play()
+    end
+    return back and "flash" or (cooling and "faint" or "lit")
 end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
@@ -7280,6 +7308,7 @@ function RD.PaintTrinkets()
                 else pcall(b.num.SetCooldown, b.num, 0, 0) end
             end
             if b.word then if cooling then b.word:Hide() else b.word:Show() end end
+            RD.TrinketReadyLook(b, cooling)
             b.cooling = cooling
             -- the icon at full, always (Arn, 26 Nov: "on all looks always show trinket icon lit")
             if b.food then

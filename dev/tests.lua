@@ -16245,6 +16245,19 @@ do
                 cds[13] = nil
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
                 ok(t.food.__vertex and t.food.__vertex[4] == 1 and t.word:IsShown(), "ready: full, the word back")
+                -- READY OR NOT AT A GLANCE (Arn: "build 1"): the pink box faint while it cools, one flash when it is back
+                local fl = t.pinkFlash
+                ok(fl and fl:IsPlaying() and t.pink:GetAlpha() == 1, "it came back: the pink box at full and its one flash plays")
+                ok(fl.looping == nil and fl.anims[1].to == RD.TRINK_FLASH.low and fl.anims[2].to == 1, "one dip and back, never a loop")
+                fl:Stop()
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(not fl:IsPlaying(), "ready and still ready: no second flash")
+                cds[13] = { GetTime() - 5, 600 }
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(t.pink:GetAlpha() == RD.TRINK_COOL_EDGE and not fl:IsPlaying(), "cooling again: the pink box faint")
+                cds[13] = nil
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                fl:Stop()
                 -- TWO MODES (Arn, 26 Nov: "always lit smart lit, we keep the same border rules but always lit always shows
                 -- the icons"): the Smart lit switch off = always lit
                 ok(RD.Sw("smartlit") and RD.Faded() == RD.ICON_FADED, "smart lit by default: a waiting icon dim")
