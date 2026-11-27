@@ -2375,7 +2375,8 @@ function RD.DeckTools(W, top)
     for _, b in ipairs(rest) do all[#all + 1] = b end
     for i = #pre, 1, -1 do table.insert(rest, 1, pre[i]) end   -- a narrow window: the mana line first, the rest under
     -- each takes its icon, a trinket chip its word too (b.chipW); a line holds what fits across the window
-    local function wide(b) return b.chipW or S end
+    -- (a trinket chip also keeps RD.TRINK_PAD each side for its pink box, so no two boxes touch)
+    local function wide(b) return b.chipW and (b.chipW + 2 * RD.TRINK_PAD) or S end
     local room = W - 2 * C.pad
     local lines = {}
     local function wrap(list)
@@ -2398,7 +2399,7 @@ function RD.DeckTools(W, top)
         local x = (W - lw) / 2
         local cy = top + (l - 1) * (S + C.gap) + S / 2
         for _, b in ipairs(line) do
-            xs[b], ys[b] = x + S / 2, cy
+            xs[b], ys[b] = x + (b.chipW and RD.TRINK_PAD or 0) + S / 2, cy
             at(b, xs[b], cy)
             if b.swHidden then b.swHidden = nil b:Show() end   -- the tools switch back on: the ones it hid
             x = x + wide(b) + gap
@@ -6693,6 +6694,11 @@ end
   amber. Nothing of ours ticks: the word comes back on the frame's own OnCooldownDone. The click spot covers the word too
   (hit rect, set out of a fight). Right-click: the trinket list (Trinkets.lua, the BiS>Deck window's TRINKETS tab). ]]
 RD.TRINK_FONT = 10
+-- PINK BOXES, ALWAYS LIT (26 Nov 2026, Arn: "on all looks always show trinket icon lit, put pink boxes around trinkets"):
+-- each chip in its own pink outline (the party ship's accent, as the blue box is the mana's), the icon at full in every
+-- look and both modes - cooling shows by the client's sweep and the time in the word's place
+RD.TRINK_BOX_COL = RD.SHIPS[1].accent
+RD.TRINK_PAD = 3
 RD.TRINK_MIN_W = 24                                 -- the word's box is never narrower than a "4:59"
 -- the client writes minutes:seconds under this. 7200 came out "8m" on Arn's deck (26 Nov: the client did not take it); the
 -- totem timers' 600 is the one seen working live ("4:59"), so a trinket shows "15m" above ten minutes, "9:59" under
@@ -6725,6 +6731,10 @@ function RD.TrinketChip(b)
     b:HookScript("PostClick", function(_, button)
         if button == "RightButton" and not combat() and NS.CU and NS.CU.Open then NS.CU.Open("trinkets") end
     end)
+    -- the pink box: a plain child of the button (it hides with it, takes no mouse), sized round the chip by RD.SizeChip
+    local P = RD.TRINK_BOX_COL
+    b.pink = CreateFrame("Frame", nil, b)
+    b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 1.5)
 end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
@@ -6743,6 +6753,11 @@ function RD.SizeChip(b)
     end
     if b.num then b.num:SetSize(ww, RD.SYS_PX) end
     b.chipW = RD.SYS_PX + 3 + ww
+    if b.pink then
+        b.pink:ClearAllPoints()
+        b.pink:SetPoint("TOPLEFT", b, "TOPLEFT", -2, 2)
+        b.pink:SetSize(b.chipW + 4, RD.SYS_PX + 4)
+    end
     if b.SetHitRectInsets and not combat() then pcall(b.SetHitRectInsets, b, 0, -(3 + ww), 0, 0) end
     return b.chipW
 end
@@ -6821,26 +6836,21 @@ function RD.PaintTrinkets()
             end
             if b.word then if cooling then b.word:Hide() else b.word:Show() end end
             b.cooling = cooling
-            local lit = false
-            local water = b.mana and RD.waterUntil > ((GetTime and GetTime()) or 0)
-            if b.mana and not cooling and not water and UnitPowerPercent then
-                -- ready, no water totem of yours standing (it would knock it down): the potion's ramp on your mana -
-                -- dim above what it restores, full at RD.FULL_AT.trinket - and the red / amber outline (the client's)
-                local ic = b.food and RD.IconCurve(b.at, RD.FullFor(b))
-                if ic then
-                    local okI, icol = pcall(UnitPowerPercent, "player", 0, true, ic)
-                    lit = okI and paint({ b.food }, icol) or false
-                end
-                local ac = lit and RD.AttnOn() and RD.AttnCurve(b.at)
-                if ac then
-                    local f = RD.Attn(b)
-                    local okA, acol = pcall(UnitPowerPercent, "player", 0, true, ac)
-                    if okA and paint(f.edges, acol) then f:Show() else f:Hide() end
-                end
+            -- the icon at full, always (Arn, 26 Nov: "on all looks always show trinket icon lit")
+            if b.food then
+                b.food:SetVertexColor(1, 1, 1, 1)
+                if b.food.SetDesaturated then pcall(b.food.SetDesaturated, b.food, false) end
             end
-            if not lit then
-                if b.food then b.food:SetVertexColor(1, 1, 1, (cooling or water) and RD.Faded() or 1) end
-                if b.attn then b.attn:Hide() end
+            -- a MANA trinket keeps its red / amber outline (the client's, on your mana), while ready and no water totem of
+            -- yours standing (it would knock it down)
+            local water = b.mana and RD.waterUntil > ((GetTime and GetTime()) or 0)
+            local ac = b.mana and not cooling and not water and UnitPowerPercent and RD.AttnOn() and RD.AttnCurve(b.at)
+            if ac then
+                local f = RD.Attn(b)
+                local okA, acol = pcall(UnitPowerPercent, "player", 0, true, ac)
+                if okA and paint(f.edges, acol) then f:Show() else f:Hide() end
+            elseif b.attn then
+                b.attn:Hide()
             end
             n = n + 1
         end

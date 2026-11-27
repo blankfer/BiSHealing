@@ -15985,6 +15985,13 @@ do
                 ok(RD.TrinketWord("Burst of Knowledge") == "BURST" and RD.TrinketWord("Talisman, of Old") == "TALISMAN"
                    and RD.TrinketWord(nil) == nil, "the first word, in capitals")
                 ok(x(RD.potion) - x(t) >= t.chipW, "the next tool starts after the word, never on it", x(RD.potion) - x(t))
+                -- its pink box (Arn, 26 Nov: "put pink boxes around trinkets"), round the whole chip, clear of the blue box
+                local pk = t.pink
+                ok(pk and pk.__parent == t and pk.__w == t.chipW + 4 and pk.edges and pk.edges[1],
+                   "a pink box round the chip (icon and word), a plain child of the button", pk and pk.__w)
+                local pinkRight = x(t) - RD.SYS_PX / 2 - 2 + pk.__w
+                local blueLeft = x(RD.potion) - RD.SYS_PX / 2 - 2
+                ok(pinkRight < blueLeft, "the pink box ends before the blue box starts", pinkRight .. " < " .. blueLeft)
                 local mb = RD.manaBox
                 ok(mb and mb:IsShown(), "the blue box still drawn round the mana group")
                 -- "does it have the smart light up thing": it learns what it restores (10 every 2 s for 1 min = 300 of
@@ -15996,7 +16003,7 @@ do
                 -- cooling: the swipe and a faded icon; ready again: full
                 cds[13] = { GetTime() - 5, 600 }
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
-                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "used: faded while it cools")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1, "used: still lit in full while it cools (Arn, 26 Nov: always lit)")
                 ok(not t.word:IsShown() and t.num and t.num.__dur == 600,
                    "and the time takes the word's place: the client's countdown, the word away (Arn's pick B)")
                 cds[13] = nil
@@ -16028,11 +16035,13 @@ do
                 ok(RD.trink2:IsShown() and RD.trink2.macro == useText(14), "both trinkets: both buttons")
                 ok(not RD.trink2.mana and x(RD.trink2) > x(t) and x(RD.trink2) < x(RD.potion) and RD.trink2.word.__text == "ZANDALARIAN",
                    "the second trinket: beside the first, both left of the blue box")
+                ok((x(RD.trink2) - RD.SYS_PX / 2 - 2) > (x(t) - RD.SYS_PX / 2 - 2 + t.pink.__w), "the two pink boxes never touch")
                 -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
                 local wasW = RD.waterUntil
                 RD.waterUntil = (GetTime() or 0) + 60
                 RD.PaintTrinkets()
-                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "a water totem of yours standing: faded")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1 and not (t.attn and t.attn:IsShown()),
+                   "a water totem of yours standing: lit, but no outline asking for it")
                 RD.waterUntil = wasW
                 RD.PaintTrinkets()
                 -- taken off in a fight: it waits for the end (secure buttons), then goes
