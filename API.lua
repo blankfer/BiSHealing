@@ -23,8 +23,8 @@
 --     spell    = "Healing Wave",          -- the heal's name, rank left off; nil for a ping
 --     rank     = "Rank 10",               -- as the client words it, or nil (no rank / a ping)
 --     boost    = "Nature's Swiftness",    -- the spell cast first, or nil
---     trinkets = { 13, 14 },              -- trinket SLOTS used first (the bind's own and its
---                                         --   modifier tab's), sorted; {} for none or a ping
+--     trinkets = {},                      -- always empty since 26 Nov 2026 (no trinkets on the binds;
+--                                         --   kept so a reader of the field does not break)
 --     ping     = "assist" | nil }         -- a ping bind: the ping's key, and spell is nil
 --
 -- FUNCTIONS (all since version 1)
@@ -96,7 +96,7 @@
 --
 -- EVENTS (since version 1). Each callback is pcalled: a listener's error stays its own.
 --   "BiSHealing_BindsChanged"  fn(event) - the player changed a bind (dropped, cleared, stepped a
---                              rank, ticked a trinket tab). Ask Binds() for the new ones.
+--                              rank). Ask Binds() for the new ones.
 --   "BiSHealing_TankChanged"   fn(event, name) - the player chose a tank (name) or let go (nil).
 --   "BiSHealing_Shown"         fn(event, shown) - the grid's show/hide switch was flipped.
 --------------------------------------------------------------------------------
@@ -158,16 +158,9 @@ local function entry(key, cast)
     local spell, rank = try(FM.Split, cast)
     e.spell = plain(spell) or cast
     e.rank = plain(rank)
-    local slots, boost = try(FM.Front, cast)
+    local _, boost = try(FM.Front, cast)
     e.boost = plain(boost)
-    local seen = {}
-    for _, s in ipairs(type(slots) == "table" and slots or {}) do seen[s] = true end
-    local tab = try(FM.TabTrinkets, mod)
-    for _, s in ipairs(type(tab) == "table" and tab or {}) do seen[s] = true end
-    for _, s in ipairs(FM.TRINKET_SLOTS or { 13, 14 }) do
-        if seen[s] then e.trinkets[#e.trinkets + 1] = s end
-    end
-    return e
+    return e                                     -- (trinkets stays {}: since 26 Nov 2026 no bind uses one)
 end
 
 function API.Ready()

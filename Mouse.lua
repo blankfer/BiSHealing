@@ -660,28 +660,9 @@ end
 --- TRINKETS PER MODIFIER TAB (10 Oct 2026). Arn: "each tab no modifier shift alt cntrl has a check
 --- make when this modifier is held down pop trinket 1 - 2 can check either or both maybe even
 --- different for each modifier". `d.trinketTabs[mod]` = { [13] = true, [14] = true }; nil = none.
+--- (26 Nov 2026: no trinkets on the binds any more - always none; kept for BiSHealingAPI's Binds() and old callers)
 function FM.TabTrinkets(mod)
-    local t = db().trinketTabs
-    local on = type(t) == "table" and t[mod or ""] or nil
-    local out = {}
-    for _, s in ipairs(FM.TRINKET_SLOTS) do if type(on) == "table" and on[s] then out[#out + 1] = s end end
-    return out
-end
-
---- Tick or untick one trinket on one tab. Returns the new state.
-function FM.SetTabTrinket(mod, slot, on)
-    if slot ~= 13 and slot ~= 14 then return nil end
-    local d = db()
-    d.trinketTabs = type(d.trinketTabs) == "table" and d.trinketTabs or {}
-    local t = d.trinketTabs[mod or ""] or {}
-    t[slot] = on and true or nil
-    d.trinketTabs[mod or ""] = next(t) and t or nil
-    if not next(d.trinketTabs) then d.trinketTabs = nil end
-    -- written to the macro like any bind (keep() lives below; its two lines, inlined)
-    FM.touched = true
-    if NS.FK and NS.FK.Save then NS.FK.Save(d.binds) end
-    if NS.Announce then NS.Announce("BiSHealing_BindsChanged") end
-    return on and true or false
+    return {}
 end
 
 --- The lines a bind casts BEFORE its heal: its own trinket slots, plus the ones ticked on its
@@ -798,116 +779,37 @@ function FM.HealLines(spell, mod, heal, room, guarded)
 end
 FM.MACRO_MAX = 255
 
---[[ A TRINKET ONCE A FIGHT, NEVER WHILE IT COOLS (24 Nov 2026). Arn: "the trinket on the bind ... gets stuck on item not
-  ready". MEASURED that night, all on Forever:
-   - `/use 14` (Enamored Water Spirit, cooling) + `/cast [@player] Chain Heal` = "Item is not ready yet", NO Chain Heal: a
-     cooling trinket STOPS the macro, as a cooling /cast does. (A `/use 13` on a trinket that was not cooling let the next
-     line run, which is why the first probe misled.)
-   - A hidden secure button (type item) pressed with `/click`: does nothing until useOnKeyDown is false; then it fires -
-     and a cooling trinket inside it STOPS the outer macro all the same. Dead end.
-   - `/castsequence reset=combat 14, null` + the cast: the first press drops the totem; the sequence then rests on
-     `null` (it never casts, so it never moves on) and every press heals - until the fight ends and it starts over.
-  Trinkets after the heal: Arn, "nope dont want trinkets after a heal". So a bind carries its trinket as that sequence,
-  written only while the trinket is READY and has a Use: (FM.TrinketReady); out of a fight the binds are written again
-  the moment one starts cooling or comes back (FM.TrinketWatch) - a bind never meets a cooling trinket. Its text changes
-  each time it comes back (FM.trinkVar), so a sequence left on `null` by a use outside a fight never carries over. The
-  deck's trinket button uses the same text (RD.ArmTrinkets), so a use there counts for the binds. A trinket that comes
-  back mid-fight waits for the next fight. ]]
-FM.trinkVar = FM.trinkVar or { [13] = 0, [14] = 0 }
---- Is the trinket in `slot` ready to use: worn, a Use:, not cooling (asked plainly; out of a fight the answers are).
-function FM.TrinketReady(slot)
-    if not (GetInventoryItemID and GetInventoryItemCooldown) then return false end
-    local okI, id = pcall(GetInventoryItemID, "player", slot)
-    if not okI or type(id) ~= "number" or (NS.Secret and NS.Secret(id)) then return false end
-    local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
-    if getSpell then
-        local okS, use = pcall(getSpell, id)
-        if not okS or type(use) ~= "string" or (NS.Secret and NS.Secret(use)) or use == "" then return false end
-    end
-    local okC, start, dur = pcall(GetInventoryItemCooldown, "player", slot)
-    if not okC then return false end
-    if (NS.Secret and (NS.Secret(start) or NS.Secret(dur))) or type(start) ~= "number" or type(dur) ~= "number" then return false end
-    if start <= 0 or dur <= 1.5 then return true end                       -- (the global cooldown is not "cooling")
-    local now = (GetTime and GetTime()) or 0
-    return start + dur <= now
-end
---- The line that uses `slot` once a fight - the same text for every bind and the deck's button.
-function FM.TrinketSeq(slot)
-    -- [combat]: never out of a fight (Arn, 24 Nov: "it did it when i was out of combat when i was healing")
-    return "/castsequence [combat] reset=combat " .. slot .. ", null" .. string.rep(", null", (FM.trinkVar[slot] or 0) % 4)
-end
---- The bind's line for one trinket slot, or nil while it cannot be used (cooling, passive, none).
-function FM.UseLine(slot)
-    if FM.TrinketReady(slot) then return FM.TrinketSeq(slot) end
-    return nil
-end
---- Out of a fight: a trinket starts cooling or comes back -> every bind and the deck written again. Seconds until the
---- next one comes back are timed (the client does not always say).
-function FM.TrinketSig()
-    return (FM.TrinketReady(13) and "1" or "0") .. (FM.TrinketReady(14) and "1" or "0")
-end
-function FM.TrinketCheck()
-    if InCombatLockdown and InCombatLockdown() then return false end
-    local sig = FM.TrinketSig()
-    if sig == FM.trinkSig then return false end
-    local was = FM.trinkSig or "00"
-    for i, slot in ipairs({ 13, 14 }) do
-        if sig:sub(i, i) == "1" and was:sub(i, i) ~= "1" then FM.trinkVar[slot] = (FM.trinkVar[slot] or 0) + 1 end
-    end
-    FM.trinkSig = sig
-    FM.Apply()
-    if NS.RD and NS.RD.ArmTrinkets then NS.RD.ArmTrinkets() end
-    FM.TrinketTimer()
-    return true
-end
-function FM.TrinketTimer()
-    if not (C_Timer and C_Timer.After and GetInventoryItemCooldown and GetTime) then return end
-    local soonest
-    for _, slot in ipairs({ 13, 14 }) do
-        local ok, start, dur = pcall(GetInventoryItemCooldown, "player", slot)
-        if ok and type(start) == "number" and type(dur) == "number" and not (NS.Secret and (NS.Secret(start) or NS.Secret(dur)))
-           and start > 0 and dur > 1.5 then
-            local left = start + dur - GetTime()
-            if left > 0 and (not soonest or left < soonest) then soonest = left end
-        end
-    end
-    if not soonest then return end
-    FM.trinkToken = (FM.trinkToken or 0) + 1
-    local token = FM.trinkToken
-    C_Timer.After(soonest + 0.2, function() if token == FM.trinkToken then FM.TrinketCheck() end end)
-end
-FM.TRINKET_EVENTS = { "PLAYER_REGEN_ENABLED", "SPELL_UPDATE_COOLDOWN", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_ENTERING_WORLD" }
---- Listen only while some bind carries a trinket (Lean and mean): asked after every write of the binds.
-function FM.TrinketWatch()
-    local any = false
+--[[ NO TRINKETS ON THE BINDS (26 Nov 2026). Arn: "we scrap the tinket thing on the binds, its kind of un reliable and blizz
+  really wants us to not". On Forever a cooling trinket STOPS the whole macro (measured 24 Nov: `/use 14` cooling +
+  Chain Heal = "Item is not ready yet", no heal), and the castsequence road round it only held for one use a fight. The
+  trinkets live on the deck now (Radar.lua RD.ArmTrinkets, Trinkets.lua's priority list). A bind saved with one in
+  front ("!use:13+Healing Wave") is read as its heal alone (FM.FirstLines writes no trinket line), and FM.DropTrinkets
+  takes the "!use:" parts off the saved binds at the first write - nothing else about the bind changes. ]]
+function FM.DropTrinkets()
     local d = db()
-    for _, cast in pairs(d.binds or {}) do
-        if type(cast) == "string" and #FM.Front(cast) > 0 then any = true break end
-    end
-    if not any and type(d.trinketTabs) == "table" and next(d.trinketTabs) then any = true end
-    if not CreateFrame then return any end
-    if any and not FM.trinkWatch then
-        FM.trinkWatch = CreateFrame("Frame")
-        FM.trinkWatch:SetScript("OnEvent", function() FM.TrinketCheck() end)
-    end
-    if FM.trinkWatch then
-        for _, ev in ipairs(FM.TRINKET_EVENTS) do
-            if any then pcall(FM.trinkWatch.RegisterEvent, FM.trinkWatch, ev) else pcall(FM.trinkWatch.UnregisterEvent, FM.trinkWatch, ev) end
+    local changed = false
+    if d.trinketTabs ~= nil then d.trinketTabs = nil changed = true end
+    for key, cast in pairs(d.binds or {}) do
+        if type(cast) == "string" and cast:find(FM.TRINKET_MARK, 1, true) then
+            local slots, boost, heal = FM.Front(cast)
+            if #slots > 0 and heal then
+                d.binds[key] = FM.Compose(nil, boost, heal)
+                changed = true
+            end
         end
     end
-    if any and not FM.trinkSig then FM.trinkSig = FM.TrinketSig() FM.TrinketTimer() end
-    return any
+    if changed then
+        FM.touched = true
+        if NS.FK and NS.FK.Save then NS.FK.Save(d.binds) end
+        if NS.Announce then NS.Announce("BiSHealing_BindsChanged") end
+    end
+    return changed
 end
 
 function FM.FirstLines(cast, mod, noAimed)
     if type(cast) ~= "string" or FM.PingOf(cast) then return "" end
-    local slots, boost = FM.Front(cast)
-    for _, s in ipairs(FM.TabTrinkets(mod)) do slots[#slots + 1] = s end
-    local seen, lines = {}, {}
-    table.sort(slots)
-    for _, s in ipairs(slots) do
-        if not seen[s] then seen[s] = true lines[#lines + 1] = FM.UseLine(s) end   -- (nil while it cannot be used: no line)
-    end
+    local _, boost = FM.Front(cast)                  -- (a trinket in front is never written: FM.DropTrinkets)
+    local lines = {}
     if boost and not (noAimed and FM.AIMED[boost]) then
         -- an aimed one (Riptide) goes on the living friend under the mouse, never on you by the client's self-cast
         lines[#lines + 1] = "/cast " .. (FM.AIMED[boost] and "[@mouseover,help,nodead] " or "") .. boost
@@ -1895,6 +1797,7 @@ function FM.Apply()
         return false
     end
     FM.pending = false
+    FM.DropTrinkets()                                -- an old bind's trinket in front: taken off, the heal kept
     local cells = 0
     for _, cell in ipairs((NS.FG and NS.FG.frames) or {}) do
         if FM.ApplyTo(cell) then cells = cells + 1 end
@@ -1906,6 +1809,5 @@ function FM.Apply()
     -- the radar's pips and pets (Radar.lua): your binds are their clicks too
     if NS.RD and NS.RD.ApplyBinds then cells = cells + (NS.RD.ApplyBinds() or 0) end
     FM.ApplyWheel()
-    FM.TrinketWatch()                                -- a trinket on a bind: written again when it cools / comes back
     return true, cells
 end

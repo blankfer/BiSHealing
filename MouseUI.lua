@@ -392,20 +392,6 @@ local function makeSlot(parent, slot, index)
             FM.Apply()
             return true
         end
-        -- A TRINKET YOU ARE WEARING, dropped on a heal (10 Oct 2026): its slot goes in front. On
-        -- anything that is not a heal it is not a bind at all, and the drop is refused.
-        local tslot = FM.CursorTrinket and FM.CursorTrinket()
-        if tslot then
-            local had = FM.Get(parent:Key(), slot.key)
-            local slots, boost, heal = FM.Front(had)
-            if not heal or FM.PingOf(heal) then return false end
-            slots[#slots + 1] = tslot
-            FM.Set(parent:Key(), slot.key, FM.Compose(slots, boost, heal))
-            if ClearCursor then ClearCursor() end
-            parent:Refresh()
-            FM.Apply()
-            return true
-        end
         local spell = FM.CursorSpell()
         if not spell then return false end
         -- NATURE'S SWIFTNESS ON A HEAL GOES IN FRONT OF IT (8 Oct 2026), rather than replacing it:
@@ -437,17 +423,12 @@ local function makeSlot(parent, slot, index)
         local spell = FM.Get(parent:Key(), slot.key)
         local name, rank = FM.Split(spell)
         -- an empty CLICK targets the person (FM.ApplyTo); an empty wheel does nothing of ours
-        local tslots, boost = FM.Front(spell)
-        for _, s in ipairs(tslots) do
-            GameTooltip:AddLine("trinket " .. (s == 13 and "1 (top)" or "2 (bottom)") .. " first", rgb("good"))
-        end
+        local _, boost = FM.Front(spell)
         if boost then GameTooltip:AddLine(boost .. " first, then", rgb("good")) end
         GameTooltip:AddLine(name or (slot.attr and "empty - a click targets them" or "empty"), rgb("ink"))
         if rank then GameTooltip:AddLine(rank, rgb("muted")) end
-        if boost or #tslots > 0 then
+        if boost then
             GameTooltip:AddLine("drop the heal again to take them off", rgb("muted"))
-        elseif spell and not FM.PingOf(spell) then
-            GameTooltip:AddLine("drop a trinket you wear here: it goes first", rgb("muted"))
         end
         GameTooltip:AddLine(spell and "right-click to clear" or "drag a spell here",
                             rgb("muted"))
@@ -601,56 +582,6 @@ function FM.Window()
     hint:SetJustifyH("LEFT")
     hint:SetText("drop a spell or a ping on a button")
     w.hint = hint
-
-    -- TRINKETS FIRST, FOR THIS TAB (10 Oct 2026). Arn: "each tab no modifier shift alt cntrl has a
-    -- check make when this modifier is held down pop trinket 1 - 2 can check either or both maybe
-    -- even different for each modifier". Two ticks under the hint, for whichever tab is open;
-    -- every bind on that tab uses the ticked trinkets before its heal (FM.TabTrinkets).
-    local firstLabel = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    w.firstLabel = firstLabel
-    firstLabel:SetPoint("TOPLEFT", 318, -38)     -- (the checklist: beside the modifier tabs)
-    firstLabel:SetText("FIRST")
-    firstLabel:SetTextColor(rgb("muted"))
-    w.trinketTicks = {}
-    for i, s in ipairs(FM.TRINKET_SLOTS) do
-        local b = CreateFrame("Button", nil, w)
-        b:SetSize(78, 16)
-        b:SetPoint("TOPLEFT", 352 + (i - 1) * 82, -36)
-        b.box = texture(b, "BACKGROUND", SLOT_BG[1], SLOT_BG[2], SLOT_BG[3], 0.95)
-        b.box:SetSize(11, 11)
-        b.box:SetPoint("LEFT", 0, 0)
-        b.tick = texture(b, "ARTWORK", 1, 1, 1, 1)
-        b.tick:SetSize(7, 7)
-        b.tick:SetPoint("CENTER", b.box, "CENTER", 0, 0)
-        b.tick:SetVertexColor(rgb("good"))
-        b.tick:Hide()
-        b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        b.text:SetPoint("LEFT", b.box, "RIGHT", 4, 0)
-        b.text:SetText("trinket " .. i)
-        FM.Pop(b, b.text)
-        b.slotId = s
-        b:SetScript("OnClick", function(self)
-            local on = false
-            for _, t in ipairs(FM.TabTrinkets(w.mod)) do if t == self.slotId then on = true end end
-            FM.SetTabTrinket(w.mod, self.slotId, not on)
-            FM.Apply()
-            w:Refresh()
-        end)
-        b:SetScript("OnEnter", function(self)
-            FM.Lit(self, true)
-            if not GameTooltip then return end
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("trinket " .. i .. (i == 1 and " (top slot)" or " (bottom slot)"), rgb("accent"))
-            GameTooltip:AddLine("every button on this tab uses it before its heal", rgb("muted"))
-            GameTooltip:AddLine("a trinket with nothing to use is skipped", rgb("muted"))
-            GameTooltip:Show()
-        end)
-        b:SetScript("OnLeave", function(self)
-            FM.Lit(self, false)
-            if GameTooltip then GameTooltip:Hide() end
-        end)
-        w.trinketTicks[i] = b
-    end
 
     -- HEAL | HOSTILE, top right beside the X: which mouse the drawing shows. The hostile one is tinted red so it is
     -- never mistaken for the heals.
@@ -921,8 +852,6 @@ function FM.Window()
             local c = hostile and p.harm or p.heal
             p.t:SetVertexColor(c[1], c[2], c[3], 1)
         end
-        for _, b in ipairs(self.trinketTicks or {}) do if hostile then b:Hide() else b:Show() end end
-        if self.firstLabel then if hostile then self.firstLabel:Hide() else self.firstLabel:Show() end end
         for i, m in ipairs(FM.MODS) do
             local on = (m.key == self.mod)
             self.tabs[i].bg:SetVertexColor(on and SLOT_ON[1] or SLOT_BG[1],
@@ -991,13 +920,9 @@ function FM.Window()
                 rest(f.rankBtn, rank and "accent" or "muted")
                 if spell then f.rankBtn:Show() else f.rankBtn:Hide() end
             end
-            -- the left half: the booster's icon, or - with no booster - the first trinket's
-            local tslots, boost = FM.Front(spell)
+            -- the left half: the booster's icon
+            local _, boost = FM.Front(spell)
             local bicon = boost and spellIcon(boost) or nil
-            if not bicon and tslots[1] and GetInventoryItemTexture then
-                local okT, tex = pcall(GetInventoryItemTexture, "player", tslots[1])
-                bicon = okT and tex or nil
-            end
             -- only over a drawn heal icon: half of nothing is a stray half-icon
             if bicon and f.icon:IsShown() then
                 f.boost:SetTexture(bicon) f.boost:Show() f.seam:Show()
@@ -1026,13 +951,6 @@ function FM.Window()
                 f.callSpell:SetText(words)
                 f.callSpell:SetTextColor(rgb(spell and "ink" or "muted"))
             end
-        end
-        -- the trinket ticks show THIS tab's choice
-        local onTab = {}
-        for _, s in ipairs(FM.TabTrinkets(self.mod)) do onTab[s] = true end
-        for _, b in ipairs(self.trinketTicks or {}) do
-            if onTab[b.slotId] then b.tick:Show() else b.tick:Hide() end
-            rest(b, onTab[b.slotId] and "good" or "muted")
         end
         -- the heal palette: this character's trained heals, top rank each (FM.Palette)
         local pal = FM.Palette()

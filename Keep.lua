@@ -134,18 +134,8 @@ local function settingRows(settings)
     -- 7 Oct: the white crosshair on whoever your mouse is on is ON by default; only "off" is a
     -- row (J, one of the letters left)
     if settings.hover == false then out[#out + 1] = "J=0" end
-    -- TRINKETS FIRST, PER MODIFIER TAB (F for "fire them", 10 Oct 2026): four digits in the tab
-    -- order none, shift, ctrl, alt - each 0 none, 1 trinket 1, 2 trinket 2, 3 both. None ticked
-    -- anywhere writes nothing. A leading digit, so "F=0300" keeps its zeros as a STRING.
-    local tt = settings.trinketTabs
-    if type(tt) == "table" and next(tt) then
-        local digits = {}
-        for i, mod in ipairs({ "", "shift-", "ctrl-", "alt-" }) do
-            local t = tt[mod] or {}
-            digits[i] = tostring((t[13] and 1 or 0) + (t[14] and 2 or 0))
-        end
-        out[#out + 1] = "F=" .. table.concat(digits)
-    end
+    -- (F, the trinkets-first tabs, is written no more since 26 Nov 2026: no trinkets on the binds; an old F row is read
+    -- and dropped below)
     local dim = tonumber(settings.dim)
     if dim and math.floor(dim * 100 + 0.5) ~= 30 then
         out[#out + 1] = ("D=%d"):format(math.floor(dim * 100 + 0.5))
@@ -396,16 +386,7 @@ function FK.Decode(body)
         elseif code == "J" then
             settings.hover = tonumber(idx) ~= 0
         elseif code == "F" then
-            -- read as the STRING it was written as (tonumber would drop the leading zeros); a
-            -- digit it does not know is "none" for that tab, never a guess
-            local tabs = {}
-            for i, mod in ipairs({ "", "shift-", "ctrl-", "alt-" }) do
-                local v = tonumber(idx:sub(i, i)) or 0
-                if v == 1 or v == 3 or v == 2 then
-                    tabs[mod] = { [13] = (v == 1 or v == 3) or nil, [14] = (v == 2 or v == 3) or nil }
-                end
-            end
-            settings.trinketTabs = next(tabs) and tabs or false
+            -- the old trinkets-first tabs (gone 26 Nov 2026): read and dropped, so the row never lands anywhere else
         elseif code == "D" and tonumber(idx) then
             settings.dim = tonumber(idx) / 100
         elseif code == "PV" then
@@ -554,7 +535,6 @@ function FK.Save(binds)
     local body, dropped = FK.Encode(binds, { scale = t.scale, text = t.text, color = t.color,
                                              pos = pos, hidden = t.shown == false, hots = t.hots,
                                              ring = t.ring, dim = t.dim, hover = t.hover,
-                                             trinketTabs = t.trinketTabs,
                                              clique = t.clique, layout = t.layout, pvp = t.pvp, spec = t.specNow,
                                              target = t.target, markers = t.markers, tot = t.tot,
                                              -- (no "me" row since 8 Nov 2026: the "me" cell is retired)

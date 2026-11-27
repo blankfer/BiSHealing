@@ -6916,103 +6916,39 @@ do
             w.slots["button4"].__scripts.OnReceiveDrag(w.slots["button4"])
             ok(FM.Get("", "button4") == "Nature's Swiftness", "on an empty slot it is just itself")
 
-            -- TRINKETS FIRST (Arn, 10 Oct: "the old bis healing had ... popping trinkets before big
-            -- heals"). A trinket you WEAR dropped on a heal: its slot rides in front, by slot number.
+            -- NO TRINKETS ON THE BINDS (Arn, 26 Nov: "we scrap the tinket thing on the binds, its kind of un reliable"):
+            -- a worn trinket dropped on a heal is no bind at all; an OLD bind with one in front becomes its heal alone
             FM.Set("", "left", "Nature's Swiftness+Healing Wave(Rank 3)")
             CURSOR = { kind = "item", a = 19950 }
-            slot.__scripts.OnReceiveDrag(slot)
-            ok(FM.Get("", "left") == "!use:13+Nature's Swiftness+Healing Wave(Rank 3)",
-               "a worn trinket dropped on a heal goes first, by SLOT, the booster kept behind it",
-               tostring(FM.Get("", "left")))
-            CURSOR = { kind = "item", a = 11832 }
-            slot.__scripts.OnReceiveDrag(slot)
-            ok(FM.Get("", "left") == "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 3)",
-               "and the other trinket too, in slot order")
-            -- an item you do not wear is not a trinket bind
-            CURSOR = { kind = "item", a = 4242 }
-            ok(not slot.__scripts.OnReceiveDrag(slot) and FM.Get("", "left"):find("^!use:13"),
-               "an item you are not wearing is refused")
+            ok(not slot.__scripts.OnReceiveDrag(slot) and FM.Get("", "left") == "Nature's Swiftness+Healing Wave(Rank 3)",
+               "a worn trinket dropped on a heal: refused, the bind as it was", tostring(FM.Get("", "left")))
             CURSOR = {}
             local cell2 = CreateFrame("Button", "TrinketCell", UIParent, "SecureUnitButtonTemplate")
+            NS.DB().binds.left = "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 3)"   -- (a save from before)
+            NS.DB().trinketTabs = { ["shift-"] = { [13] = true } }
             FM.ApplyTo(cell2)
             ok(cell2.__attrs["*macrotext1"] == "/stopmacro [@mouseover,noexists][@mouseover,nohelp][@mouseover,dead]\n"
-               .. FM.TrinketSeq(13) .. "\n" .. FM.TrinketSeq(14) .. "\n/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
-               "one press: the guard, both trinkets (once a fight), the booster, the heal", cell2.__attrs["*macrotext1"])
-            ok(FM.TrinketSeq(14):find("^/castsequence %[combat%] reset=combat 14, null"),
-               "a trinket is a cast sequence that rests on null, in a fight only (Arn, 24 Nov)", FM.TrinketSeq(14))
-            -- A COOLING TRINKET STOPS A FOREVER MACRO (Arn measured, 24 Nov): while it cools, no line at all
-            do
-                local keepCd = _G.GetInventoryItemCooldown
-                local now = GetTime()
-                _G.GetInventoryItemCooldown = function(_, slot) if slot == 14 then return now - 5, 600, 1 end return 0, 0, 1 end
-                local v14 = FM.trinkVar[14]
-                FM.trinkSig = "11"
-                ok(FM.TrinketCheck() == true, "out of a fight, the cooldown starting is heard")
-                FM.ApplyTo(cell2)                    -- (a test cell: FM.Apply walks the real ones)
-                local tx = cell2.__attrs["*macrotext1"] or ""
-                ok(tx:find(FM.TrinketSeq(13), 1, true) and not tx:find(" 14, null", 1, true),
-                   "trinket 2 cooling (out of a fight): its line comes out of the bind, trinket 1 stays", tx)
-                _G.GetInventoryItemCooldown = keepCd
-                FM.TrinketCheck()
-                FM.ApplyTo(cell2)
-                tx = cell2.__attrs["*macrotext1"] or ""
-                ok(FM.trinkVar[14] == v14 + 1 and tx:find(FM.TrinketSeq(14), 1, true),
-                   "ready again: back in, as a fresh sequence (its text moved on)", tx)
-                local wasC = STATE.inCombat
-                STATE.inCombat = true
-                _G.GetInventoryItemCooldown = function(_, slot) if slot == 14 then return now - 5, 600, 1 end return 0, 0, 1 end
-                ok(FM.TrinketCheck() == false, "in a fight nothing is written (the sequence itself rests on null)")
-                STATE.inCombat = wasC
-                _G.GetInventoryItemCooldown = keepCd
-                FM.TrinketCheck()
-            end
-            ok(FM.CycleRank("", "left") == "!use:13+!use:14+Nature's Swiftness+Healing Wave(Rank 1)",
-               "the rank button keeps everything in front", tostring(FM.Get("", "left")))
+               .. "/cast Nature's Swiftness\n/cast [@mouseover] Healing Wave(Rank 3)",
+               "an old bind with trinkets in front: no trinket line, the booster and the heal", cell2.__attrs["*macrotext1"])
+            ok(FM.DropTrinkets() == true and NS.DB().binds.left == "Nature's Swiftness+Healing Wave(Rank 3)"
+               and NS.DB().trinketTabs == nil, "the first write takes the trinkets off the saved bind and the tabs", NS.DB().binds.left)
+            ok(FM.DropTrinkets() == false, "and a second time there is nothing to do")
+            NS.DB().binds.left = "!use:14+Healing Wave(Rank 3)"
+            FM.Apply()
+            ok(NS.DB().binds.left == "Healing Wave(Rank 3)", "FM.Apply (every login) does it", NS.DB().binds.left)
+            ok(#FM.TabTrinkets("shift-") == 0 and not FM.SetTabTrinket and not FM.TrinketSeq and not FM.TrinketWatch,
+               "the per-tab trinkets and the once-a-fight sequence are gone")
+            ok(not w.trinketTicks, "the bind window has no trinket ticks")
+            local _, st = NS.FK.Decode("BiSH1;Healing Wave#F=0302")
+            ok(not (st and st.trinketTabs), "an old macro's F row is read and dropped")
+            ok(not NS.FK.Encode({}, { trinketTabs = { ["shift-"] = { [13] = true } } }):find("F="), "and never written")
+            FM.Set("", "left", "Nature's Swiftness+Healing Wave(Rank 3)")
+            ok(FM.CycleRank("", "left") == "Nature's Swiftness+Healing Wave(Rank 1)",
+               "the rank button keeps the booster in front", tostring(FM.Get("", "left")))
             local nm2 = FM.Split(FM.Get("", "left"))
             ok(nm2 == "Healing Wave", "and the slot's name is still the heal")
             local back2 = NS.FK.Decode(NS.FK.Encode({ left = FM.Get("", "left") }, {}))
             ok(back2 and back2.left == FM.Get("", "left"), "it survives a restart in the macro")
-
-            -- PER MODIFIER TAB (Arn: "each tab ... has a check ... pop trinket 1 - 2 ... maybe even
-            -- different for each modifier")
-            FM.Set("", "left", "Healing Wave(Rank 3)")
-            FM.Set("shift-", "left", "Healing Wave(Rank 3)")
-            w.mod = "shift-"
-            w:Refresh()
-            ok(w.trinketTicks and #w.trinketTicks == 2 and not w.trinketTicks[1].tick.__shown,
-               "the mouse window has a trinket 1 and a trinket 2 tick, both off")
-            w.trinketTicks[1].__scripts.OnClick(w.trinketTicks[1])
-            w.trinketTicks[2].__scripts.OnClick(w.trinketTicks[2])
-            ok(w.trinketTicks[1].tick.__shown and w.trinketTicks[2].tick.__shown, "tick both on the shift tab")
-            FM.ApplyTo(cell2)
-            local sh = cell2.__attrs["shift-macrotext1"] or ""
-            ok(sh:find(FM.TrinketSeq(13) .. "\n" .. FM.TrinketSeq(14) .. "\n/cast [@mouseover] Healing Wave(Rank 3)", 1, true),
-               "every shift bind now uses both trinkets first", sh)
-            ok(cell2.__attrs["*type1"] == "spell" and cell2.__attrs["*macrotext1"] == nil,
-               "and the no-modifier tab is untouched - a plain spell", tostring(cell2.__attrs["*type1"]))
-            w.mod = "alt-"
-            w:Refresh()
-            ok(not w.trinketTicks[1].tick.__shown, "each tab keeps its own ticks (alt: none)")
-            w.trinketTicks[2].__scripts.OnClick(w.trinketTicks[2])
-            -- the macro row: four digits, zeros kept - none 0, shift 3, ctrl 0, alt 2
-            local tb = NS.FK.Encode({}, { trinketTabs = NS.DB().trinketTabs })
-            ok(tb:find("F=0302", 1, true), "written as F=0302 in the macro", tb)
-            local _, st = NS.FK.Decode(tb)
-            ok(st and st.trinketTabs and st.trinketTabs["shift-"][13] and st.trinketTabs["shift-"][14]
-               and st.trinketTabs["alt-"][14] and not st.trinketTabs["alt-"][13] and not st.trinketTabs[""],
-               "and read back exactly")
-            ok(not NS.FK.Encode({}, {}):find("F="), "nothing ticked writes nothing")
-            -- /bish trinkets says it, and sets it
-            local keptChat = _G.DEFAULT_CHAT_FRAME
-            local heard = {}
-            _G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, t) heard[#heard + 1] = t end }
-            NS.DO.trinkets("ctrl", "1")
-            _G.DEFAULT_CHAT_FRAME = keptChat
-            local said3 = table.concat(heard, "|")
-            ok(#FM.TabTrinkets("ctrl-") == 1 and FM.TabTrinkets("ctrl-")[1] == 13
-               and said3:find("ctrl: trinket 1 first", 1, true), "/bish trinkets ctrl 1", said3)
-            NS.DO.trinkets("shift", "off") NS.DO.trinkets("alt", "off") NS.DO.trinkets("ctrl", "off")
-            ok(NS.DB().trinketTabs == nil, "off everywhere stores nothing")
             w.mod = ""
             FM.Set("", "left", "Spell331(Rank 4)") FM.Clear("shift-", "left")    -- as the tests below expect
 
@@ -10000,17 +9936,17 @@ do
        "Binds(): a plain bind, its spell and rank apart")
     local s = b and b["shift-left"]
     ok(s and s.mod == "shift-" and s.slot == "left" and s.spell == "Healing Wave" and s.rank == "Rank 10"
-       and s.boost == "Nature's Swiftness" and s.trinkets[1] == 13 and #s.trinkets == 1,
-       "a bind with a trinket and a booster in front says both")
+       and s.boost == "Nature's Swiftness" and #s.trinkets == 0,
+       "an old bind with a trinket in front: the booster, and no trinkets (none is used since 26 Nov)")
     local p = b and b["ctrl-right"]
     ok(p and p.ping == "assist" and p.spell == nil and p.mod == "ctrl-" and p.slot == "right",
        "a ping bind says which ping, and no spell")
     local w = b and b["alt-wheelup"]
-    ok(w and w.spell == "Chain Heal" and w.rank == nil and w.trinkets[1] == 14,
-       "a bare name has no rank, and its modifier tab's trinket is counted")
+    ok(w and w.spell == "Chain Heal" and w.rank == nil and #w.trinkets == 0,
+       "a bare name has no rank, and an old modifier tab's trinket is not counted")
     b.left.spell, b.left.trinkets[1], b["shift-left"].trinkets[1], b.extra = "edited", 99, 99, {}
     local b2 = A.Binds()
-    ok(b2.left.spell == "Healing Wave" and #b2.left.trinkets == 0 and b2["shift-left"].trinkets[1] == 13
+    ok(b2.left.spell == "Healing Wave" and #b2.left.trinkets == 0 and #b2["shift-left"].trinkets == 0
        and b2.extra == nil and d.binds.left == "Healing Wave(Rank 3)" and d.binds.extra == nil,
        "Binds() answers a copy: editing it changes neither the next answer nor the saved binds")
 
@@ -10081,13 +10017,13 @@ do
        "dropping a spell on the mouse announces BiSHealing_BindsChanged - past a listener that throws")
     FM.Clear("", "middle")
     ok(#heard == 2, "and so does clearing one")
-    FM.SetTabTrinket("", 13, true)
-    FM.SetTabTrinket("", 13, false)
-    ok(#heard == 4, "and ticking a trinket tab")
+    d.binds["alt-middle"] = "!use:13+Heal(Rank 2)"
+    FM.DropTrinkets()
+    ok(#heard == 3, "and so does taking an old bind's trinket off")
     ok(A.UnregisterCallback("suite", "BiSHealing_BindsChanged") == true, "UnregisterCallback lets go")
     FM.Set("", "middle", "Heal(Rank 2)")
     FM.Clear("", "middle")
-    ok(#heard == 4, "and a let-go listener hears nothing more")
+    ok(#heard == 3, "and a let-go listener hears nothing more")
     local u1, uw1 = A.UnregisterCallback("suite", "BiSHealing_BindsChanged")
     ok(u1 == nil and uw1 == "not registered", "letting go twice says not registered")
     A.UnregisterCallback("broken", "BiSHealing_BindsChanged")
@@ -10643,7 +10579,7 @@ do
         { "buffs", "bufs" }, { "buffs fort on", "bufs fort on" },
         { "markers", "mark" }, { "markers 12", "mark 12" },
         { "cures", "cure" }, { "cures on", "cure on" },
-        { "trinkets", "trin" }, { "trinkets shift both", "trin shift both" },
+        { "trinkets", "trin" }, { "trinkets why", "trin why" },
         { "hover", "hov" }, { "hover off", "hov off" },
         { "flash", "flsh" }, { "flash on", "flsh on" },
         { "clique", "clq" },
@@ -10736,7 +10672,6 @@ do
     w:Refresh()
     pops(w.slots.left.rankBtn, w.slots.left.rank, "a slot's rank button")
     FM.Clear("", "left")
-    pops(w.trinketTicks[1], w.trinketTicks[1].text, "a trinket tick")
     pops(w.pings[1], w.pings[1].text, "a ping")
     pops(w.palette[1], nil, "a heal on the palette")
     w:Hide()
@@ -11536,9 +11471,8 @@ do
     w.tabs[1]:Click()
     w:Refresh()
     ok(w.slots.right.empty:GetText() == "Purg" or w.slots.right.icon:IsShown(), "the hostile mouse shows what is on it")
-    ok(not w.trinketTicks[1]:IsShown(), "no trinket ticks on the hostile side (they are a heal's)")
     w.sets[1]:Click()
-    ok(w.set == "" and w.trinketTicks[1]:IsShown(), "back to the heal side: the ticks again")
+    ok(w.set == "", "back to the heal side")
     ok(not bodyRed(), "and the mouse is its own purple again")
     for _, s in ipairs(w.sets) do
         s:GetScript("OnEnter")(s)
@@ -15740,6 +15674,22 @@ do
         STATE.inCombat = false
         RD.LearnTimers()
         ok(w.totem == "Healing Stream Totem", "and learned when the fight ends")
+        -- NOT MANA TIDE, NOT A TRINKET'S TOTEM (Arn, 26 Nov: "when i drop enamours or mana tide ... can we make it so those
+        -- two wont update it")
+        STATE.totemName[3] = "Mana Tide Totem II"
+        RD.LearnTimers()
+        ok(w.totem == "Healing Stream Totem" and w:GetAttribute("macrotext1") == "/cast Healing Stream Totem",
+           "Mana Tide standing in the water place: the box keeps dropping Healing Stream", w.totem)
+        RD.trinketTotemAt = CLOCK                                -- (the trinket's use heard at the totem's moment)
+        STATE.totemName[3] = "Mana Spring Totem"
+        RD.LearnTimers()
+        ok(w.totem == "Healing Stream Totem", "Enamored's Mana Spring (down as the trinket was used): the box keeps its own", w.totem)
+        RD.trinketTotemAt = CLOCK - 60
+        RD.LearnTimers()
+        ok(w.totem == "Mana Spring Totem", "your own Mana Spring, long after a trinket use: learned as before", w.totem)
+        RD.trinketTotemAt = nil
+        STATE.totemName[3] = "Healing Stream Totem"
+        RD.LearnTimers()
         -- A SET SENT IN (Arn: "I click something and it changes the totems on my BiS Healing deck - out of combat of course")
         local keepGTI = _G.GetTotemInfo
         _G.GetTotemInfo = function(slot)                    -- (the standing totem went down a minute ago)
@@ -16022,6 +15972,8 @@ do
                     return keepDesc(id)
                 end
                 C_Item.GetItemSpell = function(id) if USE[id] then return USE[id], SID[id] end return nil end
+                local keepName = C_Item.GetItemNameByID
+                C_Item.GetItemNameByID = function(id) return USE[id] end       -- (the items carry their use's name here)
                 local cds = {}
                 _G.GetInventoryItemCooldown = function(unit, slot) local c = cds[slot] if c then return c[1], c[2], 1 end return 0, 0, 1 end
                 local function x(b) local p = b.points and b.points[#b.points] return p and p[4] end
@@ -16040,10 +15992,26 @@ do
                    "an on-use trinket put on: its button, clicking uses slot 13")
                 ok(t.tip and t.tip[1] ~= nil and t.tip[2]:find("Use: Enamored Water Spirit", 1, true), "the hover says what it does", t.tip and t.tip[2])
                 ok(t.food and t.food:IsShown() ~= false, "its own icon")
-                -- a MANA trinket (Arn: "put the enamoured water totem in the blue box since its a mana thing"): in the box,
-                -- right after the potion - Mana Tide still the middle of five - and the box runs past it
-                ok(t.mana and x(t) and x(RD.potion) and x(RD.tide) and x(t) > x(RD.potion) and x(t) < x(RD.tide),
-                   "a mana trinket: inside the blue box, after the potion")
+                -- LEFT OF THE BLUE BOX (Arn, 26 Nov: "down by the mana bar at the bottom with mana tide but on the left of the
+                -- blue box"), a mana trinket too; a chip: its icon and its name's first word beside it, the click covering both
+                ok(t.mana and x(t) and x(RD.potion) and x(t) < x(RD.potion) and (not RD.shield.__shown or x(RD.shield) < x(t)),
+                   "a mana trinket: left of the blue box, outside it")
+                ok(t.word and t.word.__text == "ENAMORED" and t.chipW and t.chipW > RD.SYS_PX and t.word:IsShown(),
+                   "its chip: the first word of its name beside the icon", t.word and t.word.__text)
+                ok(RD.ManaTrinket("Enamored Water Spirit", "Summons a Mana Spring Totem that restores 10 mana every 2 seconds")
+                   and not RD.ManaTrinket("Burst of Knowledge", "Reduces the mana cost of all spells by 100 for 10 sec.")
+                   and not RD.ManaTrinket("Zandalarian Hero Charm", "Increases spell damage and healing by up to 204."),
+                   "a mana trinket gives mana back; Burst (mana COST) is not one (Arn's shot: its red outline at 77%)")
+                ok(RD.TrinketWord("Burst of Knowledge") == "BURST" and RD.TrinketWord("Talisman, of Old") == "TALISMAN"
+                   and RD.TrinketWord(nil) == nil, "the first word, in capitals")
+                ok(x(RD.potion) - x(t) >= t.chipW, "the next tool starts after the word, never on it", x(RD.potion) - x(t))
+                -- its pink box (Arn, 26 Nov: "put pink boxes around trinkets"), round the whole chip, clear of the blue box
+                local pk = t.pink
+                ok(pk and pk.__parent == t and pk.__w == t.chipW + 4 and pk.edges and pk.edges[1],
+                   "a pink box round the chip (icon and word), a plain child of the button", pk and pk.__w)
+                local pinkRight = x(t) - RD.SYS_PX / 2 - 2 + pk.__w
+                local blueLeft = x(RD.potion) - RD.SYS_PX / 2 - 2
+                ok(pinkRight < blueLeft, "the pink box ends before the blue box starts", pinkRight .. " < " .. blueLeft)
                 local mb = RD.manaBox
                 ok(mb and mb:IsShown(), "the blue box still drawn round the mana group")
                 -- "does it have the smart light up thing": it learns what it restores (10 every 2 s for 1 min = 300 of
@@ -16053,23 +16021,61 @@ do
                 ok(t.tip and t.tip[2]:find("restores ~300 mana", 1, true), "and the hover says so", t.tip and t.tip[2])
                 ok(RD.rations and x(RD.rations) ~= railX, "the rest of the row moved over to make room")
                 -- cooling: the swipe and a faded icon; ready again: full
-                cds[13] = { 100, 600 }
+                cds[13] = { GetTime() - 5, 600 }
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
-                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "used: faded while it cools")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1, "used: still lit in full while it cools (Arn, 26 Nov: always lit)")
+                ok(not t.word:IsShown() and t.num and t.num.__dur == 600,
+                   "and the time takes the word's place: the client's countdown, the word away (Arn's pick B)")
                 cds[13] = nil
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
-                ok(t.food.__vertex and t.food.__vertex[4] == 1, "ready: full")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1 and t.word:IsShown(), "ready: full, the word back")
+                -- TWO MODES (Arn, 26 Nov: "always lit smart lit, we keep the same border rules but always lit always shows
+                -- the icons"): the Smart lit switch off = always lit
+                ok(RD.Sw("smartlit") and RD.Faded() == RD.ICON_FADED, "smart lit by default: a waiting icon dim")
+                RD.SetSw("smartlit", false)
+                cds[13] = { GetTime() - 5, 600 }
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
+                ok(RD.Faded() == 1 and t.food.__vertex[4] == 1 and not t.word:IsShown(),
+                   "always lit: the cooling trinket shown in full (its time still in the word's place)")
+                local drink = t                                -- (a deck tool wearing a real icon)
+                ok(RD.LitAlpha(drink, false) == 1 and RD.CascadeAlpha(0.8) == 1, "always lit: a waiting tool and a fresh buff at full")
+                local lit = RD.LitAlpha(drink, true)
+                ok(lit == 1 and (not drink.attn or drink.attn:IsShown()) , "and lit still draws its red outline (the same rules)")
+                local c1, c2 = RD.IconCurve(0.3), nil
+                RD.SetSw("smartlit", true)
+                c2 = RD.IconCurve(0.3)
+                ok(c1 ~= c2 or not c1, "each mode its own mana curve (never the other's cached)")
+                ok(RD.LitAlpha(drink, false) == RD.ICON_FADED and RD.CascadeAlpha(0.8) < 0.5, "smart lit again: dim")
+                ok(RD.SwPreset("bare") and RD.Sw("smartlit") and RD.SwPreset("full"), "the presets leave the mode alone")
+                cds[13] = nil
+                fire(RD.events, "SPELL_UPDATE_COOLDOWN")
                 -- a second on-use trinket in 14
                 STATE.worn = { [13] = 20503, [14] = 19950 }
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 14, false)
                 ok(RD.trink2:IsShown() and RD.trink2.macro == useText(14), "both trinkets: both buttons")
-                ok(not RD.trink2.mana and x(RD.trink2) > x(RD.fuel) and x(t) < x(RD.tide),
-                   "a trinket that is not a mana thing stays outside the box, after the drink")
+                ok(not RD.trink2.mana and x(RD.trink2) > x(t) and x(RD.trink2) < x(RD.potion) and RD.trink2.word.__text == "ZANDALARIAN",
+                   "the second trinket: beside the first, both left of the blue box")
+                ok((x(RD.trink2) - RD.SYS_PX / 2 - 2) > (x(t) - RD.SYS_PX / 2 - 2 + t.pink.__w), "the two pink boxes never touch")
+                local p2 = RD.trink2.pink
+                ok(p2 and p2.__w == RD.trink2.chipW + 4 and p2.__shown ~= false and p2.points and p2.points[1] and p2.points[1][2] == RD.trink2,
+                   "the second trinket has its own pink box too", p2 and tostring(p2.__w) .. " " .. tostring(p2.__shown))
+                -- its use heard (your cast of "Enamored Water Spirit"): timed, so the totem it puts down is not the box's
+                do
+                    local keepGN = C_Spell.GetSpellName
+                    C_Spell.GetSpellName = function(id) if id == 24854 then return "Enamored Water Spirit" end return keepGN(id) end
+                    RD.trinketTotemAt = nil
+                    RD.OnCast("player", 24854)
+                    ok(RD.trinketTotemAt == CLOCK and RD.NotForBox("Mana Spring Totem", CLOCK + 0.3),
+                       "the trinket's use is heard: a Mana Spring that goes down with it is the trinket's, not the box's")
+                    RD.trinketTotemAt = nil
+                    C_Spell.GetSpellName = keepGN
+                end
                 -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
                 local wasW = RD.waterUntil
                 RD.waterUntil = (GetTime() or 0) + 60
                 RD.PaintTrinkets()
-                ok(t.food.__vertex and t.food.__vertex[4] == RD.ICON_FADED, "a water totem of yours standing: faded")
+                ok(t.food.__vertex and t.food.__vertex[4] == 1 and not (t.attn and t.attn:IsShown()),
+                   "a water totem of yours standing: lit, but no outline asking for it")
                 RD.waterUntil = wasW
                 RD.PaintTrinkets()
                 -- taken off in a fight: it waits for the end (secure buttons), then goes
@@ -16087,7 +16093,7 @@ do
                 fire(RD.events, "PLAYER_EQUIPMENT_CHANGED", 1, false)
                 ok((RD.trink2.points and #RD.trink2.points or 0) == n0, "a helmet swap: the deck left alone")
                 STATE.worn, C_Item.GetItemSpell, _G.GetInventoryItemCooldown = keepWorn, keepGis, keepCd
-                C_Spell.GetSpellDescription = keepDesc
+                C_Spell.GetSpellDescription, C_Item.GetItemNameByID = keepDesc, keepName
                 RD.Arm()
             end
             -- the sliders (Arn: "maybe we also put the sliders there for width and height")
@@ -16232,7 +16238,7 @@ do
                 RD.TIDE_CHAT = false
             end
             -- MANA TIDE IN THE MIDDLE (Arn: "i confused it for my call totems ... they were both far left")
-            ok(RD.TOOL_KEYS[2] == "potion" and RD.TOOL_KEYS[3] == "tide", "the mana four: potion, MANA TIDE, spring, drink - Tide in the middle")
+            ok(RD.TOOL_KEYS[4] == "potion" and RD.TOOL_KEYS[5] == "tide" and RD.TOOL_KEYS[2] == "trink1", "(the trinkets before them) the mana four: potion, MANA TIDE, spring, drink - Tide in the middle")
             -- THE RIPTIDE TRACKER (Arn: "a riptide marker on who i riptided and on top in los row a riptide duration")
             do
                 local keepRanks, keepRips = NS.FM.Ranks, RD.rips
@@ -18782,6 +18788,237 @@ do
     _G.UnitClass = function() return "Priest", "PRIEST", 5 end
     ok(RD.SwForMe(byKey.fxmend) and RD.SwForMe(byKey.fxpoh) and not RD.SwForMe(byKey.totems), "a priest's: the Prayer effects, no totems")
     _G.UnitClass = keepUC
+end
+
+-- THE TRINKET PRIORITY LIST (Trinkets.lua; Arn, 26 Nov: "need a priority list for each slot ... always try and put [the
+-- first] its a 30 sec cooldown when you equip a triket so a 2 min trinket we can equip at 1:30 if thats on cool down we put
+-- on trinket on prio 2 etc")
+do
+    local TR = NS.TR
+    local Cost = dofile("../_bisdev/dev/cost.lua")
+    local keep = { worn = STATE.worn, cont = rawget(_G, "C_Container"), info = C_Item.GetItemInfoInstant,
+                   equip = C_Item.EquipItemByName, name = C_Item.GetItemNameByID, cd = _G.GetInventoryItemCooldown,
+                   timer = rawget(_G, "C_Timer"), combat = STATE.inCombat, prio = NS.DB().radar and NS.DB().radar.trinketPrio,
+                   cast = rawget(_G, "UnitCastingInfo") }
+    local BURST, CHARM, SCARAB, EYE, BOOTS = 11832, 19950, 21625, 30000, 2000
+    local NAMES = { [BURST] = "Burst of Knowledge", [CHARM] = "Zandalarian Hero Charm", [SCARAB] = "Scarab Brooch",
+                    [EYE] = "Eye of Diminution", [BOOTS] = "Boots of Walking" }
+    -- the client's answers: what you wear, a bag, each item's cooldown by item (it follows the item into the bag and back)
+    STATE.worn = { [13] = BURST, [14] = CHARM }
+    local BAG = { SCARAB, BOOTS, EYE }
+    local CD = {}                                                      -- item -> { start, dur }
+    local equips, later = {}, {}
+    local function cdOf(id) local c = CD[id] if c then return c[1], c[2], 1 end return 0, 0, 1 end
+    _G.C_Container = { GetContainerNumSlots = function(bag) return bag == 0 and #BAG or 0 end,
+                       GetContainerItemID = function(bag, slot) return bag == 0 and BAG[slot] or nil end,
+                       GetContainerItemCooldown = function(bag, slot) if bag == 0 and BAG[slot] then return cdOf(BAG[slot]) end return 0, 0, 0 end }
+    _G.GetInventoryItemCooldown = function(unit, slot) if unit == "player" and STATE.worn[slot] then return cdOf(STATE.worn[slot]) end return 0, 0, 0 end
+    C_Item.GetItemInfoInstant = function(id)
+        if not NAMES[id] then return nil end
+        return id, "Armor", "Miscellaneous", id == BOOTS and "INVTYPE_FEET" or "INVTYPE_TRINKET", 1000 + id
+    end
+    C_Item.GetItemNameByID = function(id) return NAMES[id] end
+    -- the equip, as the client does it out of a fight: the bag item goes on, the worn one into its place in the bag, the
+    -- new one waits 30 s unless it was already waiting longer; the gear event comes after
+    C_Item.EquipItemByName = function(id, slot)
+        if STATE.inCombat then return end                              -- (the client refuses; nothing moves)
+        for i, b in ipairs(BAG) do
+            if b == id then
+                BAG[i] = STATE.worn[slot]
+                STATE.worn[slot] = id
+                local now = GetTime()
+                local s, d = cdOf(id)
+                if not (s > 0 and s + d - now > 30) then CD[id] = { now, 30 } end
+                equips[#equips + 1] = slot .. ":" .. id
+                return
+            end
+        end
+    end
+    _G.C_Timer = { After = function(t, fn) later[#later + 1] = { t = t, fn = fn } end }
+    local mockEquip = C_Item.EquipItemByName
+    -- (as the client's: the time has passed when a timer runs - a mock that ran it at once would be kinder)
+    local function runLater() local l = later later = {} for _, x in ipairs(l) do CLOCK = CLOCK + (x.t or 0) x.fn() end end
+    NS.DB().radar.trinketPrio = nil
+    TR.listening, TR.last, TR.soon = nil, nil, nil
+
+    ok(not TR.Any() and not TR.Listen() and not (TR.frame.__events and TR.frame.__events.SPELL_UPDATE_COOLDOWN),
+       "no lists: nothing listened to")
+    local owned = TR.Owned()
+    ok(#owned == 4 and owned[1] == BURST and owned[2] == CHARM, "what you carry: the two worn, then the bag's trinkets (boots left out)", #owned)
+    ok(TR.Check("asked") == false and TR.why == "no trinket on either list", "an empty list never swaps anything")
+
+    -- slot 13: Burst first, Scarab second
+    TR.SetIn(13, BURST, true)
+    TR.SetIn(13, SCARAB, true)
+    ok(TR.List(13)[1] == BURST and TR.List(13)[2] == SCARAB and TR.frame.__events and TR.frame.__events.SPELL_UPDATE_COOLDOWN,
+       "ticked: the list in order, and now it listens")
+    later = {}
+    ok(TR.Check("asked") == false and #equips == 0, "the first is worn and ready: nothing to do", TR.why)
+    -- Burst used: 2 minutes. Scarab is ready - it goes on
+    local now = GetTime()
+    CD[BURST] = { now, 120 }
+    ok(TR.Check("used") == true and STATE.worn[13] == SCARAB and equips[1] == "13:" .. SCARAB,
+       "the first cooling (2:00 left), the second ready: the second goes on", TR.why)
+    ok(TR.why:find("Scarab Brooch", 1, true) and TR.why:find("no. 2", 1, true), "and it says which and why", TR.why)
+    ok(CD[SCARAB] and CD[SCARAB][2] == 30, "(putting it on started its 30 s wait)")
+    -- the gear event looks again: Burst still 2:00 away - stays off; the timer is set for its moment
+    later = {}
+    ok(TR.Check("gear") == false and STATE.worn[13] == SCARAB, "Burst is still more than 30 s away: Scarab stays")
+    local t = TR.NextLook()
+    ok(t and math.abs(t - 90) < 1, "the next look is at 1:30 - when Burst comes within 30 s", t)
+    -- 1:30 later: Burst back on, though Scarab is ready - the first always wins once within 30 s
+    CLOCK = CLOCK + 91
+    ok(TR.Check("timer") == true and STATE.worn[13] == BURST, "1:31 later (29 s left): Burst goes back on", TR.why)
+    -- in a fight: never
+    CD[BURST] = { GetTime(), 120 }
+    STATE.inCombat = true
+    ok(TR.Check("used") == false and STATE.worn[13] == BURST and TR.afterFight, "in a fight: nothing changes, it waits")
+    later = {}
+    fire(TR.frame, "SPELL_UPDATE_COOLDOWN")
+    ok(#later == 0, "and an event in a fight costs a test and nothing else")
+    STATE.inCombat = keep.combat
+    fire(TR.frame, "PLAYER_REGEN_ENABLED")
+    ok(#later == 1, "the fight over: a look a moment later")
+    runLater()
+    ok(STATE.worn[13] == SCARAB, "and the swap the fight held back happens then")
+    -- the other slot's trinket is never taken; one you do not carry is skipped
+    CD = {}
+    TR.SetIn(14, BURST, true)
+    TR.SetIn(14, EYE, true)
+    TR.SetIn(14, CHARM, true)
+    ok(TR.Choose(14) == BURST, "slot 14's list: Burst ready in the bag - first on the list", TR.Choose(14))
+    STATE.worn[13] = BURST
+    for i, b in ipairs(BAG) do if b == BURST then BAG[i] = SCARAB end end
+    ok(TR.Choose(14) == EYE, "Burst worn in the other slot: skipped, the next one (Eye)")
+    TR.SetIn(14, EYE, false)
+    TR.SetIn(14, BOOTS, true)
+    ok(TR.Choose(14) == CHARM, "unticked Eye, boots in the list (no trinket, ignored by the bag scan): the worn Charm")
+    -- moving and unticking
+    ok(TR.Move(14, CHARM, -1) and TR.List(14)[1] == CHARM and not TR.Move(14, CHARM, -1), "arrows move it a place, never off the list")
+    -- casting: wait a moment
+    _G.UnitCastingInfo = function(u) if u == "player" then return "Chain Heal" end end
+    later = {}
+    CD[BURST] = { GetTime(), 120 }
+    ok(TR.Check("used") == false and TR.why:find("casting", 1, true) and #later >= 1, "under a cast: not now, a look in a moment")
+    _G.UnitCastingInfo = keep.cast
+    -- the client refuses (an addon may not put it on): said once, never a loop
+    C_Item.EquipItemByName = function() end
+    later = {}
+    TR.last = nil
+    ok(TR.Check("used") == true, "the equip asked for")
+    for _, x in ipairs(later) do if x.t == TR.REFUSED_FOR then x.fn() end end
+    ok(TR.last and TR.last.refused and TR.why:find("put it on by hand", 1, true), "it did not take: refused, and it says so", TR.why)
+    local n = 0
+    C_Item.EquipItemByName = function() n = n + 1 end
+    TR.Check("again")
+    ok(n == 0, "and it does not try the same swap again and again")
+    -- SHIFT + HOVER A TRINKET (Arn, 26 Nov: "hold shift on the [trinket] so i can switch on the fly out of combat? maybe it
+    -- que if i do in combat?")
+    do
+        C_Item.EquipItemByName = mockEquip
+        STATE.worn = { [13] = BURST, [14] = CHARM }
+        BAG[1], BAG[2], BAG[3] = SCARAB, BOOTS, EYE
+        CD = {}
+        TR.last, TR.hold, TR.queue = nil, {}, {}
+        NS.DB().radar.trinketPrio = { [13] = { BURST, SCARAB }, [14] = {} }
+        TR.Changed()
+        local chip = CreateFrame("Button", nil, UIParent)
+        chip.slot = 13
+        chip:SetSize(22, 22)
+        TR.HookChip(chip)
+        STATE.shift = false
+        chip:GetScript("OnEnter")(chip)
+        ok(not (TR.col and TR.col:IsShown()) and TR.flyKeys.__events and TR.flyKeys.__events.MODIFIER_STATE_CHANGED,
+           "the mouse on a trinket, no Shift: nothing pops out (Shift now heard)")
+        fire(TR.flyKeys, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+        local col = TR.col
+        ok(col and col:IsShown() and col.count == 2 and col.b[1].id == SCARAB and col.b[2].id == EYE,
+           "Shift pressed: the trinkets in your bags drop down (not the worn ones, not the boots)", col and col.count)
+        ok(col.points[1][1] == "TOPLEFT" and col.points[1][2] == chip and col.points[1][3] == "BOTTOMLEFT", "under the trinket, touching it")
+        -- let go of Shift on Eye, out of a fight: it goes on now, and the list leaves the slot alone until it is used
+        chip:GetScript("OnLeave")(chip)
+        col.b[2]:GetScript("OnEnter")(col.b[2])
+        later = {}
+        fire(TR.flyKeys, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+        ok(STATE.worn[13] == EYE and not col:IsShown() and TR.hold[13] == EYE, "Shift let go on Eye: on now, the column away", STATE.worn[13])
+        col.b[2]:GetScript("OnLeave")(col.b[2])
+        ok(TR.Check("gear") == false and STATE.worn[13] == EYE, "the list (Burst first, ready) does not take your pick off")
+        CD[EYE] = { GetTime(), 180 }
+        ok(TR.Check("used") == true and STATE.worn[13] == BURST and not TR.hold[13], "you use Eye: the list takes over again (Burst back)")
+        -- IN A FIGHT: queued, its icon on the chip's corner, on at the fight's end
+        STATE.inCombat = true
+        STATE.shift = true
+
+        local deckChip = NS.RD.trink1
+        chip:GetScript("OnEnter")(chip)
+        ok(TR.col:IsShown(), "in a fight Shift still pops it out (plain frames)")
+        local scarabBtn
+        for i = 1, TR.col.count do if TR.col.b[i].id == SCARAB then scarabBtn = TR.col.b[i] end end
+        ok(scarabBtn and TR.Pick(13, SCARAB, "a click") == "queued" and STATE.worn[13] == BURST and TR.queue[13] == SCARAB,
+           "a pick in a fight: queued, nothing changes now")
+        ok(TR.frame.__events and TR.frame.__events.PLAYER_REGEN_ENABLED, "and the fight's end is listened for")
+        if deckChip and deckChip.slot == 13 then
+            ok(deckChip.queued and deckChip.queued:IsShown() and deckChip.queued.__texture == 1000 + SCARAB,
+               "the queued trinket's icon rides the deck chip's corner")
+        end
+        chip:GetScript("OnLeave")(chip)
+        STATE.inCombat, STATE.shift = false, false
+        fire(TR.frame, "PLAYER_REGEN_ENABLED")
+        ok(STATE.worn[13] == SCARAB and not TR.queue[13] and TR.hold[13] == SCARAB, "the fight over: Scarab goes on", STATE.worn[13])
+        if deckChip and deckChip.queued then ok(not deckChip.queued:IsShown(), "and the corner icon goes") end
+        -- the mouse leaves: closed a moment later
+        STATE.shift = true
+        chip:GetScript("OnEnter")(chip)
+        chip:GetScript("OnLeave")(chip)
+        ok(TR.col:IsShown() and TR.flyWatch:IsShown(), "open, its watcher on")
+        chip.__mouseOver, TR.col.__mouseOver = false, false
+        CLOCK = CLOCK + 0.1 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        CLOCK = CLOCK + TR.FLY.off + 0.01 TR.flyWatch:GetScript("OnUpdate")(TR.flyWatch)
+        ok(not TR.col:IsShown() and not TR.flyWatch:IsShown() and not (TR.flyKeys.__events or {}).MODIFIER_STATE_CHANGED,
+           "off both a moment: closed, Shift no longer heard")
+        STATE.shift = false
+        TR.hold, TR.queue = {}, {}
+        C_Item.EquipItemByName = function() n = n + 1 end
+        NS.DB().radar.trinketPrio = { [13] = { BURST, SCARAB }, [14] = {} }
+    end
+    -- the tab: rows = the list first (numbered), then the rest of what you carry
+    local rows = TR.Rows(13)
+    ok(rows[1].id == BURST and rows[1].place == 1 and rows[2].id == SCARAB and rows[2].place == 2 and rows[3] and not rows[3].place,
+       "the TRINKETS tab's rows: the list in order, then the others (unticked)")
+    local CU = NS.CU
+    CU.Open("trinkets")
+    ok(TR.page and TR.page:IsShown() and not CU.card.page:IsShown() and TR.page.cols[1].rows[1].text.__text:find("^1%. Burst"),
+       "the BiS>Deck window's TRINKETS tab: the two lists, numbered", TR.page and TR.page.cols[1].rows[1].text.__text)
+    do  -- the gold note ("after this fight") by the close button, clear of the tabs (Arn's shot, 26 Nov: it printed over DECK)
+        local c, last = CU.card, CU.card.tabs[#CU.card.tabs]
+        c.note:SetText("after this fight")
+        local _, _, _, tx = last:GetPoint(1)
+        local tabsEnd = tx + last:GetWidth()
+        local noteLeft = CU.CARD_W - 24 - c.note:GetStringWidth()
+        ok(c.note.points and c.note.points[1][1] == "TOPRIGHT" and c.note.points[1][2] == c and noteLeft > tabsEnd, "the window's note sits right of the last tab", noteLeft .. " > " .. tabsEnd)
+        c.note:SetText("")
+    end
+    TR.page.cols[1].rows[2].tick:GetScript("OnClick")()
+    ok(not TR.InList(13, SCARAB), "a tick takes one off the list")
+    CU.SetTab("cues")
+    ok(not TR.page:IsShown() and CU.card.page:IsShown(), "another tab: the trinket page away")
+    CU.Close()
+    ok(NS.DO.trinkets("why") ~= nil, "/bish trinkets why says the last look")
+    -- empty again: deaf
+    NS.DB().radar.trinketPrio = nil
+    TR.Changed()
+    ok(not TR.listening and not TR.frame.__events.SPELL_UPDATE_COOLDOWN, "both lists empty: it stops listening")
+    -- cost: an event in a fight = the test alone
+    STATE.inCombat = true
+    TR.SetIn(13, BURST, true)
+    local c = Cost.Count(function() for _ = 1, 100 do fire(TR.frame, "SPELL_UPDATE_COOLDOWN") end end)
+    ok(c <= 100 * 3, "a fight's cooldown events cost ~2 calls each", c)
+    STATE.inCombat = keep.combat
+    NS.DB().radar.trinketPrio = keep.prio
+    TR.Changed()
+    STATE.worn, _G.C_Container, C_Item.GetItemInfoInstant, C_Item.EquipItemByName = keep.worn, keep.cont, keep.info, keep.equip
+    C_Item.GetItemNameByID, _G.GetInventoryItemCooldown, _G.C_Timer = keep.name, keep.cd, keep.timer
+    TR.last, TR.soon = nil, nil
 end
 
 print(fail == 0 and ("== BiS Healing ok (" .. checks .. " checks)")
