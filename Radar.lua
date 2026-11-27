@@ -7123,6 +7123,23 @@ function RD.TrinketChip(b)
     b.pink.edges = edge(b.pink, { P[1], P[2], P[3], 0.9 }, 2)    -- (2 px: a 1.5 line can vanish between screen pixels)
     if NS.TR and NS.TR.HookChip then NS.TR.HookChip(b) end        -- Shift + hover: your other trinkets (Trinkets.lua)
 end
+--- THE TIME IN THE MIDDLE OF THE WORD'S PLACE (26 Nov 2026, Arn's shot: "center cooldown" - the client's number sat against the
+--- icon): its own countdown text pinned to the centre of the word's box. Again at each cooldown start (the client may make
+--- the text late).
+function RD.CenterNum(b)
+    local cd = b and b.num
+    if not (cd and cd.GetRegions) then return 0 end
+    local n = 0
+    for _, reg in ipairs({ cd:GetRegions() }) do
+        if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" then
+            if reg.ClearAllPoints then pcall(reg.ClearAllPoints, reg) end
+            if reg.SetPoint then pcall(reg.SetPoint, reg, "CENTER", cd, "CENTER", 0, 0) end
+            if reg.SetJustifyH then pcall(reg.SetJustifyH, reg, "CENTER") end
+            n = n + 1
+        end
+    end
+    return n
+end
 --- The first word of a name, in capitals ("Burst of Knowledge" -> "BURST"); nil for none.
 function RD.TrinketWord(name)
     if type(name) ~= "string" then return nil end
@@ -7138,7 +7155,7 @@ function RD.SizeChip(b)
         local ok, w = pcall(b.word.GetStringWidth, b.word)
         if ok and type(w) == "number" and w == w then ww = math.max(ww, math.ceil(w) + 2) end
     end
-    if b.num then b.num:SetSize(ww, RD.SYS_PX) end
+    if b.num then b.num:SetSize(ww, RD.SYS_PX) RD.CenterNum(b) end
     b.chipW = RD.SYS_PX + 3 + ww
     if b.pink then
         b.pink:ClearAllPoints()
@@ -7258,7 +7275,7 @@ function RD.PaintTrinkets()
                             and s + d > ((GetTime and GetTime()) or 0)
             -- the time in the word's place: the client's number while it cools (a GCD is not cooling: no number for it)
             if b.num and b.num.SetCooldown then
-                if cooling then pcall(b.num.SetCooldown, b.num, s, d)
+                if cooling then pcall(b.num.SetCooldown, b.num, s, d) RD.CenterNum(b)
                 elseif b.num.Clear then pcall(b.num.Clear, b.num)
                 else pcall(b.num.SetCooldown, b.num, 0, 0) end
             end

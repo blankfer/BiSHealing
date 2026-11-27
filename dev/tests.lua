@@ -946,6 +946,13 @@ _G.CreateFrameUnguarded = function(kind, name, parent, template)
         function made:SetHideCountdownNumbers(v) self.__noNumbers = v end
         function made:SetSwipeColor(...) self.__swipe = { ... } end
         function made:SetSwipeTexture(t) self.__swipeTex = t end
+        -- ITS OWN COUNTDOWN TEXT is one of its regions, as the client's (26 Nov 2026: the trinket chip pins it to the centre)
+        local cnt = made:CreateFontString(nil, "OVERLAY")
+        cnt.GetObjectType = function() return "FontString" end
+        cnt:SetPoint("LEFT", made, "LEFT", 0, 0)
+        made.__regions = made.__regions or {}
+        table.insert(made.__regions, cnt)
+        made.__countdown = cnt
     end
     return made
 end
@@ -16230,6 +16237,9 @@ do
                 cds[13] = { GetTime() - 5, 600 }
                 fire(RD.events, "SPELL_UPDATE_COOLDOWN")
                 ok(t.food.__vertex and t.food.__vertex[4] == 1, "used: still lit in full while it cools (Arn, 26 Nov: always lit)")
+                local cdText = t.num and t.num.__countdown
+                ok(cdText and cdText.points and #cdText.points == 1 and cdText.points[1][1] == "CENTER" and cdText.points[1][2] == t.num,
+                   "the client's countdown pinned to the middle of the word's place (Arn: \"center cooldown\")")
                 ok(not t.word:IsShown() and t.num and t.num.__dur == 600,
                    "and the time takes the word's place: the client's countdown, the word away (Arn's pick B)")
                 cds[13] = nil
