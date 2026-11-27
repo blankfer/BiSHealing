@@ -3323,6 +3323,18 @@ function RD.TotemSpell(name)
 end
 
 --- Out of a fight: learn the standing totem's name for each slot (kept), and arm each box's click with its remembered one.
+--[[ NOT EVERY TOTEM IS THE BOX'S (26 Nov 2026, Arn: "when i drop enamours or mana tide it drops a totem with a really long
+  cooldown and it takes of my other totem can we make it so those two wont update it"). Mana Tide (a 5 minute cooldown, it
+  has its own button) and a totem a TRINKET put down (Enamored Water Spirit's Mana Spring - the same name as your own, so
+  told apart by its moment: it went down within RD.BORROWED_FOR of the trinket's use, RD.trinketTotemAt) stand in the water
+  place and show on its timer, but the box keeps dropping the totem it had. ]]
+RD.BORROWED_FOR = 2
+function RD.NotForBox(name, start)
+    if RD.TotemSpell(name) == RD.TIDE then return "mana tide" end
+    local at = RD.trinketTotemAt
+    if at and type(start) == "number" and math.abs(start - at) <= RD.BORROWED_FOR then return "a trinket's" end
+    return nil
+end
 function RD.LearnTimers()
     if combat() or RD.inFight then return false end
     local d = db()
@@ -3336,7 +3348,9 @@ function RD.LearnTimers()
         -- (RD.setAt is this session's only: GetTime counts from the PC's start, so a time kept in the save blocked the box
         -- forever after a restart - 20 Nov 2026, Arn: "earth totem always drops earth bind totem, yesterday it was working")
         local older = RD.setAt[t.slot] and type(start) == "number" and start < RD.setAt[t.slot]
-        if type(name) == "string" and name ~= "" and not older then d.totemSlots[t.slot] = RD.TotemSpell(name) end
+        if type(name) == "string" and name ~= "" and not older and not RD.NotForBox(name, start) then
+            d.totemSlots[t.slot] = RD.TotemSpell(name)
+        end
         local want = RD.TotemSpell(d.totemSlots[t.slot])          -- a name kept before this fix loses its numeral too
         t.totem = want
         t:SetAttribute("type1", want and "macro" or nil)
@@ -7500,9 +7514,11 @@ function RD.OnCast(unit, spellID)
         RD.waterUntil = now + RD.WATER.spring
         return "spring"
     end
-    -- a mana trinket's own use (its totem stands in the water place too): no water tool lights over it
+    -- a mana trinket's own use (its totem stands in the water place too): no water tool lights over it; ANY trinket's use
+    -- is timed, so a totem it puts down is never taken for the box's own (RD.NotForBox)
     for key in pairs(RD.TRINKET_SLOTS) do
         local t = RD[key]
+        if name and t and t.use == name then RD.trinketTotemAt = now end
         if name and t and t.mana and t.use == name then
             RD.waterUntil = now + RD.WATER.spring
             RD.PaintTrinkets()

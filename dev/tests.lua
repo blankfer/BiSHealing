@@ -15674,6 +15674,22 @@ do
         STATE.inCombat = false
         RD.LearnTimers()
         ok(w.totem == "Healing Stream Totem", "and learned when the fight ends")
+        -- NOT MANA TIDE, NOT A TRINKET'S TOTEM (Arn, 26 Nov: "when i drop enamours or mana tide ... can we make it so those
+        -- two wont update it")
+        STATE.totemName[3] = "Mana Tide Totem II"
+        RD.LearnTimers()
+        ok(w.totem == "Healing Stream Totem" and w:GetAttribute("macrotext1") == "/cast Healing Stream Totem",
+           "Mana Tide standing in the water place: the box keeps dropping Healing Stream", w.totem)
+        RD.trinketTotemAt = CLOCK                                -- (the trinket's use heard at the totem's moment)
+        STATE.totemName[3] = "Mana Spring Totem"
+        RD.LearnTimers()
+        ok(w.totem == "Healing Stream Totem", "Enamored's Mana Spring (down as the trinket was used): the box keeps its own", w.totem)
+        RD.trinketTotemAt = CLOCK - 60
+        RD.LearnTimers()
+        ok(w.totem == "Mana Spring Totem", "your own Mana Spring, long after a trinket use: learned as before", w.totem)
+        RD.trinketTotemAt = nil
+        STATE.totemName[3] = "Healing Stream Totem"
+        RD.LearnTimers()
         -- A SET SENT IN (Arn: "I click something and it changes the totems on my BiS Healing deck - out of combat of course")
         local keepGTI = _G.GetTotemInfo
         _G.GetTotemInfo = function(slot)                    -- (the standing totem went down a minute ago)
@@ -16043,6 +16059,17 @@ do
                 local p2 = RD.trink2.pink
                 ok(p2 and p2.__w == RD.trink2.chipW + 4 and p2.__shown ~= false and p2.points and p2.points[1] and p2.points[1][2] == RD.trink2,
                    "the second trinket has its own pink box too", p2 and tostring(p2.__w) .. " " .. tostring(p2.__shown))
+                -- its use heard (your cast of "Enamored Water Spirit"): timed, so the totem it puts down is not the box's
+                do
+                    local keepGN = C_Spell.GetSpellName
+                    C_Spell.GetSpellName = function(id) if id == 24854 then return "Enamored Water Spirit" end return keepGN(id) end
+                    RD.trinketTotemAt = nil
+                    RD.OnCast("player", 24854)
+                    ok(RD.trinketTotemAt == CLOCK and RD.NotForBox("Mana Spring Totem", CLOCK + 0.3),
+                       "the trinket's use is heard: a Mana Spring that goes down with it is the trinket's, not the box's")
+                    RD.trinketTotemAt = nil
+                    C_Spell.GetSpellName = keepGN
+                end
                 -- your water totem standing (Mana Tide): the mana trinket would knock it down - faded, never lit
                 local wasW = RD.waterUntil
                 RD.waterUntil = (GetTime() or 0) + 60
