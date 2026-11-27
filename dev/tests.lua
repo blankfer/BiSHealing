@@ -16308,6 +16308,51 @@ do
                 ok(not RD.trink2.mana and x(RD.trink2) > x(t) and x(RD.trink2) < x(RD.potion) and RD.trink2.word.__text == "ZANDALARIAN",
                    "the second trinket: beside the first, both left of the blue box")
                 ok((x(RD.trink2) - RD.SYS_PX / 2 - 2) > (x(t) - RD.SYS_PX / 2 - 2 + t.pink.__w), "the two pink boxes never touch")
+                -- COLUMNS THAT STACK (Arn's pick B: "Columns that stack, but keep in mind we might add more stuff later")
+                do
+                    local W = 460
+                    local keepM = {}                                    -- (the three totem buttons known, as a shaman's)
+                    for i, b in ipairs(RD.TOTEMS) do keepM[i] = b.macro b.macro = b.macro or "/cast Call of the Elements" end
+                    local cols = RD.TotemColumns(W)
+                    ok(cols and #cols == 5, "the totem row's five columns at a wide deck", cols and #cols)
+                    RD.DeckTools(W, 100)
+                    local plan = RD.toolCols
+                    ok(plan and #plan == 4, "the tool row in columns: four groups", plan and #plan)
+                    local fine = plan ~= nil
+                    for i, pl in ipairs(plan or {}) do
+                        local col = cols[pl.g.col]
+                        if pl.l < col[1] - 0.01 then fine = false end                       -- never left of its column
+                        if i > 1 and pl.l < plan[i - 1].r then fine = false end              -- never over the one before
+                    end
+                    ok(fine and math.abs(plan[1].l - cols[1][1]) < 0.01, "each group from its column's left edge (later if the one before is wider), none overlapping")
+                    local L = function(b) return x(b) - RD.SYS_PX / 2 end
+                    ok(L(RD.trink1) >= cols[1][1] and L(RD.trink2) >= cols[2][1] and L(RD.potion) >= cols[3][1] and L(RD.shield) >= cols[4][1],
+                       "Burst over air, Enamored over water, the mana box over CALL, the shield's group over earth and fire")
+                    local kb = RD.kitBox
+                    ok(kb and kb:IsShown() and kb.edges and kb.edges[1].__vertex and kb.edges[1].__vertex[1] == RD.ATTN_AMBER[1] and kb.edges[1].__vertex[2] == RD.ATTN_AMBER[2]
+                       and plan[4].g.box == "kitBox" and plan[4].items[1] == RD.shield, "the shield and the loose icons in their own amber box")
+                    -- the totem timers stand on the same columns (one reckoning: they never drift apart)
+                    RD.DeckTotemRow(W, 100 + RD.SYS_PX + RD.CON.gap)
+                    local tl = {}
+                    for k = 1, 4 do local t = RD.timers and RD.timers[k] local pp = t and t.points and t.points[1] tl[k] = pp and pp[4] end
+                    ok(tl[1] == cols[1][1] and tl[2] == cols[2][1] and tl[3] == cols[4][1] and tl[4] == cols[5][1],
+                       "the timers' left edges are the columns' (air, water, earth, fire)", tostring(tl[1]) .. " " .. tostring(cols[1][1]))
+                    -- room for more later: a tool in no group falls back to the old row, never lost
+                    table.insert(RD.TOOL_KEYS, "fakeTool")
+                    RD.fakeTool = RD.rations
+                    RD.rations.absent = nil
+                    local keepGroup = RD.TOOL_GROUPS[4].keys
+                    RD.TOOL_GROUPS[4].keys = { "shield", "chaff", "res" }
+                    RD.DeckTools(W, 100)
+                    ok(RD.toolCols == nil and not (RD.kitBox and RD.kitBox:IsShown()), "a tool no group names: the old row (nothing ever left out)")
+                    RD.TOOL_GROUPS[4].keys = keepGroup
+                    table.remove(RD.TOOL_KEYS) RD.fakeTool = nil
+                    -- narrow (the totem row stacked): the old centred, wrapping row, no amber box
+                    RD.DeckTools(160, 100)
+                    ok(RD.toolCols == nil and not RD.kitBox:IsShown(), "a narrow deck: the old wrapping row, no amber box")
+                    for i, b in ipairs(RD.TOTEMS) do b.macro = keepM[i] end
+                    RD.Arm()
+                end
                 local p2 = RD.trink2.pink
                 ok(p2 and p2.__w == RD.trink2.chipW + 4 and p2.__shown ~= false and p2.points and p2.points[1] and p2.points[1][2] == RD.trink2,
                    "the second trinket has its own pink box too", p2 and tostring(p2.__w) .. " " .. tostring(p2.__shown))
