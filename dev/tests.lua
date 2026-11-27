@@ -14602,6 +14602,56 @@ do
                    and RD.call.tip[2]:find("Call of the Spirits", 1, true) and f2:IsShown(), "chosen: CALL drops it, the right-click the one before", RD.call:GetAttribute("*macrotext1"))
                 RD.Arm()
                 ok(RD.call:GetAttribute("*macrotext1") == "/cast Call of the Spirits", "and it stays so")
+                -- HOLD TO SAVE (Arn, 26 Nov: "our current selection of totems if we hold shift on the call and we hover down and
+                -- we hold left click a bar fills to save it on that preset")
+                do
+                    local keepSet, keepMC, keepSlots = rawget(_G, "SetMultiCastSpell"), STATE.multiCast, NS.DB().radar.totemSlots
+                    local writes = 0
+                    _G.SetMultiCastSpell = function(action, id) writes = writes + 1 AT[action] = id end   -- (the bar the reads see)
+                    STATE.multiCast = { [1] = { 1, 5 }, [2] = { 2 }, [3] = { 3 } }
+                    NS.DB().radar.totemSlots = { [1] = "Magma Totem", [3] = "Mana Spring Totem" }    -- (the deck's boxes now)
+                    ok(CP.IdFor(1, "Magma Totem") == 5 and CP.IdFor(1, "Flametongue Totem") == 1 and CP.IdFor(4, "Windfury Totem") == nil,
+                       "each totem's id among the ones the game's bar offers")
+                    local b2 = f2.rows[2].btn                 -- Ancestors: nothing in it yet
+                    CP.Show(true)
+                    ok(b2.callIndex == 2 and b2.tip[2]:find("Hold left-click", 1, true), "the row says it", b2.tip[2])
+                    local t0 = CLOCK
+                    b2:GetScript("OnMouseDown")(b2, "LeftButton")
+                    ok(b2.fill:IsShown() and b2:GetScript("OnUpdate"), "held: a bar along its foot starts filling")
+                    CLOCK = t0 + CP.HOLD / 2
+                    b2:GetScript("OnUpdate")(b2)
+                    ok(b2.fill.__w and b2.fill.__w > 1 and b2.fill.__w < CP.W and writes == 0, "half way: half full, nothing written", b2.fill.__w)
+                    -- let go early: an ordinary click (it chooses), nothing saved
+                    b2:GetScript("OnMouseUp")(b2)
+                    b2:GetScript("OnClick")(b2)
+                    ok(writes == 0 and not b2.fill:IsShown() and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors",
+                       "let go early: nothing saved, the click chooses as before")
+                    -- held to the end: the deck's totems into Ancestors
+                    b2:GetScript("OnMouseDown")(b2, "LeftButton")
+                    CLOCK = CLOCK + CP.HOLD + 0.01
+                    b2:GetScript("OnUpdate")(b2)
+                    local s2 = CP.Sets()[2]
+                    ok(writes == 2 and s2.totems[1] and s2.totems[1].name == "Magma" and s2.totems[3] and s2.totems[3].name == "Mana Spring"
+                       and not s2.totems[2] and CP.saved == "call 2: 2 of 2", "full: the deck's Magma and Mana Spring saved into Ancestors (the empty boxes leave theirs)", CP.saved)
+                    local before = RD.call:GetAttribute("*macrotext1")
+                    b2:GetScript("OnMouseUp")(b2)
+                    b2:GetScript("OnClick")(b2)
+                    ok(b2.held == nil and RD.call:GetAttribute("*macrotext1") == before, "the hold is not a click as well")
+                    -- the mouse off the row mid-hold: let go, nothing saved
+                    writes = 0
+                    b2:GetScript("OnMouseDown")(b2, "LeftButton")
+                    b2:GetScript("OnLeave")(b2)
+                    CLOCK = CLOCK + CP.HOLD + 0.01
+                    ok(not b2:GetScript("OnUpdate") and not b2.fill:IsShown() and writes == 0, "off the row mid-hold: nothing saved")
+                    -- in a fight: no hold at all
+                    STATE.inCombat = true
+                    b2:GetScript("OnMouseDown")(b2, "LeftButton")
+                    ok(not b2.holdAt and select(2, CP.Save(2)) == "in a fight", "in a fight: no hold, nothing written")
+                    STATE.inCombat = false
+                    _G.SetMultiCastSpell, STATE.multiCast, NS.DB().radar.totemSlots = keepSet, keepMC, keepSlots
+                    AT[137], AT[139] = nil, nil
+                    CP.Choose("Call of the Spirits")          -- (as the tests below expect)
+                end
                 ok(_G.BiSHealingAPI.Call() == "Call of the Spirits" and _G.BiSHealingAPI.SetCall("Call of the Ancestors") == true and RD.call:GetAttribute("*macrotext1") == "/cast Call of the Ancestors"
                    and select(2, _G.BiSHealingAPI.SetCall("Fireball")) == "not known", "BiS Tools can choose it")
                 STATE.inCombat = true

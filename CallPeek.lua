@@ -28,7 +28,7 @@ CP.LOOK = 0.1                                              -- seconds between tw
 for i, s in ipairs(RD.SW) do
     if s.key == "timers" then
         table.insert(RD.SW, i + 1, { key = "callpeek", group = "SHAMAN", name = "Calls on Shift",
-            tip = "Hold Shift over CALL: every Call you know and the four totems set in it. Out of a fight a click chooses the one CALL drops." })
+            tip = "Hold Shift over CALL: every Call you know and the four totems set in it. Out of a fight a click chooses the one CALL drops; holding left-click saves the deck's four totems into it." })
         break
     end
 end
@@ -147,6 +147,13 @@ function CP.Button(i)
     b.wash:SetColorTexture(r, g, bl, 0.22)
     b.bar = b:CreateTexture(nil, "OVERLAY")
     b.bar:SetPoint("TOPLEFT") b.bar:SetPoint("BOTTOMLEFT") b.bar:SetWidth(2)
+    -- the hold's bar: fills left to right along the row's foot while the left button is held (CP.HOLD)
+    b.fill = b:CreateTexture(nil, "OVERLAY")
+    b.fill:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
+    b.fill:SetHeight(4)
+    b.fill:SetWidth(1)
+    b.fill:SetColorTexture(colour("gold"))
+    b.fill:Hide()
     b:SetScript("OnEnter", function(self)
         if not (GameTooltip and self.tip) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -154,8 +161,21 @@ function CP.Button(i)
         GameTooltip:AddLine(self.tip[2], 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    b:SetScript("OnLeave", function(self)
+        if GameTooltip then GameTooltip:Hide() end
+        CP.EndHold(self)                                     -- (the mouse off the row: the hold is let go, nothing saved)
+    end)
+    b:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" or combat() or not self.callIndex then return end
+        self.holdAt, self.held = (GetTime and GetTime()) or 0, nil
+        self.fill:SetWidth(1)
+        self.fill:SetColorTexture(colour("gold"))
+        self.fill:Show()
+        self:SetScript("OnUpdate", CP.HoldTick)
+    end)
+    b:SetScript("OnMouseUp", function(self) CP.EndHold(self, true) end)
     b:SetScript("OnClick", function(self)
+        if self.held then self.held = nil return end          -- (the hold saved: not a click as well)
         if combat() or not self.call then return end
         CP.Choose(self.call)
         CP.Show(true)
@@ -203,6 +223,78 @@ function CP.Dress()
     RD.SpellIcon(b, c)
     b.tip = { "CALL", c .. (other ~= c and ("  -  right-click: " .. other) or "") .. ".  Lights before the pull while none of your totems are down." }
     return true
+end
+
+-- HOLD TO SAVE (26 Nov 2026, Arn: "our current selection of totems if we hold shift on the call and we hover down and we hold
+-- left click a bar fills to save it on that preset") ------------------------------------------------------------------------
+-- Hold left-click on a Call's row: a bar fills across it in CP.HOLD; full = the deck's four totem boxes (what each drops now,
+-- db().radar.totemSlots) are written into that Call's four places on the game's totem bar (SetMultiCastSpell, each read
+-- back - BiS Tools' Totems app writes it the same way; UNVERIFIED live). Let go early = an ordinary click (it chooses). Out of
+-- a fight only; a box with nothing in it leaves its place alone.
+CP.HOLD = 0.8
+--- The id the game's bar offers for a totem by its name (the last one it lists - the highest rank), or nil.
+function CP.IdFor(place, name)
+    if type(GetMultiCastTotemSpells) ~= "function" or type(name) ~= "string" then return nil end
+    local got = { pcall(GetMultiCastTotemSpells, place) }
+    if not got[1] then return nil end
+    local want = RD.TotemSpell and RD.TotemSpell(name) or name
+    local pick
+    for i = 2, #got do
+        local id = plain(got[i])
+        local n = type(id) == "number" and C_Spell and ask(C_Spell.GetSpellName, id)
+        if type(n) == "string" and (RD.TotemSpell and RD.TotemSpell(n) or n) == want then pick = id end
+    end
+    return pick
+end
+--- Write the deck's four totems into Call `call` (1-3). Answers how many took, how many were asked (nil + why: refused).
+function CP.Save(call)
+    if combat() then return nil, "in a fight" end
+    if type(SetMultiCastSpell) ~= "function" then return nil, "this client has no totem bar to write" end
+    local r = saved()
+    local slots = r and type(r.totemSlots) == "table" and r.totemSlots or {}
+    local bar = ask(GetMultiCastBarIndex)
+    bar = (type(bar) == "number" and bar > 0) and bar or 12
+    local took, asked = 0, 0
+    for place = 1, 4 do
+        local id = CP.IdFor(place, slots[place])
+        if id then
+            asked = asked + 1
+            if CP.Get(call, place) ~= id then pcall(SetMultiCastSpell, (bar - 1) * 12 + (call - 1) * 4 + place, id) end
+            if CP.Get(call, place) == id then took = took + 1 end
+        end
+    end
+    CP.saved = ("call %d: %d of %d"):format(call, took, asked)
+    return took, asked
+end
+--- While held: the bar fills; full = saved, the bar turns green ("warn" pink: the game took none or only some), the panel repainted.
+function CP.HoldTick(b)
+    if not b.holdAt then b:SetScript("OnUpdate", nil) return end
+    if combat() then CP.EndHold(b) return end
+    local share = math.min(1, (((GetTime and GetTime()) or 0) - b.holdAt) / CP.HOLD)
+    b.fill:SetWidth(math.max(1, (b.GetWidth and b:GetWidth() or CP.W) * share))
+    if share < 1 then return end
+    b.holdAt = nil
+    b:SetScript("OnUpdate", nil)
+    local took, asked = CP.Save(b.callIndex)
+    b.held = true
+    b.fill:SetColorTexture(colour((took and took > 0 and took == asked) and "good" or "warn"))
+    pcall(CP.Show, true)
+end
+--- The hold over: before full, nothing saved (the click still chooses); after, the green bar stays a moment.
+function CP.EndHold(b, up)
+    if not b then return end
+    if b.holdAt then
+        b.holdAt = nil
+        b:SetScript("OnUpdate", nil)
+        b.fill:Hide()
+        return
+    end
+    if b.held and up and C_Timer and C_Timer.After then
+        C_Timer.After(0.6, function() if not b.holdAt then b.fill:Hide() end end)
+    elseif not up then
+        b.held = nil
+        b.fill:Hide()
+    end
 end
 
 -- SHOWN AND GONE ------------------------------------------------------------------------------------------------------------
@@ -255,11 +347,13 @@ function CP.Show(stay)
         local set = sets[i]
         local b = CP.Button(i)
         b.call = set and set.name or nil
+        b.callIndex = set and set.call or nil
         if set then
             local is = set.name == now
             local words = {}
             for place = 1, 4 do words[place] = CP.PLACES[place] .. ": " .. (set.totems[place] and set.totems[place].name or "nothing") end
-            b.tip = { set.name, table.concat(words, "\n") .. (is and "\nCALL drops this one" or "\nClick: CALL drops this one from now on") }
+            b.tip = { set.name, table.concat(words, "\n") .. (is and "\nCALL drops this one" or "\nClick: CALL drops this one from now on")
+                .. "\nHold left-click: save the deck's four totems into it" }
             local r, g, bl = colour("gold")
             b.bar:SetColorTexture(r, g, bl, is and 1 or 0)
             f.rows[i].name:SetTextColor(colour(is and "gold" or "ink"))
