@@ -2352,8 +2352,100 @@ end
 -- (RD.TrinketChip); a mana trinket no longer goes inside the box
 RD.TOOL_KEYS = { "shield", "trink1", "trink2", "potion", "tide", "reserve", "fuel", "rations", "chaff", "res" }
 RD.MANA_KEYS = { tide = true, potion = true, reserve = true, fuel = true }   -- the four inside the blue box
+--[[ COLUMNS THAT STACK (26 Nov 2026, Arn's pick B of https://claude.ai/artifact/QsAGq2TrxUJ4baXgUD75Zm - "Columns that stack,
+  but keep in mind we might add more stuff later"). When the totem row lies on one line, the tool row lines its groups up
+  over the totem row's columns (RD.TotemColumns: air, water, CALL / BRING / RECALL, earth, fire): each group starts at its
+  column's left edge - or just after the group before it, when that one is wider than its own column - so nothing ever
+  overlaps. RD.TOOL_GROUPS is the one list: a new tool joins a group's `keys`, a new group names its column. A boxed group
+  draws its outline (`box` = the RD field of its frame, `col` = its colour). Too wide for the window, or the totem row
+  stacked / off: the old centred, wrapping row (RD.DeckTools below). ]]
+RD.TOOL_GROUPS = {
+    { keys = { "trink1" }, col = 1 },
+    { keys = { "trink2" }, col = 2 },
+    { keys = { "potion", "tide", "reserve", "fuel" }, col = 3, box = "manaBox", colour = RD.MANA_BOX_COL },
+    { keys = { "shield", "rations", "chaff", "res" }, col = 4, box = "kitBox" },   -- (amber: RD.ATTN_AMBER)
+}
+--- The totem row's five columns at width W as { {l, r}, ... } (air, water, the buttons, earth, fire) - only when it lies on one
+--- line; nil otherwise. RD.DeckTotemRow places by the same numbers.
+function RD.TotemColumns(W)
+    local list = {}
+    for _, b in ipairs(RD.TOTEMS or {}) do if b.macro then list[#list + 1] = b end end
+    if #list == 0 or not (RD.Sw("totems") and RD.Sw("timers")) or W < RD.TotemWideW() then return nil end
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local bw = #list * S + (#list - 1) * gap
+    local bl = (W - bw) / 2
+    local sideGap = 4
+    local tw = math.floor((bl - sideGap - C.pad - gap) / 2)
+    local e = bl + bw + sideGap
+    return { { C.pad, C.pad + tw }, { C.pad + tw + gap, C.pad + 2 * tw + gap }, { bl, bl + bw },
+             { e, e + tw }, { e + tw + gap, e + 2 * tw + gap } }, list, bw, bl, tw
+end
+--- The tool row in columns: answers true when it fit (and was placed), false to fall back. Nothing moves before it is known
+--- to fit.
+function RD.DeckToolsColumns(W, top, cols)
+    local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local function wide(b) return b.chipW and (b.chipW + 2 * RD.TRINK_PAD) or S end
+    local plan, x, placed = {}, C.pad, {}
+    for _, g in ipairs(RD.TOOL_GROUPS) do
+        local items = {}
+        for _, k in ipairs(g.keys) do
+            local b = RD[k]
+            if b and b.absent then b:Hide() end            -- a trinket slot with nothing to show: no chip, no gap
+            if b and not b.absent and not placed[b] then items[#items + 1] = b placed[b] = true end
+        end
+        if #items > 0 then
+            local inner = 0
+            for i, b in ipairs(items) do inner = inner + wide(b) + (i > 1 and gap or 0) end
+            local pad = g.box and 2 or 0                       -- (a box's edge sits 2 px outside its icons)
+            local col = cols[g.col] or cols[#cols]
+            local l = math.max(col[1], x)
+            plan[#plan + 1] = { g = g, items = items, l = l, r = l + inner + 2 * pad, pad = pad }
+            x = l + inner + 2 * pad + gap + (g.box and 2 or 0)
+        end
+    end
+    -- every tool must have a place: one left out of every group (a tool added to RD.TOOL_KEYS only) = the old row
+    for _, k in ipairs(RD.TOOL_KEYS) do
+        local b = RD[k]
+        if b and not b.absent and not placed[b] then return false end
+    end
+    if #plan == 0 or plan[#plan].r > W - C.pad + 0.5 then return false end
+    local cy = top + S / 2
+    local boxesUsed = {}
+    for _, p in ipairs(plan) do
+        local cx = p.l + p.pad
+        for _, b in ipairs(p.items) do
+            if b.trinket and not b:IsShown() then b:Show() end
+            at(b, cx + (b.chipW and RD.TRINK_PAD or 0) + S / 2, cy)
+            if b.swHidden then b.swHidden = nil b:Show() end
+            cx = cx + wide(b) + gap
+        end
+        if p.g.box then
+            local mb = RD[p.g.box]
+            if not mb then
+                mb = CreateFrame("Frame", nil, RD.conLayer)
+                mb.edges = edge(mb, p.g.colour or RD.ATTN_AMBER, 1.5)
+                RD[p.g.box] = mb
+            end
+            mb:SetSize(p.r - p.l, S + 4)
+            mb:ClearAllPoints()
+            mb:SetPoint("CENTER", RD.frame, "TOPLEFT", (p.l + p.r) / 2, -cy)
+            mb:Show()
+            boxesUsed[p.g.box] = true
+        end
+    end
+    for _, g in ipairs(RD.TOOL_GROUPS) do
+        if g.box and not boxesUsed[g.box] and RD[g.box] then RD[g.box]:Hide() end
+    end
+    RD.toolCols = plan
+    return true
+end
+
 function RD.DeckTools(W, top)
     local C, gap, S = RD.CON, RD.CON.toolGap, RD.SYS_PX
+    local cols = RD.TotemColumns(W)                    -- B: over the totem row's columns, when it lies on one line
+    if cols and RD.DeckToolsColumns(W, top, cols) then return S + C.gap end
+    RD.toolCols = nil
+    if RD.kitBox then RD.kitBox:Hide() end
     -- every tool, in its order - NOT only the shown ones (Arn, 16 Nov: "all the buttons for food are gone" after a /reload:
     -- at the first layout the game has not shown them yet, so a "shown only" list placed none); a narrow window (Arn's
     -- shot: "the mana thing did not center"): the mana four on a line of their own, centred in their box, the rest under
@@ -2430,6 +2522,7 @@ function RD.HideTools()
         if b and b:IsShown() then b.swHidden = true b:Hide() end   -- remembered: only these come back (Arn: the empty blue box)
     end
     if RD.manaBox then RD.manaBox:Hide() end
+    if RD.kitBox then RD.kitBox:Hide() end
 end
 
 --[[ ATTENTION OUTLINES (16 Nov 2026, Arn: "I'm missing clicking on icons that are only lit 100% for example food ... I
@@ -2826,6 +2919,7 @@ end
 function RD.DeckClear()
     for _, t in ipairs(RD.timers or {}) do t:Hide() end   -- the totem timers are the deck's alone
     if RD.manaBox then RD.manaBox:Hide() end              -- and the mana group's outline
+    if RD.kitBox then RD.kitBox:Hide() end
     RD.deckMates = nil                                    -- (the deck lays them out again; nobody's group mates lit)
     for _, sp in ipairs(RD.spokes or {}) do
         sp.room, sp.raidGroup = nil, nil
