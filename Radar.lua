@@ -3595,8 +3595,6 @@ function RD.ArmFly()
                 if not b then b = RD.FlyButton(col, k, j) col.b[j] = b end
                 b.entry, b.src = e, t
                 b:SetSize(size, size)
-                b:ClearAllPoints()
-                b:SetPoint("BOTTOM", col, "BOTTOM", 0, gap + (j - 1) * (size + gap))   -- (the first nearest its box)
                 b:SetAttribute("*type1", "macro")
                 b:SetAttribute("*macrotext1", "/cast " .. e.name)
                 pcall(b.pic.SetTexture, b.pic, e.icon)
@@ -3609,9 +3607,10 @@ function RD.ArmFly()
             for j = #list + 1, #col.b do col.b[j]:Hide() end
             col.count = #list
             col.bg:SetAlpha(#list > 0 and 1 or 0)
-            col:ClearAllPoints()
-            col:SetPoint("BOTTOMLEFT", t, "TOPLEFT", 0, 0)                  -- (touching its box: no gap to cross)
+            col.size = size
             col:SetSize(size + 2 * gap, math.max(1, #list * (size + gap) + gap))
+            col.dir = nil
+            RD.FlyAim(col, t)
             if col.SetFrameLevel and t.GetFrameLevel then col:SetFrameLevel((t:GetFrameLevel() or 1) + 10) end
             flyRef(t, "fly", col)
             flyRef(t, "src", t)
@@ -3623,6 +3622,38 @@ function RD.ArmFly()
     if not RD.flyShiftHeard then                                       -- (Shift heard only once there are boxes to pop out)
         RD.flyShiftHeard = pcall(RD.flyEvents.RegisterEvent, RD.flyEvents, "MODIFIER_STATE_CHANGED")
     end
+    return true
+end
+
+--- DOWN FIRST (26 Nov 2026, Arn after the first try: "works great maybe we do down?"): a column hangs UNDER its box, the
+--- first icon nearest it; only when the screen has no room below and room above does it go up. Out of a fight only (a
+--- secure column is placed out of one): from RD.ArmFly, and again at each opening out of a fight (the deck may have moved).
+function RD.FlyDir(t, h)
+    local function px(fr, v) local s = fr.GetEffectiveScale and fr:GetEffectiveScale() or 1 return (v or 0) * (s or 1) end
+    local bottom = t.GetBottom and t:GetBottom()
+    local top = t.GetTop and t:GetTop()
+    if type(bottom) ~= "number" or type(top) ~= "number" then return "down" end
+    local need, below = px(t, h), px(t, bottom)
+    if below >= need then return "down" end
+    local screen = UIParent and UIParent.GetTop and UIParent:GetTop()
+    if type(screen) ~= "number" then return "down" end
+    return (px(UIParent, screen) - px(t, top) >= need) and "up" or "down"
+end
+function RD.FlyAim(col, t)
+    if combat() or not (col and t) then return false end
+    local dir = RD.FlyDir(t, col.GetHeight and col:GetHeight() or 0)
+    if col.dir == dir then return false end
+    col.dir = dir
+    local size, gap, down = col.size or 16, RD.FLY.gap, dir == "down"
+    for j = 1, col.count or 0 do
+        local b = col.b[j]
+        b:ClearAllPoints()
+        local y = gap + (j - 1) * (size + gap)                              -- (the first nearest its box)
+        if down then b:SetPoint("TOP", col, "TOP", 0, -y) else b:SetPoint("BOTTOM", col, "BOTTOM", 0, y) end
+    end
+    col:ClearAllPoints()
+    if down then col:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 0, 0)            -- (touching its box: no gap to cross)
+    else col:SetPoint("BOTTOMLEFT", t, "TOPLEFT", 0, 0) end
     return true
 end
 
@@ -3649,6 +3680,7 @@ function RD.OpenFly(t)
     local col = t and RD.flyCols and RD.flyCols[t.k]
     if not col or (col.count or 0) == 0 then RD.flyWhy = "nothing of its kind to pick" return false end
     for _, c in pairs(RD.flyCols) do if c ~= col and c:IsShown() then c:Hide() end end
+    RD.FlyAim(col, t)
     if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(t) then GameTooltip:Hide() end   -- (it would cover the column)
     RD.flyFrom, RD.flyAt, RD.flyOffAt = t, (GetTime and GetTime()) or 0, nil
     col:Show()

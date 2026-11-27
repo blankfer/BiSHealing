@@ -15826,6 +15826,28 @@ do
            "the game's snippets wrapped (Shift-over, mouse-off, the pick) and every part known to the header")
         RD.LearnTimers()
         ok(WRAPPED[fire1].OnEnter.n == 1 and WRAPPED[fb[1]].OnClick.n == 1, "a second look wraps nothing twice")
+        -- DOWN FIRST (Arn, 26 Nov: "works great maybe we do down?"); up only with no room below and room above
+        do
+            local p1, rel, p2 = fc:GetPoint(1)
+            local b1, _, _, _, y1 = fb[1]:GetPoint(1)
+            local _, _, _, _, y2 = fb[2]:GetPoint(1)
+            ok(fc.dir == "down" and p1 == "TOPLEFT" and rel == fire1 and p2 == "BOTTOMLEFT" and b1 == "TOP" and y1 > y2,
+               "the pop-out hangs UNDER its box, the first icon nearest it", tostring(p1) .. " " .. tostring(p2) .. " " .. tostring(fc.dir))
+            local kb, kt, ku = fire1.GetBottom, fire1.GetTop, UIParent.GetTop
+            fire1.GetBottom = function() return 10 end
+            fire1.GetTop = function() return 30 end
+            UIParent.GetTop = function() return 768 end
+            ok(RD.FlyAim(fc, fire1) and fc.dir == "up" and select(1, fc:GetPoint(1)) == "BOTTOMLEFT" and select(1, fb[1]:GetPoint(1)) == "BOTTOM",
+               "no room under the box (the deck at the screen's foot): it goes up instead", fc.dir)
+            UIParent.GetTop = function() return 40 end
+            RD.FlyAim(fc, fire1)
+            ok(fc.dir == "down", "no room either way: down", fc.dir)
+            fire1.GetBottom = function() return 300 end
+            fire1.GetTop = function() return 320 end
+            UIParent.GetTop = function() return 768 end
+            ok(not RD.FlyAim(fc, fire1) and fc.dir == "down", "room under it: down, nothing moved twice")
+            fire1.GetBottom, fire1.GetTop, UIParent.GetTop = kb, kt, ku
+        end
         ok(RD.flyEvents.__events and RD.flyEvents.__events.MODIFIER_STATE_CHANGED, "Shift heard once there are boxes to pop out")
         -- OUT OF A FIGHT
         STATE.shift = false
