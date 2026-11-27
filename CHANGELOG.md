@@ -1,5 +1,18 @@
 # BiS Healing
 
+## 1.12.0
+
+- **Trinkets on the deck:** each trinket you wear sits on the tool row as its icon and the first word of its name, in a pink box. Click it to use it. While it cools, the time left takes the word's place and the box goes faint; when it's ready the box flashes once. A trinket with no on-use effect keeps its spot too.
+- **Swap trinkets on the fly:** hold Shift over a trinket on the deck and the trinkets in your bags drop down under it. Pick one and it goes on. In a fight it waits and goes on when the fight ends.
+- **Trinket priority list:** a new TRINKETS tab in the deck window (or `/bish trinkets`, or right-click a trinket). Tick your trinkets for each slot, best first. Out of a fight the deck wears the best one that is ready or nearly ready - a trinket you just put on has to wait 30 seconds, so one that is 30 seconds from ready loses nothing by going on now. Nothing swaps in a fight.
+- **Trinkets are off the binds.** A cooling trinket stopped the whole bind, heal and all. Binds that used one now just heal.
+- **Totem pop-out on the deck:** hold Shift over a totem box and the other totems of its element drop down. Let go of Shift on one to make the box drop it next, without casting. Shift + click drops it now. Works in a fight too.
+- **Save totems into a Call:** hold Shift over CALL, move down onto a Call and hold left-click: a bar fills, and your four totem boxes are saved into that Call.
+- **Totem boxes keep your totems.** Mana Tide and a trinket's totem no longer replace what a box drops.
+- **Smart lit or always lit:** a new switch in the deck's LOOK settings. Smart lit (as before) keeps tool icons dim until you need them; always lit shows them all the time. The red and amber outlines work the same either way.
+- **The tool row lines up with the totems:** each group sits over the totem box under it, and the shield, food, Grounding and rez share an amber box.
+- **Fixed:** the deck window's "after this fight" note no longer covers the DECK tab.
+
 ## 1.11.1
 
 - **Fixed: the Hellfire voice was silent.** The game hides which spell a warlock is channelling, and in a fight his Hellfire too, so the voice never knew he had started. Now a warlock channelling with fire burning him a moment later counts as Hellfire, and the voice says "Hellfire" and his name again.
