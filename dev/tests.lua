@@ -806,6 +806,21 @@ _G.SecureHandlerSetFrameRef = function(f, label, ref)
     f.__refs = f.__refs or {}
     f.__refs[label] = ref
 end
+-- the census's SecureHandlerWrapScript (26 Nov 2026, the deck's totem pop-out): refused in a fight; recorded, so a suite can run
+-- the snippets the way the game would (WRAPPED[frame][script] = { header, pre, post })
+WRAPPED = {}
+_G.SecureHandlerWrapScript = function(f, script, header, pre, post)
+    if STATE.inCombat then error("ADDON_ACTION_BLOCKED: SecureHandlerWrapScript in combat", 2) end
+    WRAPPED[f] = WRAPPED[f] or {}
+    WRAPPED[f][script] = { header = header, pre = pre, post = post, n = (WRAPPED[f][script] and WRAPPED[f][script].n or 0) + 1 }
+end
+-- the census's GetMultiCastTotemSpells(slot): the totems the game's totem bar offers for that slot, as many returns (nothing for a
+-- class without totems - the default; a test hands STATE.multiCast[slot] = { ids })
+_G.GetMultiCastTotemSpells = function(slot)
+    local t = STATE.multiCast and STATE.multiCast[slot]
+    if not t then return end
+    return unpack(t)
+end
 -- A 3D MODEL, DIRTY (21 Nov 2026, Arn: the cue card's fireball "appeared for a second but disappeared after i switched"):
 -- hiding it drops what it drew, a load puts the camera back at its own place, and showing runs OnShow. The old mock had no
 -- model at all - any call answered, so "is the fireball there" was the flag our own code had set.
@@ -15723,6 +15738,185 @@ do
         NS.DB().radar.totemSlots = nil
         for k = 1, 4 do timers[k]:Hide() end
         _G.C_Spell.GetSpellTexture = keepTex
+    end
+    -- THE TOTEM POP-OUT (Arn, 26 Nov: "make these totem button do the pop out when i shift [hover] like the bis tool totems ...
+    -- when i let go of shift it selects and not drop it but if i hold shift and click i drop")
+    do
+        local keepName, keepTex, keepTimer = _G.C_Spell.GetSpellName, _G.C_Spell.GetSpellTexture, rawget(_G, "C_Timer")
+        local NAMES = { [3599] = "Searing Totem", [8190] = "Magma Totem", [8227] = "Flametongue Totem",
+                        [5675] = "Mana Spring Totem", [5394] = "Healing Stream Totem" }
+        local TEX = { [3599] = 135824, [8190] = 135826, [8227] = 136040, [5675] = 136053, [5394] = 135127,
+                      ["Searing Totem"] = 135824, ["Magma Totem"] = 135826, ["Flametongue Totem"] = 136040,
+                      ["Mana Spring Totem"] = 136053, ["Healing Stream Totem"] = 135127 }
+        _G.C_Spell.GetSpellName = function(id) return NAMES[id] or keepName(id) end
+        _G.C_Spell.GetSpellTexture = function(x) return TEX[x] end
+        local later = {}
+        rawset(_G, "C_Timer", { After = function(_, fn) later[#later + 1] = fn end })
+        local function runLater() local l = later later = {} for _, fn in ipairs(l) do fn() end end
+        -- (the game offers Searing at every rank: one icon a name)
+        STATE.multiCast = { [1] = { 3599, 3599, 8190, 8227 }, [3] = { 5675, 5394 } }
+        local keepTot = { TOTEMS[1], TOTEMS[2], TOTEMS[3], TOTEMS[4] }
+        for k = 1, 4 do TOTEMS[k] = false end                          -- (no totem standing: the picks alone decide)
+        local timers = {}
+        for k = 1, 4 do timers[k] = RD.TotemTimer(k) timers[k]:Show() end
+        local fire1, water = timers[4], timers[2]
+        RD.flyLists = nil
+        RD.LearnTimers()
+        local cols = RD.flyCols or {}
+        local fc, wc, ac = cols[4], cols[2], cols[1]
+        ok(RD.flyHeader and fc and fc.count == 3 and wc and wc.count == 2 and ac and ac.count == 0 and not fc:IsShown(),
+           "each box's pop-out built and aimed before it is wanted, hidden: fire 3 (one a name), water 2, air none", fc and fc.count)
+        local fb = fc.b
+        ok(fb[1]:GetAttribute("*type1") == "macro" and fb[1]:GetAttribute("*macrotext1") == "/cast Searing Totem"
+           and fb[2]:GetAttribute("*macrotext1") == "/cast Magma Totem" and fb[1].pic.__texture == 135824,
+           "each icon drops its totem (with Shift held too) and shows it", fb[1]:GetAttribute("*macrotext1"))
+        ok(WRAPPED[fire1] and WRAPPED[fire1].OnEnter and WRAPPED[fire1].OnLeave and WRAPPED[fb[1]] and WRAPPED[fb[1]].OnLeave
+           and WRAPPED[fb[1]].OnClick and WRAPPED[fb[1]].OnClick.post and RD.flyHeader.__refs.f4_1 == fb[1]
+           and RD.flyHeader.__refs.box4 == fire1 and RD.flyHeader.__refs.fly4 == fc and fb[1].__refs.src == fire1,
+           "the game's snippets wrapped (Shift-over, mouse-off, the pick) and every part known to the header")
+        RD.LearnTimers()
+        ok(WRAPPED[fire1].OnEnter.n == 1 and WRAPPED[fb[1]].OnClick.n == 1, "a second look wraps nothing twice")
+        -- DOWN FIRST (Arn, 26 Nov: "works great maybe we do down?"); up only with no room below and room above
+        do
+            local p1, rel, p2 = fc:GetPoint(1)
+            local b1, _, _, _, y1 = fb[1]:GetPoint(1)
+            local _, _, _, _, y2 = fb[2]:GetPoint(1)
+            ok(fc.dir == "down" and p1 == "TOPLEFT" and rel == fire1 and p2 == "BOTTOMLEFT" and b1 == "TOP" and y1 > y2,
+               "the pop-out hangs UNDER its box, the first icon nearest it", tostring(p1) .. " " .. tostring(p2) .. " " .. tostring(fc.dir))
+            local kb, kt, ku = fire1.GetBottom, fire1.GetTop, UIParent.GetTop
+            fire1.GetBottom = function() return 10 end
+            fire1.GetTop = function() return 30 end
+            UIParent.GetTop = function() return 768 end
+            ok(RD.FlyAim(fc, fire1) and fc.dir == "up" and select(1, fc:GetPoint(1)) == "BOTTOMLEFT" and select(1, fb[1]:GetPoint(1)) == "BOTTOM",
+               "no room under the box (the deck at the screen's foot): it goes up instead", fc.dir)
+            UIParent.GetTop = function() return 40 end
+            RD.FlyAim(fc, fire1)
+            ok(fc.dir == "down", "no room either way: down", fc.dir)
+            fire1.GetBottom = function() return 300 end
+            fire1.GetTop = function() return 320 end
+            UIParent.GetTop = function() return 768 end
+            ok(not RD.FlyAim(fc, fire1) and fc.dir == "down", "room under it: down, nothing moved twice")
+            fire1.GetBottom, fire1.GetTop, UIParent.GetTop = kb, kt, ku
+        end
+        ok(RD.flyEvents.__events and RD.flyEvents.__events.MODIFIER_STATE_CHANGED, "Shift heard once there are boxes to pop out")
+        -- OUT OF A FIGHT
+        STATE.shift = false
+        fire1:GetScript("OnEnter")(fire1)
+        ok(not fc:IsShown(), "no Shift: no pop-out")
+        fire(RD.flyEvents, "MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+        ok(fc:IsShown() and RD.flyFrom == fire1, "Shift pressed with the mouse on the fire box: its totems pop out")
+        fire1:GetScript("OnLeave")(fire1)
+        RD.CloseFly()
+        STATE.shift = true
+        fire1:GetScript("OnEnter")(fire1)
+        ok(fc:IsShown() and not wc:IsShown(), "Shift over the fire box: the fire totems only")
+        local clicked = false
+        for _, b in ipairs(fb) do b.__pc = b:GetScript("PostClick") b:SetScript("PostClick", function(...) clicked = true return b.__pc(...) end) end
+        fire1:GetScript("OnLeave")(fire1)
+        fb[2]:GetScript("OnEnter")(fb[2])
+        STATE.shift = false
+        fire(RD.flyEvents, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+        ok(fire1:GetAttribute("macrotext1") == "/cast Magma Totem" and fire1.totem == "Magma Totem" and not fc:IsShown() and not clicked
+           and NS.DB().radar.totemSlots[1] == "Magma Totem",
+           "Shift let go on Magma: the box drops Magma from now on (kept), the pop-out away, nothing cast", fire1:GetAttribute("macrotext1"))
+        ok(fb[2].pic:GetAlpha() < 1 and fb[1].pic:GetAlpha() == 1, "the one the box drops now is dimmed in its pop-out")
+        STATE.shift = true
+        fire1:GetScript("OnEnter")(fire1)
+        fire1:GetScript("OnLeave")(fire1)
+        fb[3]:GetScript("OnEnter")(fb[3])
+        fb[3]:GetScript("OnLeave")(fb[3])
+        fire(RD.flyEvents, "MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+        ok(fire1.totem == "Magma Totem" and fc:IsShown(), "let go after the mouse left the icon: nothing picked, still open")
+        fb[3]:GetScript("OnEnter")(fb[3])
+        fb[3]:GetScript("PostClick")(fb[3], "LeftButton", true)
+        ok(clicked and fire1:GetAttribute("macrotext1") == "/cast Flametongue Totem" and not fc:IsShown(),
+           "Shift held, a click on Flametongue: it drops (its own button) and the box keeps it", fire1:GetAttribute("macrotext1"))
+        fb[3]:GetScript("OnLeave")(fb[3])
+        -- the mouse leaves: closed a moment later (out of a fight the watcher)
+        fire1:GetScript("OnEnter")(fire1)
+        ok(fc:IsShown() and RD.flyWatch:IsShown(), "open again, its watcher on")
+        fc.__mouseOver, fire1.__mouseOver = false, false
+        CLOCK = CLOCK + 1 RD.flyWatch.__scripts.OnUpdate(RD.flyWatch)
+        ok(fc:IsShown(), "one look off it: still open (the gap between box and column)")
+        CLOCK = CLOCK + RD.FLY.off + 0.01 RD.flyWatch.__scripts.OnUpdate(RD.flyWatch)
+        ok(not fc:IsShown() and not RD.flyWatch:IsShown(), "off both a moment: closed, the watcher off")
+        fire1:GetScript("OnLeave")(fire1)
+        -- A FIGHT: put away before the lockdown, then the game's snippets do it
+        fire1:GetScript("OnEnter")(fire1)
+        fire(RD.flyEvents, "PLAYER_REGEN_DISABLED")
+        ok(not fc:IsShown(), "a pull: the pop-out away first")
+        fire1:GetScript("OnLeave")(fire1)
+        STATE.inCombat, RD.inFight = true, true
+        ok(pcall(RD.LearnTimers) and pcall(RD.ArmFly), "in a fight the plain code touches nothing secure")
+        local function handle(fr)
+            if not fr then return nil end
+            local cl = fr.__client or {}
+            return { Show = function() (cl.Show or fr.Show)(fr) end, Hide = function() (cl.Hide or fr.Hide)(fr) end,
+                     IsShown = function() return fr:IsShown() end, IsVisible = function() return fr:IsShown() end,
+                     IsUnderMouse = function() return fr.__under == true end,
+                     GetFrameRef = function(_, k) return handle(fr.__refs and fr.__refs[k]) end,
+                     SetAttribute = function(_, k, v) fr.__attrs[k] = v end, GetAttribute = function(_, k) return fr.__attrs[k] end,
+                     CallMethod = function(_, m, ...) return fr[m](fr, ...) end }
+        end
+        local function snip(code, fr, newstate)
+            local fn = assert(loadstring(code))
+            setfenv(fn, { self = handle(fr), newstate = newstate, PlayerInCombat = function() return STATE.inCombat end,
+                          IsShiftKeyDown = function() return STATE.shift and true or false end })
+            return fn()
+        end
+        STATE.shift = false
+        snip(WRAPPED[fire1].OnEnter.pre, fire1)
+        ok(not fc:IsShown(), "in a fight, no Shift: nothing")
+        STATE.shift = true
+        snip(WRAPPED[fire1].OnEnter.pre, fire1)
+        ok(fc:IsShown(), "in a fight, Shift over the fire box: its column")
+        fire1.__under, fc.__under = false, true
+        snip(WRAPPED[fire1].OnLeave.pre, fire1)
+        ok(fc:IsShown(), "the mouse up onto the column: open")
+        for _, b in ipairs(fb) do b.__under = (b == fb[1]) end
+        snip(RD.flyHeader.__attrs["_onstate-shift"], RD.flyHeader, "up")
+        ok(fire1.__attrs.macrotext1 == "/cast Searing Totem" and not fc:IsShown() and RD.flyQueue and RD.flyQueue[1] == "Searing Totem"
+           and fire1.base.__texture == 135824 and fire1.totem == "Searing Totem",
+           "in a fight, Shift let go on Searing: the box drops Searing now, the column away, its picture at once", fire1.__attrs.macrotext1)
+        fb[1].__under = false
+        snip(WRAPPED[fire1].OnEnter.pre, fire1)
+        snip(RD.flyHeader.__attrs["_onstate-shift"], RD.flyHeader, "up")
+        ok(fc:IsShown() and fire1.__attrs.macrotext1 == "/cast Searing Totem", "let go with the mouse on no icon: nothing changes")
+        local _, msg = snip(WRAPPED[fb[2]].OnClick.pre, fb[2])
+        ok(fire1.__attrs.macrotext1 == "/cast Magma Totem" and msg, "in a fight, a click on Magma: the box drops Magma from now on")
+        snip(WRAPPED[fb[2]].OnClick.post, fb[2])
+        ok(not fc:IsShown(), "and the column closes after the cast")
+        ok(pcall(fb[2].__pc, fb[2], "LeftButton", true) and RD.flyQueue[1] == "Magma Totem", "its click remembered for after the fight")
+        fire1.__under = true
+        snip(RD.flyHeader.__attrs["_onstate-shift"], RD.flyHeader, "down")
+        ok(fc:IsShown(), "Shift pressed with the mouse already on the box: its column (the header's state driver)")
+        fire1.__under, fc.__under = false, false
+        snip(WRAPPED[fb[1]].OnLeave.pre, fb[1])
+        ok(not fc:IsShown(), "the mouse off both: closed")
+        -- after the fight: the picks onto the boxes (a moment later, after the deck's own end of the fight)
+        STATE.inCombat = false
+        fire(RD.flyEvents, "PLAYER_REGEN_ENABLED")
+        ok(RD.flyQueue and #later == 1, "the fight ends: the picks wait a moment for the deck's own end of the fight")
+        runLater()
+        ok(RD.flyQueue ~= nil, "still RD.inFight: kept, not lost")
+        RD.inFight = nil
+        RD.FlySettle()
+        ok(RD.flyQueue == nil and NS.DB().radar.totemSlots[1] == "Magma Totem" and fire1:GetAttribute("macrotext1") == "/cast Magma Totem",
+           "after it: the fight's pick kept by the box", NS.DB().radar.totemSlots[1])
+        -- what it costs: nothing until Shift; a look at the totems (LearnTimers) with the pop-out aimed
+        local Cost = dofile("../_bisdev/dev/cost.lua")
+        local n = Cost.Count(function() RD.LearnTimers() end)
+        ok(n < 160, "a look at the totems with the pop-outs aimed stays light (nothing rebuilt when nothing changed)", n)
+        local nE = Cost.Count(function() fire(RD.flyEvents, "MODIFIER_STATE_CHANGED", "LCTRL", 1) end)
+        ok(nE <= 2, "another key than Shift: nothing", nE)
+        for _, b in ipairs(fb) do b:SetScript("PostClick", b.__pc) b.__pc = nil end
+        STATE.shift, STATE.multiCast, RD.flyLists = false, nil, nil
+        for k = 1, 4 do TOTEMS[k] = keepTot[k] end
+        RD.CloseFly()
+        NS.DB().radar.totemSlots = nil
+        for k = 1, 4 do timers[k]:Hide() end
+        _G.C_Spell.GetSpellName, _G.C_Spell.GetSpellTexture = keepName, keepTex
+        rawset(_G, "C_Timer", keepTimer)
     end
     -- THE FOOD'S OWN ICON (Arn: "put the food icon on the H or Fork" ... "just the food we are eating"): whatever was picked
     do

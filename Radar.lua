@@ -3291,9 +3291,16 @@ function RD.TotemTimer(k)
         GameTooltip:AddLine(self.totem and self.totem:upper() or "TOTEM TIMER")
         GameTooltip:AddLine(self.totem and "Click: drop it again." or "Drop a totem out of a fight: this box remembers it.",
             1, 1, 1, true)
+        if RD.flyCols and RD.flyCols[self.k] and (RD.flyCols[self.k].count or 0) > 0 then
+            GameTooltip:AddLine("Shift: the others of its kind pop out.", 0.6, 0.6, 0.6, true)
+        end
         GameTooltip:Show()
+        RD.FlyEnter(self)                                       -- (Shift held: the pop-out; its tooltip steps aside)
     end)
-    t:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    t:SetScript("OnLeave", function(self)
+        if GameTooltip then GameTooltip:Hide() end
+        RD.FlyLeave(self)
+    end)
     local okCd, cd = pcall(CreateFrame, "Cooldown", nil, t, "CooldownFrameTemplate")
     if okCd and cd then
         cd:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 2, 0)
@@ -3308,7 +3315,7 @@ function RD.TotemTimer(k)
         if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, RD.TIMER_FULL) end
         t.cd = cd
     end
-    t.slot = spec.slot
+    t.slot, t.k = spec.slot, k
     RD.timers[k] = t
     return t
 end
@@ -3362,6 +3369,7 @@ function RD.LearnTimers()
         end
         pcall(t.base.SetTexture, t.base, tex)
     end
+    RD.ArmFly()                                                   -- each box's pop-out, aimed before it is wanted
     return true
 end
 
@@ -3421,6 +3429,369 @@ end
 function RD.PaintTimers()
     for _, t in ipairs(RD.timers or {}) do RD.PaintTimer(t) end
 end
+
+--[[ THE TOTEM POP-OUT (26 Nov 2026, Arn, on the four totem boxes: "can we make these totem button do the pop out when i shift
+  [hover] like the bis tool totems, but on both when i let go of shift it selects and not drop it but if i hold shift and click
+  i drop"). BiS Tools' totem card's way (Tools/TotemCard.lua), the deck's own copy: Shift over a box = a column of the totems of
+  its element pops out over it - the game's own list (GetMultiCastTotemSpells: what its totem bar offers), one a name. The
+  mouse on one: a CLICK (Shift held) drops it and the box keeps it; LETTING GO OF SHIFT picks it - the box drops it from the
+  next click, nothing cast - and the column closes. Out of a fight the plain code below; in one, secure snippets the game runs
+  (built and aimed before the pull): the header's Shift state driver (down = open over the box under the mouse, up = the pick),
+  each box's OnEnter / OnLeave and each icon's OnLeave / OnClick wrapped. A pick reaches the box through RD.SetTotems (a totem
+  standing from before does not undo it); a fight's after the fight (RD.flyQueue), its picture at once. Nothing runs until
+  Shift: no ticker, the watcher's OnUpdate only while a column is open out of a fight, the lists read once (till SPELLS_CHANGED
+  changes them). ]]
+RD.FLY = { max = 12, gap = 2, grace = 0.25, off = 0.3, margin = 6 }
+
+--- Your totems for a game slot (1 fire, 2 earth, 3 water, 4 air): { { id, name, icon }, ... }, one a name, the game's order.
+function RD.FlyList(slot)
+    local out, seen = {}, {}
+    if type(GetMultiCastTotemSpells) ~= "function" or not (C_Spell and C_Spell.GetSpellName) then return out end
+    local got = { pcall(GetMultiCastTotemSpells, slot) }
+    if not got[1] then return out end
+    for i = 2, #got do
+        local id = plain(got[i])
+        if type(id) == "number" and id > 0 and #out < RD.FLY.max then
+            local okN, n = pcall(C_Spell.GetSpellName, id)
+            n = okN and plain(n) or nil
+            if type(n) == "string" and n ~= "" and not seen[n] then
+                seen[n] = true
+                local okI, icon = false, nil
+                if C_Spell.GetSpellTexture then okI, icon = pcall(C_Spell.GetSpellTexture, id) end
+                out[#out + 1] = { id = id, name = n, icon = okI and icon or nil }
+            end
+        end
+    end
+    return out
+end
+
+local FLY_FIGHT = [[
+    local fight = (PlayerInCombat and PlayerInCombat()) or (SecureCmdOptionParse and SecureCmdOptionParse("[combat] y; n") == "y")
+]]
+local FLY_SHIFT = [[
+    local shift = (IsShiftKeyDown and IsShiftKeyDown()) or (SecureCmdOptionParse and SecureCmdOptionParse("[mod:shift] y; n") == "y")
+]]
+--- Shift over a box, in a fight: its column.
+RD.FLY_ENTER = FLY_FIGHT .. FLY_SHIFT .. [[
+    if not (fight and shift) then return end
+    local c = self:GetFrameRef("fly")
+    if c then c:Show() end
+]]
+--- The mouse off a box or one of its icons, in a fight: the column closes when the mouse is on neither.
+RD.FLY_LEAVE = FLY_FIGHT .. [[
+    if not fight then return end
+    local c, s = self:GetFrameRef("fly"), self:GetFrameRef("src")
+    if c and c:IsShown() and not c:IsUnderMouse(true) and not (s and s:IsUnderMouse(true)) then c:Hide() end
+]]
+--- A click on an icon (before its cast): the box drops this one from now on; the column closes after the cast.
+RD.FLY_PICK = [[
+    local s, m = self:GetFrameRef("src"), self:GetAttribute("*macrotext1")
+    if s and m then s:SetAttribute("type1", "macro") s:SetAttribute("macrotext1", m) end
+    return nil, "picked"
+]]
+RD.FLY_PICKED = [[
+    local c = self:GetFrameRef("fly")
+    if c then c:Hide() end
+]]
+--- The header's Shift state driver, in a fight: down = the column of the box under the mouse; up = the icon under the mouse
+--- onto its box (nothing cast), the column away, the plain code told (CallMethod -> RD.FlyFightPick).
+RD.FLY_SHIFTED = FLY_FIGHT .. [[
+    if not fight then return end
+    if newstate == "down" then
+        for k = 1, 4 do
+            local b, c = self:GetFrameRef("box" .. k), self:GetFrameRef("fly" .. k)
+            if b and c and b:IsVisible() and b:IsUnderMouse(true) then c:Show() end
+        end
+        return
+    end
+    for k = 1, 4 do
+        local s, c = self:GetFrameRef("box" .. k), self:GetFrameRef("fly" .. k)
+        if s and c and c:IsShown() then
+            for j = 1, 12 do
+                local b = self:GetFrameRef("f" .. k .. "_" .. j)
+                if b and b:IsVisible() and b:IsUnderMouse(true) then
+                    local m = b:GetAttribute("*macrotext1")
+                    if m then s:SetAttribute("type1", "macro") s:SetAttribute("macrotext1", m) end
+                    c:Hide()
+                    self:CallMethod("FightPick", k, j)
+                    return
+                end
+            end
+        end
+    end
+]]
+
+--- The secure header, once, out of a fight. None (no snippets on this client) = the pop-out out of a fight only (RD.flyWhy).
+function RD.FlyHeader()
+    if RD.flyHeader ~= nil then return RD.flyHeader or nil end
+    if combat() then return nil end
+    if not (SecureHandlerWrapScript and SecureHandlerSetFrameRef) then
+        RD.flyHeader, RD.flyWhy = false, "no secure snippets on this client: out of a fight only"
+        return nil
+    end
+    local okH, h = pcall(CreateFrame, "Frame", "BiSHealingTotemFly", UIParent, "SecureHandlerStateTemplate")
+    if not (okH and h) then RD.flyHeader, RD.flyWhy = false, "no secure header on this client: out of a fight only" return nil end
+    h.FightPick = function(_, k, j) RD.FlyFightPick(k, j) end
+    pcall(h.SetAttribute, h, "_onstate-shift", RD.FLY_SHIFTED)
+    if RegisterStateDriver then pcall(RegisterStateDriver, h, "shift", "[mod:shift] down; up") end
+    RD.flyHeader = h
+    return h
+end
+local function flyWrap(b, script, pre, post)
+    if not RD.flyHeader then return end
+    b.__flyWrap = b.__flyWrap or {}
+    if b.__flyWrap[script] then return end                       -- (wrapped once: a second wrap would run it twice)
+    if pcall(SecureHandlerWrapScript, b, script, RD.flyHeader, pre, post) then b.__flyWrap[script] = true end
+end
+local function flyRef(b, label, to)
+    if RD.flyHeader and b and to then pcall(SecureHandlerSetFrameRef, b, label, to) end
+end
+
+--- One icon of a column: a secure button that drops its totem (with Shift held too: "*type1").
+function RD.FlyButton(col, k, j)
+    local b = CreateFrame("Button", "BiSHealingTotemFly" .. k .. "_" .. j, col, "SecureActionButtonTemplate")
+    if b.RegisterForClicks then b:RegisterForClicks("AnyDown") end
+    local c = RD.TOTEM_TIMERS[k].col
+    b.edge = b:CreateTexture(nil, "BACKGROUND")
+    b.edge:SetAllPoints(b)
+    b.edge:SetColorTexture(c[1], c[2], c[3], 1)
+    b.pic = b:CreateTexture(nil, "ARTWORK")
+    b.pic:SetPoint("TOPLEFT", b, "TOPLEFT", 1, -1)
+    b.pic:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1, 1)
+    if b.pic.SetTexCoord then b.pic:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    b.hl = b:CreateTexture(nil, "HIGHLIGHT")                      -- (it pops on hover, like every clickable thing)
+    b.hl:SetAllPoints(b)
+    b.hl:SetColorTexture(1, 1, 1, 0.25)
+    b:SetScript("OnEnter", function(self)
+        RD.flyHover = self
+        if not (GameTooltip and self.entry) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")               -- (to the side: never over the column)
+        GameTooltip:AddLine(self.entry.name:upper())
+        GameTooltip:AddLine("Click: drop it, the box keeps it.", 1, 1, 1, true)
+        GameTooltip:AddLine("Let go of Shift: the box keeps it, nothing cast.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function(self)
+        if RD.flyHover == self then RD.flyHover = nil end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    b:SetScript("PostClick", function(self) RD.FlyClicked(self) end)
+    flyWrap(b, "OnLeave", RD.FLY_LEAVE)
+    flyWrap(b, "OnClick", RD.FLY_PICK, RD.FLY_PICKED)
+    return b
+end
+
+--- Out of a fight: every box's column built and aimed (hidden), so a fight's snippets have them. Rebuilt only on a change.
+function RD.ArmFly()
+    if combat() or RD.inFight or not (RD.timers and #RD.timers > 0) then return false end
+    RD.FlyHeader()
+    RD.flyCols = RD.flyCols or {}
+    RD.flyLists = RD.flyLists or {}
+    for k, t in ipairs(RD.timers) do
+        local list = RD.flyLists[t.slot]
+        if not list then list = RD.FlyList(t.slot) RD.flyLists[t.slot] = list end
+        local col = RD.flyCols[k]
+        if not col then
+            local parent = RD.conLayer or UIParent
+            local okC, c = pcall(CreateFrame, "Frame", "BiSHealingTotemFlyCol" .. k, parent, "SecureHandlerBaseTemplate")
+            col = okC and c or CreateFrame("Frame", "BiSHealingTotemFlyCol" .. k, parent)
+            col.bg = col:CreateTexture(nil, "BACKGROUND")
+            col.bg:SetAllPoints(col)
+            col.bg:SetColorTexture(0, 0, 0, 0.85)
+            col.b = {}
+            col:Hide()
+            RD.flyCols[k] = col
+            flyWrap(t, "OnEnter", RD.FLY_ENTER)
+            flyWrap(t, "OnLeave", RD.FLY_LEAVE)
+        end
+        local size = math.max(16, math.floor(((t.GetHeight and t:GetHeight()) or RD.SYS_PX) + 0.5))
+        local names = {}
+        for j, e in ipairs(list) do names[j] = e.name end
+        local sig = size .. "|" .. tostring(t.totem) .. "|" .. table.concat(names, ",")
+        if col.sig ~= sig then
+            col.sig = sig
+            local gap = RD.FLY.gap
+            for j, e in ipairs(list) do
+                local b = col.b[j]
+                if not b then b = RD.FlyButton(col, k, j) col.b[j] = b end
+                b.entry, b.src = e, t
+                b:SetSize(size, size)
+                b:SetAttribute("*type1", "macro")
+                b:SetAttribute("*macrotext1", "/cast " .. e.name)
+                pcall(b.pic.SetTexture, b.pic, e.icon)
+                b.pic:SetAlpha(e.name == t.totem and 0.5 or 1)            -- (the one the box drops now: dimmed)
+                b:Show()
+                flyRef(b, "src", t)
+                flyRef(b, "fly", col)
+                flyRef(RD.flyHeader, "f" .. k .. "_" .. j, b)
+            end
+            for j = #list + 1, #col.b do col.b[j]:Hide() end
+            col.count = #list
+            col.bg:SetAlpha(#list > 0 and 1 or 0)
+            col.size = size
+            col:SetSize(size + 2 * gap, math.max(1, #list * (size + gap) + gap))
+            col.dir = nil
+            RD.FlyAim(col, t)
+            if col.SetFrameLevel and t.GetFrameLevel then col:SetFrameLevel((t:GetFrameLevel() or 1) + 10) end
+            flyRef(t, "fly", col)
+            flyRef(t, "src", t)
+            flyRef(RD.flyHeader, "box" .. k, t)
+            flyRef(RD.flyHeader, "fly" .. k, col)
+        end
+        if RD.flyFrom ~= t and col:IsShown() then col:Hide() end
+    end
+    if not RD.flyShiftHeard then                                       -- (Shift heard only once there are boxes to pop out)
+        RD.flyShiftHeard = pcall(RD.flyEvents.RegisterEvent, RD.flyEvents, "MODIFIER_STATE_CHANGED")
+    end
+    return true
+end
+
+--- DOWN FIRST (26 Nov 2026, Arn after the first try: "works great maybe we do down?"): a column hangs UNDER its box, the
+--- first icon nearest it; only when the screen has no room below and room above does it go up. Out of a fight only (a
+--- secure column is placed out of one): from RD.ArmFly, and again at each opening out of a fight (the deck may have moved).
+function RD.FlyDir(t, h)
+    local function px(fr, v) local s = fr.GetEffectiveScale and fr:GetEffectiveScale() or 1 return (v or 0) * (s or 1) end
+    local bottom = t.GetBottom and t:GetBottom()
+    local top = t.GetTop and t:GetTop()
+    if type(bottom) ~= "number" or type(top) ~= "number" then return "down" end
+    local need, below = px(t, h), px(t, bottom)
+    if below >= need then return "down" end
+    local screen = UIParent and UIParent.GetTop and UIParent:GetTop()
+    if type(screen) ~= "number" then return "down" end
+    return (px(UIParent, screen) - px(t, top) >= need) and "up" or "down"
+end
+function RD.FlyAim(col, t)
+    if combat() or not (col and t) then return false end
+    local dir = RD.FlyDir(t, col.GetHeight and col:GetHeight() or 0)
+    if col.dir == dir then return false end
+    col.dir = dir
+    local size, gap, down = col.size or 16, RD.FLY.gap, dir == "down"
+    for j = 1, col.count or 0 do
+        local b = col.b[j]
+        b:ClearAllPoints()
+        local y = gap + (j - 1) * (size + gap)                              -- (the first nearest its box)
+        if down then b:SetPoint("TOP", col, "TOP", 0, -y) else b:SetPoint("BOTTOM", col, "BOTTOM", 0, y) end
+    end
+    col:ClearAllPoints()
+    if down then col:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 0, 0)            -- (touching its box: no gap to cross)
+    else col:SetPoint("BOTTOMLEFT", t, "TOPLEFT", 0, 0) end
+    return true
+end
+
+--- Is the mouse over it (a little round it: the gap between a box and its column counts)?
+function RD.FlyOver(fr)
+    if not fr then return false end
+    local m = RD.FLY.margin
+    if fr.IsMouseOver then
+        local fine, yes = pcall(fr.IsMouseOver, fr, m, -m, -m, m)
+        if fine then return yes and true or false end
+    end
+    return true                                                         -- (cannot tell: left open; a leave or a pull closes it)
+end
+
+--- The box's own OnEnter / OnLeave (plain): Shift held = its column, out of a fight.
+function RD.FlyEnter(t)
+    RD.flyBox = t
+    if IsShiftKeyDown and IsShiftKeyDown() then RD.OpenFly(t) end
+end
+function RD.FlyLeave(t) if RD.flyBox == t then RD.flyBox = nil end end
+
+function RD.OpenFly(t)
+    if combat() or RD.inFight then return false end                    -- (in a fight the snippets do it)
+    local col = t and RD.flyCols and RD.flyCols[t.k]
+    if not col or (col.count or 0) == 0 then RD.flyWhy = "nothing of its kind to pick" return false end
+    for _, c in pairs(RD.flyCols) do if c ~= col and c:IsShown() then c:Hide() end end
+    RD.FlyAim(col, t)
+    if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(t) then GameTooltip:Hide() end   -- (it would cover the column)
+    RD.flyFrom, RD.flyAt, RD.flyOffAt = t, (GetTime and GetTime()) or 0, nil
+    col:Show()
+    RD.flyWatch:Show()
+    RD.flyWhy = "opened: " .. col.count .. " to pick"
+    return true
+end
+
+function RD.CloseFly(why)
+    RD.flyFrom, RD.flyHover = nil, nil
+    if RD.flyWatch then RD.flyWatch:Hide() end
+    if combat() then return end                                         -- (the lockdown: the snippets' job)
+    for _, c in pairs(RD.flyCols or {}) do if c:IsShown() then c:Hide() end end
+    if why then RD.flyWhy = why end
+end
+
+--- Shift let go on an icon, out of a fight: the box keeps it, nothing cast.
+function RD.FlySelect(b)
+    if combat() or RD.inFight or not (b and b.entry and b.src) then return false end
+    RD.SetTotems({ [b.src.slot] = b.entry.name })
+    RD.CloseFly("picked " .. b.entry.name)
+    return true
+end
+--- An icon clicked (it dropped its totem): out of a fight the box keeps it now; in one its picture now, the box after.
+function RD.FlyClicked(b)
+    if not (b and b.entry and b.src) then return end
+    if combat() or RD.inFight then
+        pcall(b.src.base.SetTexture, b.src.base, b.entry.icon)
+        b.src.totem = b.entry.name
+        RD.flyQueue = RD.flyQueue or {}
+        RD.flyQueue[b.src.slot] = b.entry.name
+        return
+    end
+    RD.SetTotems({ [b.src.slot] = b.entry.name })
+    RD.CloseFly("dropped " .. b.entry.name)
+end
+--- Shift let go on an icon in a fight, told by the snippet (which already re-aimed the box): the same as a fight's click.
+function RD.FlyFightPick(k, j)
+    local col = RD.flyCols and RD.flyCols[k]
+    local b = col and col.b[j]
+    if not (b and b.entry and b.src) then return end
+    pcall(b.src.base.SetTexture, b.src.base, b.entry.icon)
+    b.src.totem = b.entry.name
+    RD.flyQueue = RD.flyQueue or {}
+    RD.flyQueue[b.src.slot] = b.entry.name
+    RD.flyHover = nil
+    RD.flyWhy = "picked in a fight: " .. b.entry.name
+end
+--- After a fight: its picks onto the boxes (what the snippets already aimed).
+function RD.FlySettle()
+    local q = RD.flyQueue
+    if not (q and next(q)) then return false end
+    if combat() or RD.inFight then return false end                    -- (still the fight: kept for the next look)
+    RD.flyQueue = nil
+    return RD.SetTotems(q)
+end
+
+-- the watcher: out of a fight, the open column closes a moment after the mouse leaves it and its box
+RD.flyWatch = CreateFrame("Frame")
+RD.flyWatch:Hide()
+RD.flyWatch:SetScript("OnUpdate", function()
+    if combat() then return end
+    local from = RD.flyFrom
+    local col = from and RD.flyCols and RD.flyCols[from.k]
+    if not col then RD.CloseFly() return end
+    local now = (GetTime and GetTime()) or 0
+    if RD.flyAt and now - RD.flyAt < RD.FLY.grace then return end
+    if RD.FlyOver(col) or RD.FlyOver(from) then RD.flyOffAt = nil return end
+    RD.flyOffAt = RD.flyOffAt or now
+    if now - RD.flyOffAt >= RD.FLY.off then RD.CloseFly("the mouse left it") end
+end)
+RD.flyEvents = CreateFrame("Frame")
+for _, e in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "SPELLS_CHANGED" }) do pcall(RD.flyEvents.RegisterEvent, RD.flyEvents, e) end
+RD.flyEvents:SetScript("OnEvent", function(_, e, a1, a2)
+    if e == "PLAYER_REGEN_DISABLED" then RD.CloseFly() return end       -- (before the lockdown: the last moment to put it away)
+    if e == "PLAYER_REGEN_ENABLED" then                                 -- (a moment later: the deck's own handler ends the fight first)
+        if RD.flyQueue then if C_Timer and C_Timer.After then C_Timer.After(0, RD.FlySettle) else RD.FlySettle() end end
+        return
+    end
+    if e == "SPELLS_CHANGED" then
+        if not RD.flyLists then return end
+        RD.flyLists = nil                                                -- (a new totem learned: read again, rebuilt if it changed)
+        if not combat() then RD.ArmFly() end
+        return
+    end
+    if a1 ~= "LSHIFT" and a1 ~= "RSHIFT" then return end
+    if combat() or RD.inFight then return end                          -- (in a fight: the snippets)
+    if a2 == 1 and RD.flyBox then RD.OpenFly(RD.flyBox)
+    elseif a2 == 0 and RD.flyHover then RD.FlySelect(RD.flyHover) end
+end)
 
 --[[ WHERE THE NUMBER GOES (16 Nov 2026, Arn's screenshots: "3m" drawn over the totem's icon in a narrow window). The
   client centres its countdown in the Cooldown frame and writes it at its own size, so a strip narrower than the number
